@@ -44,7 +44,7 @@ my-learning/
 建议为每个具有独立依赖的 Python 项目创建虚拟环境，不要把 `.venv` 提交到 Git。
 
 ```bash
-cd 01-python/fastapi-demo
+cd python/fastapi-demo
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt

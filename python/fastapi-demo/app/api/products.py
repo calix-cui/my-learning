@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db
 from app.common.response import Response
 from app.schemas.product import ProductCreateRequest, ProductResponse
-from app.schemas.product import ProductCreateRequest, ProductResponse
 from app.services import product_service
 
 router = APIRouter(prefix="/products", tags=["商品相关的接口"])

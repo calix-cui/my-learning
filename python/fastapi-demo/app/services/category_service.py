@@ -1,5 +1,4 @@
 import logging
-from unicodedata import category
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
