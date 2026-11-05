@@ -27,7 +27,7 @@ my-learning/
 
 | 项目 | 说明 | 状态 |
 |---|---|---|
-| [fastapi-demo](./01-python/fastapi-demo/) | FastAPI 接口开发练习 | 待完善 |
+| [fastapi-demo](./python/fastapi-demo/) | FastAPI 接口开发练习：CRUD、联表查询、统计、测试与 CI | 持续开发 |
 
 ### Frontend
 

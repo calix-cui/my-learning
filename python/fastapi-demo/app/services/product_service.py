@@ -1,12 +1,12 @@
 import logging
 
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy import func, select
 
 from app.common.exceptions import BusinessError
 from app.models import Category, Product
-from app.schemas.product import ProductResponse, ProductCreateRequest, ProductUpdateRequest
+from app.schemas.product import ProductCreateRequest, ProductResponse, ProductUpdateRequest
 
 logger = logging.getLogger(__name__)
 

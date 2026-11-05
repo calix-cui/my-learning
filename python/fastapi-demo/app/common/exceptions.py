@@ -33,18 +33,16 @@ def handle_business_error(request: Request, exc: BusinessError):
 def handle_database_error(request: Request, exc: SQLAlchemyError):
     return JSONResponse(
         status_code=500,
-        content=Response.error(
-            code=500, message="数据库操作失败，请检查记录后重试"
-        ).model_dump(mode="json"),
+        content=Response.error(code=500, message="数据库操作失败，请检查记录后重试").model_dump(
+            mode="json"
+        ),
     )
 
 
 def handle_http_error(request: Request, exc: StarletteHTTPException):
     return JSONResponse(
         status_code=exc.status_code,
-        content=Response.error(code=exc.status_code, message=exc.detail).model_dump(
-            mode="json"
-        ),
+        content=Response.error(code=exc.status_code, message=exc.detail).model_dump(mode="json"),
         headers=exc.headers,
     )
 
@@ -64,7 +62,5 @@ def handle_unexpected_error(request: Request, exc: Exception):
     logger.error("处理请求时发生未预期异常", exc_info=exc)
     return JSONResponse(
         status_code=500,
-        content=Response.error(code=500, message="服务器内部错误").model_dump(
-            mode="json"
-        ),
+        content=Response.error(code=500, message="服务器内部错误").model_dump(mode="json"),
     )

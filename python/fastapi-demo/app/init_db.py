@@ -1,5 +1,5 @@
 # init_db.py 是本篇手动运行的建表入口
-from app import models
+from app import models  # noqa: F401  # 导入即注册模型，下面的 create_all 依赖这次副作用
 from app.database import Base, engine
 
 # from app import models 会导入 app/models.py
@@ -7,11 +7,13 @@ from app.database import Base, engine
 # 两个类继承了 Base，SQLAlchemy 会在创建这些模型类时，根据字段声明生成表结构描述，并登记到同一个 Base.metadata 中
 # 这里登记的是内存中的表定义，还没有在 MySQL 中建表。
 
+
 def main():
     """根据已经注册的模型，在数据库自动创建表"""
     print("开始执行创建表的脚本")
     Base.metadata.create_all(bind=engine)
     print("相关的表已经创建成功")
+
 
 # 这段代码的执行顺序是：
 # 导入 models，执行模型类定义，将 categories、products 的表定义登记到 Base.metadata。

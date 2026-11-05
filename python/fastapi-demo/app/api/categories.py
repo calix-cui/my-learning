@@ -1,10 +1,10 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 
-from typing import Annotated
-
-from app.dependencies import get_db
 from app.common.response import Response
+from app.dependencies import get_db
 from app.schemas.category import CategoryCreateRequest, CategoryResponse, CategoryStatisticResponse
 from app.services import category_service
 
@@ -30,9 +30,7 @@ def create_category(
     # db 不再设置 Python 默认值，由 FastAPI 通过依赖注入提供
 ):
     return Response.success(
-        data=CategoryResponse.model_validate(
-            category_service.create_category(db, payload)
-        )
+        data=CategoryResponse.model_validate(category_service.create_category(db, payload))
     )
 
 
@@ -66,11 +64,10 @@ def patch_category(
     # 分类对象通过响应模型处理，沿用已有字段和时间序列化规则。
     return Response.success(
         data=CategoryResponse.model_validate(
-            category_service.update_category(
-                db=db, payload=payload, category_id=category_id
-            )
+            category_service.update_category(db=db, payload=payload, category_id=category_id)
         )
     )
+
 
 @router.delete(
     "/{category_id}",
@@ -84,6 +81,7 @@ def delete_category(
 ):
     category_service.delete_category(db=db, category_id=category_id)
     return Response.success()
+
 
 @router.get(
     "/statistics",

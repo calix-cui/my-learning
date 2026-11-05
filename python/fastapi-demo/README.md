@@ -1,0 +1,148 @@
+# fastapi-demo
+
+FastAPI + SQLAlchemy 的商品/分类接口练习项目：覆盖增删改查、分页与模糊查询、联表查询、分组统计、统一响应与全局异常处理，并配套 lint、测试与 CI。
+
+## 技术栈
+
+| 组件 | 版本 | 说明 |
+|---|---|---|
+| Python | ≥ 3.10（本地 3.15） | 代码使用 `X \| None` 语法 |
+| FastAPI | 0.124.4 | Web 框架与依赖注入 |
+| SQLAlchemy | 2.0.44 | ORM（`Mapped` / `mapped_column` 写法） |
+| PyMySQL | 1.1.2 | MySQL 驱动 |
+| pydantic-settings | 2.12.0 | 读取 `.env` 配置 |
+| MySQL | 8.x | 数据库，库名 `fastapi_demo` |
+| ruff / pytest / pre-commit | 见 `requirements-dev.txt` | 工程化工具链 |
+
+## 目录结构
+
+```text
+fastapi-demo/
+├── app/
+│   ├── main.py           # 应用入口：注册路由与 5 个全局异常处理器
+│   ├── config.py         # Settings：读取 .env 中的 DATABASE_URL
+│   ├── database.py       # Engine、Session 工厂、Base（公共 id / create_time）
+│   ├── dependencies.py   # get_db：每个请求一个 Session，用完关闭
+│   ├── init_db.py        # 手动建表脚本：python -m app.init_db
+│   ├── api/              # 接口层：只做参数接收、调用 service、包装响应
+│   ├── schemas/          # 数据契约：入参校验与出参序列化
+│   ├── services/         # 业务层：校验、事务提交/回滚、ORM 读写
+│   ├── models/           # ORM 模型：categories、products
+│   └── common/           # 统一响应 Response、业务异常与处理器
+├── tests/                # 不依赖 MySQL 的自动化测试
+├── docs/module-map.md    # 模块导图与职责说明（含 4 张图）
+├── Makefile              # 常用命令入口
+├── pyproject.toml        # ruff / pytest 配置（不放运行时依赖）
+├── requirements.txt      # 运行时依赖（锁定版本）
+├── requirements-dev.txt  # 开发依赖
+└── .env.example          # 环境变量模板
+```
+
+分层与调用方向（详情见 [docs/module-map.md](docs/module-map.md)）：
+
+```text
+api → services → models → database
+ │        │
+ └→ schemas ← services
+common（Response / BusinessError）被 api 与 main 复用
+```
+
+## 快速开始
+
+```bash
+cd python/fastapi-demo
+
+# 1. 虚拟环境（项目内 .venv，不要提交）
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 2. 依赖
+python -m pip install -r requirements.txt
+
+# 3. 配置：复制模板后改成自己的账号密码
+cp .env.example .env
+#    DATABASE_URL=mysql+pymysql://root:密码@127.0.0.1:3306/fastapi_demo?charset=utf8mb4
+
+# 4. 建库（create_all 只建表，不建库）
+mysql -u root -p -e "CREATE DATABASE fastapi_demo DEFAULT CHARSET utf8mb4;"
+
+# 5. 建表
+python -m app.init_db
+
+# 6. 启动
+python -m uvicorn app.main:app --reload
+```
+
+打开 <http://127.0.0.1:8000/docs> 查看接口文档。
+
+> 若虚拟环境由 `uv venv` 创建（默认不含 pip），把上面的 `python -m pip install` 换成 `uv pip install --python .venv/bin/python -r requirements.txt`。
+
+## 常用命令
+
+```bash
+make install      # 安装运行时依赖
+make install-dev  # 安装开发依赖（ruff / pytest / pre-commit）
+make run          # 启动开发服务器（热重载）
+make init-db      # 建表
+make test         # 运行测试（不需要 MySQL）
+make lint         # 静态检查，只报告不改文件
+make fmt          # 自动修复导入顺序并格式化
+make check        # 提交前自检：lint + 测试
+```
+
+## 接口一览
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/` | 健康检查 |
+| POST | `/api/categories` | 新增分类，重名返回 409 |
+| GET | `/api/categories` | 分类列表（ID 倒序） |
+| PATCH | `/api/categories/{category_id}` | 修改分类名称 |
+| DELETE | `/api/categories/{category_id}` | 删除分类，分类下有商品时返回 409 |
+| GET | `/api/categories/statistics` | 各分类商品数量（含 0 的分类） |
+| POST | `/api/products` | 新增商品，分类不存在时返回 400 |
+| GET | `/api/products` | 分页 + 关键词 + 分类筛选 |
+| PATCH | `/api/products/{product_id}` | 局部修改商品 |
+| DELETE | `/api/products/{product_id}` | 删除商品 |
+| GET | `/api/products/count` | 商品总数 |
+| GET | `/api/products/{product_id}` | 商品详情，不存在返回 404 |
+
+统一响应格式：`{"code": 200, "message": "请求成功", "data": ...}`；业务异常由全局处理器转成同样的外壳，`code` 与 HTTP 状态码一致。
+
+## 测试
+
+```bash
+make test
+```
+
+测试只覆盖不依赖数据库的部分，因此 CI 不需要 MySQL：
+
+- `tests/test_health.py`：应用装配、OpenAPI 路由是否齐全
+- `tests/test_schemas.py`：入参校验规则、出参序列化格式
+- `tests/test_errors.py`：统一响应外壳、`BusinessError` 状态码
+- `tests/test_api_validation.py`：422 / 400 / 404 的接口级行为
+
+## 工程规范
+
+| 项 | 现状 | 命令 |
+|---|---|---|
+| 代码风格 | ruff（lint + format，行宽 100） | `make lint` / `make fmt` |
+| 导入顺序 | isort 规则，`app` 视为一方包 | 随 `make fmt` 自动修复 |
+| 提交前检查 | pre-commit：ruff、尾随空格、yaml/toml、密钥检测 | `pip install -r requirements-dev.txt && pre-commit install` |
+| CI | GitHub Actions：ruff + format + pytest（Python 3.12） | `.github/workflows/ci.yml` |
+| 配置管理 | `.env` 不入库，模板 `.env.example` | `cp .env.example .env` |
+| 依赖锁定 | 全部 `==` 固定版本 | — |
+
+## 已知限制与后续计划
+
+- 唯一约束冲突判断依赖 MySQL 错误码 `1062`（`app/services/category_service.py`、`product_service.py`），换数据库需调整。
+- 建表用 `Base.metadata.create_all`，没有迁移版本记录；后续建议引入 Alembic。
+- `Response.data` 是 `Any`，OpenAPI 里看不到具体结构；可为每个接口声明具体 `response_model`。
+- 列表接口的 `total` 与 `items` 是两次查询，极端并发下可能不一致。
+- 没有 Docker / 部署脚本，目前面向本地学习。
+- 仓库里存在两个虚拟环境（`python/.venv` 与 `python/fastapi-demo/.venv`），建议只保留项目内的 `.venv`。
+
+## 相关文档
+
+- [模块功能导图与职责说明](docs/module-map.md)
+- [目录职责速查](app/README.md)

@@ -1,6 +1,7 @@
 # 读取连接信息
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 # BaseSettings 是 pydantic-settings 提供的配置基类，已经实现了读取配置、匹配字段和校验类型的功能
 # class Settings(BaseSettings): 表示让自己的 Settings 类继承这些功能，不需要再手动打开配置文件、查找字段并逐项校验。
 class Settings(BaseSettings):
@@ -10,6 +11,8 @@ class Settings(BaseSettings):
     )
 
     database_url: str
+
+
 # database_url: str 声明需要一个字符串类型的配置字段。
 # BaseSettings 根据字段名匹配配置，默认不区分环境变量名的大小写，因此它会将 DATABASE_URL 的值赋给 database_url。这个字段没有默认值，如果配置中缺少它，创建配置对象时就会报校验错误。
 # SettingsConfigDict 指定读取 .env 并使用 UTF-8 编码

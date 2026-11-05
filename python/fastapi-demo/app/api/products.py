@@ -1,18 +1,17 @@
 from typing import Annotated
 
 # 使用 Annotated 可以将类型声明与依赖配置分离，并将常用依赖封装成可复用的类型别名，减少重复代码，让代码结构更清晰、易维护。
-
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db
 from app.common.response import Response
+from app.dependencies import get_db
 from app.schemas.product import (
-    ProductCreateRequest,
-    ProductResponse,
-    ProductPageResponse,
     ProductCountResponse,
-    ProductUpdateRequest
+    ProductCreateRequest,
+    ProductPageResponse,
+    ProductResponse,
+    ProductUpdateRequest,
 )
 from app.services import product_service
 
@@ -44,9 +43,7 @@ def create_product(
 )
 def get_page_products(
     db: Annotated[Session, Depends(get_db)],
-    keyword: Annotated[
-        str | None, Query(max_length=50, description="名称关键词")
-    ] = None,
+    keyword: Annotated[str | None, Query(max_length=50, description="名称关键词")] = None,
     category_id: Annotated[int | None, Query(gt=0, description="分类ID")] = None,
     page: Annotated[int, Query(ge=1, description="页码")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="每页条数")] = 10,
@@ -65,9 +62,7 @@ def get_page_products(
     description="统计全部商品数量，不应用商品列表接口的关键词和分类筛选条件。",
 )
 def read_product_count(db: Annotated[Session, Depends(get_db)]):
-    return Response.success(
-        data=ProductCountResponse(total=product_service.count_products(db))
-    )
+    return Response.success(data=ProductCountResponse(total=product_service.count_products(db)))
 
 
 @router.get(
@@ -85,6 +80,7 @@ def read_product(
     if product is None:
         raise HTTPException(status_code=404, detail="商品不存在")
     return Response.success(data=ProductResponse.model_validate(product))
+
 
 @router.patch(
     "/{product_id}",

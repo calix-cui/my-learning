@@ -9,8 +9,8 @@ from app.common.exceptions import (
     handle_business_error,
     handle_database_error,
     handle_http_error,
-    handle_validation_error,
     handle_unexpected_error,
+    handle_validation_error,
 )
 from app.common.response import Response
 

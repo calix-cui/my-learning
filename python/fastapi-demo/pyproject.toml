@@ -1,0 +1,47 @@
+# 本文件只放“工程工具”配置（lint、格式、测试），不声明运行时依赖。
+# 依赖仍由 requirements.txt / requirements-dev.txt 管理，保持学习项目“pip install -r”即可运行。
+# 工具说明：ruff 同时负责 lint 与格式化，pytest 负责测试，pre-commit 负责提交前检查。
+
+[tool.ruff]
+# 与 fastapi 0.124 / SQLAlchemy 2.0 支持的 Python 版本对齐：代码用到 X | None 语法，最低 3.10
+target-version = "py310"
+line-length = 100
+extend-exclude = [".venv", "__pycache__", "docs"]
+
+[tool.ruff.lint]
+# 规则集选择原则：只启用“发现真实缺陷”和“统一风格”的规则，避免把中文注释也当成错误
+select = [
+    "E4", "E7", "E9",  # pycodestyle 的 import/语法类错误
+    "F",               # pyflakes：未定义名字、未使用变量与导入
+    "W",               # pycodestyle 空白问题
+    "I",               # isort：导入分组与排序
+    "UP",              # pyupgrade：过时的写法
+    "B",               # bugbear：容易引入 bug 的写法
+    "SIM",             # 可简化写法
+    "C4",              # comprehensions
+    "RET",             # return 语句风格
+    "PTH",             # pathlib 替代 os.path
+    "ARG",             # 未使用的函数参数
+    "DTZ",             # 不带时区的时间处理
+    "G", "LOG",        # 日志调用规范
+    "RUF100",          # 失效的 noqa
+]
+ignore = [
+    "E501",   # 行宽交给 ruff format 处理，中文注释按语义换行
+    "SIM102", # 嵌套 if 在这里表达“先判断字段是否提交、再判断取值是否合法”两步语义
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Starlette 要求异常处理器签名固定为 (request, exc)，request 未使用也必须保留
+"app/common/exceptions.py" = ["ARG001"]
+# 测试里构造“无时区的 datetime”是为了对齐接口输出的时间格式，属于有意为之
+"tests/*" = ["DTZ001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# 让 tests/ 里可以直接 from app... 导入，无需安装成包
+pythonpath = ["."]
+addopts = "-q"

@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -53,9 +53,7 @@ def get_categories(db: Session):
         raise BusinessError("查询分类失败，请稍后重试", code=500) from exc
 
 
-def update_category(
-    db: Session, payload: CategoryCreateRequest, category_id: int
-) -> Category:
+def update_category(db: Session, payload: CategoryCreateRequest, category_id: int) -> Category:
     category = db.get(Category, category_id)
     if not category:
         raise BusinessError(message="分类不存在", code=404)
@@ -95,9 +93,7 @@ def delete_category(db: Session, category_id: int):
 def get_category_statistics(db: Session):
 
     stmt = (
-        select(
-            Category.id, Category.name, func.count(Product.id).label("product_count")
-        )
+        select(Category.id, Category.name, func.count(Product.id).label("product_count"))
         .outerjoin(Product, Product.category_id == Category.id)
         .group_by(Category.id, Category.name)
         .order_by(Category.id.asc())

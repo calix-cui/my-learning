@@ -1,0 +1,7 @@
+# 开发期工具（不参与运行）：pip install -r requirements-dev.txt
+# 版本与 requirements.txt 一样锁定，避免不同机器 lint/测试结果不一致
+-r requirements.txt
+
+ruff==0.17.3
+pytest==9.2.0
+pre-commit==4.7.0
