@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 
 from app.common.exceptions import BusinessError
 from app.models import Category, Product
-from app.schemas.product import ProductCreateRequest, ProductUpdateRequest
+from app.schemas.product import ProductResponse, ProductCreateRequest, ProductUpdateRequest
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,10 @@ def get_products(
         total = db.scalar(total_statement)
 
         statement = (
-            select(Product)
+            select(Product, Category.name.label("category_name"))
+            # 查询两项：商品 ORM 对象、分类名称。label 为分类名称列起别名
+            .join(Category, Product.category_id == Category.id)
+            # 按商品的分类外键关联分类主键，筛选、倒序和分页规则保持原样。
             .where(*filters)
             .order_by(Product.id.desc())
             .offset(
@@ -71,7 +74,18 @@ def get_products(
             )  # page=1， page_size=10  第二页就从序号10开始查询   序号是从0开始计数的
             .limit(page_size)
         )
-        items = db.scalars(statement).all()
+        rows = db.execute(statement).all()
+        # 复用原商品响应模型转换字段，再给每行结果补上分类名称。
+        items = [
+            {
+                **ProductResponse.model_validate(product).model_dump(),
+                # model_validate 根据已有的 from_attributes=True 从商品对象读取字段，生成商品响应模型
+                # model_dump 按响应模型生成字段字典，价格和创建时间使用已有序列化规则，不再手动逐个写 "id": product.id 等七项映射
+                "category_name": category_name,
+                # ** 将商品字典的键值对展开到外层字典，再补上 "category_name": category_name
+            }
+            for product, category_name in rows
+        ]
         return {
             "items": items,
             "total": total,

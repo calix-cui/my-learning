@@ -36,8 +36,13 @@ class ProductResponse(BaseModel):
 class ProductCountResponse(BaseModel):
     total: int = Field(description="全部商品数量")
 
+class ProductWithCategoryNameResponse(ProductResponse):
+    """复用商品响应字段，只增加所属分类名称。"""
+
+    category_name: str = Field(description="分类名称")
+
 class ProductPageResponse(BaseModel):
-    items: list[ProductResponse] = Field(description="当前页商品")
+    items: list[ProductWithCategoryNameResponse] = Field(description="当前页商品")
     total: int = Field(description="符合条件的商品总数")
     page: int = Field(description="当前页码")
     page_size: int = Field(description="每页条数")
