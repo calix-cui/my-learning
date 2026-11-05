@@ -90,3 +90,25 @@ def delete_category(db: Session, category_id: int):
         db.rollback()
         logger.exception("删除分类数据库操作失败")
         raise
+
+
+def get_category_statistics(db: Session):
+
+    stmt = (
+        select(
+            Category.id, Category.name, func.count(Product.id).label("product_count")
+        )
+        .outerjoin(Product, Product.category_id == Category.id)
+        .group_by(Category.id, Category.name)
+        .order_by(Category.id.asc())
+    )
+    #     stmt 是本次查询语句，按执行过程分为三步：
+    # select(...) 查询分类 ID、名称和计数。func.count(Product.id).label("product_count") 计算非 NULL 的商品 ID 数量，并把结果列命名为 product_count。
+    # .outerjoin(Product, Product.category_id == Category.id) 以分类为左表，关联商品的分类外键；.group_by(Category.id, Category.name) 把同一分类的商品归为一组，没有商品的分类也保留。
+    # .order_by(Category.id.asc()) 按分类 ID 升序；db.execute(stmt).all() 执行语句，取回包含三项的完整行列表。
+    rows = db.execute(stmt).all()
+
+    return [
+        {"id": category_id, "name": category_name, "product_count": product_count}
+        for category_id, category_name, product_count in rows
+    ]

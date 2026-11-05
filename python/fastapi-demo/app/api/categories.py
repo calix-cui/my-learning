@@ -5,7 +5,7 @@ from typing import Annotated
 
 from app.dependencies import get_db
 from app.common.response import Response
-from app.schemas.category import CategoryCreateRequest, CategoryResponse
+from app.schemas.category import CategoryCreateRequest, CategoryResponse, CategoryStatisticResponse
 from app.services import category_service
 
 router = APIRouter(prefix="/categories", tags=["分类相关的接口"])
@@ -84,3 +84,17 @@ def delete_category(
 ):
     category_service.delete_category(db=db, category_id=category_id)
     return Response.success()
+
+@router.get(
+    "/statistics",
+    response_model=Response,
+    summary="统计分类商品数量",
+    description="按分类ID升序返回分类ID、名称和商品数量；没有商品的分类也保留，数量为0。",
+)
+def read_category_statistics(db: Annotated[Session, Depends(get_db)]):
+    return Response.success(
+        data=[
+            CategoryStatisticResponse.model_validate(item)
+            for item in category_service.get_category_statistics(db=db)
+        ]
+    )
