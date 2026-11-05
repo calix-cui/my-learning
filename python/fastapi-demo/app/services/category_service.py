@@ -38,3 +38,15 @@ def create_category(db: Session, payload: CategoryCreateRequest) -> Category:
             raise BusinessError("分类名称已存在", code=409) from exc
         raise
     return category
+
+def get_categories(db: Session):
+    """查询所有的商品分类"""
+    try:
+        statement = select(Category).order_by(Category.id.desc())
+        return db.scalars(statement).all()
+        # db.scalars(statement) 执行语句并取得其中的 ORM 对象，.all() 将全部对象取出
+
+    except SQLAlchemyError as exc:
+        logger.exception("查询分类列表失败")
+        raise BusinessError("查询分类失败，请稍后重试", code=500) from exc
+

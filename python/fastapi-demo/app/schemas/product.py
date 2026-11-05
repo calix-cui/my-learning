@@ -32,3 +32,12 @@ class ProductResponse(BaseModel):
     @field_serializer("create_time")
     def serialize_create_time(self, value: datetime) -> str:
         return value.strftime("%Y-%m-%d %H:%M:%S")
+
+class ProductCountResponse(BaseModel):
+    total: int = Field(description="全部商品数量")
+
+class ProductPageResponse(BaseModel):
+    items: list[ProductResponse] = Field(description="当前页商品")
+    total: int = Field(description="符合条件的商品总数")
+    page: int = Field(description="当前页码")
+    page_size: int = Field(description="每页条数")
