@@ -12,6 +12,7 @@ from app.schemas.product import (
     ProductResponse,
     ProductPageResponse,
     ProductCountResponse,
+    ProductUpdateRequest
 )
 from app.services import product_service
 
@@ -84,3 +85,35 @@ def read_product(
     if product is None:
         raise HTTPException(status_code=404, detail="商品不存在")
     return Response.success(data=ProductResponse.model_validate(product))
+
+@router.patch(
+    "/{product_id}",
+    response_model=Response,
+    summary="修改商品",
+    description="按商品ID局部修改商品，只更新提交的字段；修改成功返回完整商品，不存在时返回404。",
+)
+def patch_product(
+    payload: ProductUpdateRequest,
+    product_id: Annotated[int, Path(gt=0)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    # Service 处理业务失败，这里只把成功结果转换为商品响应模型。
+    return Response.success(
+        data=ProductResponse.model_validate(
+            product_service.update_product(db=db, payload=payload, product_id=product_id)
+        )
+    )
+
+
+@router.delete(
+    "/{product_id}",
+    response_model=Response,
+    summary="删除商品",
+    description="按商品ID删除一条记录；不存在时返回404，删除成功返回统一成功响应。",
+)
+def delete_product(
+    product_id: Annotated[int, Path(gt=0)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    product_service.delete_product(db=db, product_id=product_id)
+    return Response.success()

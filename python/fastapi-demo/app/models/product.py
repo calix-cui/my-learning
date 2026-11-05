@@ -1,10 +1,15 @@
 from decimal import Decimal
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, ForeignKey, Numeric, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
+# 只供类型检查工具使用，运行时不导入分类模块，避免互相导入。
+if TYPE_CHECKING:
+    from app.models.category import Category
 
 class Product(Base):
     __tablename__ = "products"
@@ -21,3 +26,4 @@ class Product(Base):
     shelf_status: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, comment="是否上架"
     )
+    category: Mapped["Category"] = relationship(back_populates="products")

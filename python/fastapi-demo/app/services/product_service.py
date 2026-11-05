@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 
 from app.common.exceptions import BusinessError
 from app.models import Category, Product
-from app.schemas.product import ProductCreateRequest
+from app.schemas.product import ProductCreateRequest, ProductUpdateRequest
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +82,12 @@ def get_products(
         logger.exception("查询商品列表失败")
         raise BusinessError("查询商品列表失败，请稍后重试", code=500) from exc
 
+
 # scalar() 和 scalars() 的区别也不是“数字”和“对象”：
 # 它们都取每行的第一列，具体类型由 select() 选择的内容决定
 # scalar() 只返回第一行的第一列，没有结果行时返回 None；
 # scalars() 提供各行第一列的结果，再用 .all() 全部取出
+
 
 def count_products(db: Session):
     try:
@@ -96,9 +98,61 @@ def count_products(db: Session):
         logger.exception("统计商品数量失败")
         raise BusinessError("统计商品数量失败，请稍后重试", code=500) from exc
 
+
 def get_product(db: Session, product_id: int):
     try:
         return db.get(Product, product_id)
     except SQLAlchemyError as exc:
         logger.exception("查询商品详情失败")
         raise BusinessError("查询商品失败，请稍后重试", code=500) from exc
+
+
+def update_product(
+    db: Session,
+    payload: ProductUpdateRequest,
+    product_id: int,
+) -> Product | None:
+    try:
+        product = db.get(Product, product_id)
+        # 查不到商品时抛出业务异常，由全局处理返回 404
+        if product is None:
+            raise BusinessError(message="未找到商品", code=404)
+
+        changes = payload.model_dump(exclude_unset=True)
+        # 一个字段都没有提交时没有可写入的内容
+        if not changes:
+            raise BusinessError("至少提交一个需要修改的字段")
+
+        for field, value in changes.items():
+            # 显式提交的 null 表示要把字段清空，本项目的业务字段都不允许为空。
+            if value is None:
+                raise BusinessError(f"字段 {field} 的值不允许为 null")
+        if "category_id" in changes:
+            # 分类必须真实存在才能写入外键，先确认再保存，提示更明确。
+            if db.get(Category, changes["category_id"]) is None:
+                raise BusinessError("商品分类不存在")
+        for field, value in changes.items():
+            # ORM 对象要逐个属性赋值，字典的 update() 不能用在对象上。
+            # product: {"name": "矿泉水"} -> schema: {"name": "纯净水"}
+            setattr(product, field, value)
+        db.commit()
+        db.refresh(product)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("修改商品数据库操作失败")
+        raise
+
+    return product
+
+
+def delete_product(db: Session, product_id: int):
+    product = db.get(Product, product_id)
+    if product is None:
+        raise BusinessError(message="商品不存在", code=404)
+    try:
+        db.delete(product)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("删除商品数据库操作失败")
+        raise

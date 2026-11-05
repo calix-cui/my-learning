@@ -41,3 +41,28 @@ class ProductPageResponse(BaseModel):
     total: int = Field(description="符合条件的商品总数")
     page: int = Field(description="当前页码")
     page_size: int = Field(description="每页条数")
+
+class ProductUpdateRequest(BaseModel):
+    """修改商品，客户端可以提交的字段，局部修改"""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+    # ConfigDict(str_strip_whitespace=True) 会在模型校验时去掉字符串首尾空白
+
+    category_id: int | None = Field(
+        default=None, gt=0, description="商品分类的ID，必须是正整数"
+    )
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+        description="商品名称，不超过50个字符",
+    )
+    price: Decimal | None = Field(
+        default=None,
+        ge=0,
+        decimal_places=2,
+        max_digits=8,
+        description="商品价格，最大保留2位小数",
+    )
+    stock: int | None = Field(default=None, ge=0, description="库存，不小于0")
+    shelf_status: bool | None = Field(default=None, description="上架状态")
