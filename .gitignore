@@ -63,3 +63,6 @@ temp/
 *.db
 .cache/
 data/generated/
+
+# --- 端到端验收产物（pnpm acceptance 生成） ---
+.acceptance/

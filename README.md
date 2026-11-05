@@ -35,6 +35,13 @@ my-learning/
 
 ### Fullstack
 
+| 项目 | 说明 | 状态 |
+|---|---|---|
+| [product-admin](./fullstack/product-admin/) | 简易商品管理后台：Vue 3 + TypeScript + Vite + Element Plus，对接 FastAPI 商品/分类接口；含 PRD、设计稿、API 契约与 18 项端到端验收脚本 | 可用（v1.0） |
+
+商品管理网站的交付与验收说明见 [docs/product-admin/README.md](./docs/product-admin/README.md)，
+包含如何启动前后端、P0 需求对照表、验收证据与已知限制。
+
 > 项目名称、状态和说明应随实际进度更新；尚未创建的项目可以删除对应索引。
 
 ## 环境与依赖管理
@@ -63,7 +70,7 @@ deactivate
 进入具体前端项目后，根据锁文件选择包管理器：
 
 ```bash
-cd 02-frontend/react-demo
+cd frontend/react-demo   # 换成实际项目目录
 npm install
 npm run dev
 ```
