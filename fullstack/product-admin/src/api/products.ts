@@ -46,10 +46,7 @@ export async function createProduct(payload: ProductCreatePayload): Promise<Prod
 }
 
 /** 局部修改商品 */
-export async function updateProduct(
-  id: number,
-  payload: ProductUpdatePayload,
-): Promise<Product> {
+export async function updateProduct(id: number, payload: ProductUpdatePayload): Promise<Product> {
   const { data } = await client.patch<ApiResponse<Product>>(`/products/${id}`, payload)
   return data.data
 }

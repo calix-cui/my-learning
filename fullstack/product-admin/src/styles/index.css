@@ -87,12 +87,7 @@ body,
 body {
   color: var(--pa-color-text-regular);
   font-family:
-    -apple-system,
-    'PingFang SC',
-    'Hiragino Sans GB',
-    'Microsoft YaHei',
-    'Helvetica Neue',
-    Arial,
+    -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial,
     sans-serif;
   font-size: var(--pa-font-size-body);
   font-variant-numeric: tabular-nums;

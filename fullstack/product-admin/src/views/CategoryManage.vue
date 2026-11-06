@@ -170,12 +170,7 @@ onMounted(() => {
               </span>
             </template>
           </el-table-column>
-          <el-table-column
-            prop="create_time"
-            label="创建时间"
-            width="200"
-            class-name="time-cell"
-          />
+          <el-table-column prop="create_time" label="创建时间" width="200" class-name="time-cell" />
           <el-table-column label="操作" width="204" align="center">
             <template #default="{ row }">
               <div class="row-actions">

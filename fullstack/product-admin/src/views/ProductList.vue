@@ -257,12 +257,7 @@ onMounted(() => {
         <el-table v-loading="loading" :data="items" class="data-table" row-key="id">
           <el-table-column prop="id" label="ID" width="72" class-name="id-cell" />
           <el-table-column prop="name" label="商品名称" width="308" show-overflow-tooltip />
-          <el-table-column
-            prop="category_name"
-            label="分类"
-            width="104"
-            show-overflow-tooltip
-          />
+          <el-table-column prop="category_name" label="分类" width="104" show-overflow-tooltip />
           <el-table-column label="价格" width="116" align="right">
             <template #default="{ row }">
               <span class="price-cell">{{ formatPrice(row.price) }}</span>
@@ -285,12 +280,7 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column
-            prop="create_time"
-            label="创建时间"
-            width="180"
-            class-name="time-cell"
-          />
+          <el-table-column prop="create_time" label="创建时间" width="180" class-name="time-cell" />
           <el-table-column label="操作" width="164" align="center">
             <template #default="{ row }">
               <div class="row-actions">
@@ -308,27 +298,27 @@ onMounted(() => {
             </template>
           </el-table-column>
 
-        <template #empty>
-          <el-empty v-if="loadError" description="数据加载失败，请稍后重试" :image-size="96">
-            <el-button :loading="loading" @click="refreshAll">重新加载</el-button>
-          </el-empty>
-          <el-empty v-else :image="emptyStateImage" :image-size="120">
-            <template #description>
-              <p class="empty-state__title">
-                {{ hasFilter ? '没有符合条件的商品' : '还没有商品' }}
-              </p>
-              <p class="empty-state__sub">
-                {{
-                  hasFilter
-                    ? `试试更换关键词，或清空筛选条件查看全部 ${productTotal} 件商品`
-                    : '点击右上角「新增商品」创建第一件商品'
-                }}
-              </p>
-            </template>
-            <el-button v-if="hasFilter" :icon="Refresh" @click="handleReset">清空筛选</el-button>
-            <el-button v-else type="primary" :icon="Plus" @click="openCreate">新增商品</el-button>
-          </el-empty>
-        </template>
+          <template #empty>
+            <el-empty v-if="loadError" description="数据加载失败，请稍后重试" :image-size="96">
+              <el-button :loading="loading" @click="refreshAll">重新加载</el-button>
+            </el-empty>
+            <el-empty v-else :image="emptyStateImage" :image-size="120">
+              <template #description>
+                <p class="empty-state__title">
+                  {{ hasFilter ? '没有符合条件的商品' : '还没有商品' }}
+                </p>
+                <p class="empty-state__sub">
+                  {{
+                    hasFilter
+                      ? `试试更换关键词，或清空筛选条件查看全部 ${productTotal} 件商品`
+                      : '点击右上角「新增商品」创建第一件商品'
+                  }}
+                </p>
+              </template>
+              <el-button v-if="hasFilter" :icon="Refresh" @click="handleReset">清空筛选</el-button>
+              <el-button v-else type="primary" :icon="Plus" @click="openCreate">新增商品</el-button>
+            </el-empty>
+          </template>
         </el-table>
       </div>
 

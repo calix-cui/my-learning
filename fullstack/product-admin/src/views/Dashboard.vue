@@ -2,14 +2,7 @@
 import emptyStateImage from '@/assets/empty-state.svg'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import {
-  ArrowRight,
-  Box,
-  CircleCheck,
-  Files,
-  Refresh,
-  Warning,
-} from '@element-plus/icons-vue'
+import { ArrowRight, Box, CircleCheck, Files, Refresh, Warning } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 
 import { countProducts, listProducts } from '@/api/products'
@@ -55,9 +48,7 @@ const lowStockProducts = computed(() =>
     .sort((a, b) => a.stock - b.stock)
     .slice(0, 5),
 )
-const lowStockTotal = computed(
-  () => listedProducts.value.filter((item) => item.stock <= 20).length,
-)
+const lowStockTotal = computed(() => listedProducts.value.filter((item) => item.stock <= 20).length)
 const ringBackground = computed(() => {
   if (productTotal.value === 0) {
     return 'conic-gradient(#F3F4F6 0% 100%)'
@@ -158,13 +149,24 @@ onMounted(() => {
             <h2 class="panel__title">各分类商品数</h2>
             <span class="panel__meta">按分类统计，含暂无商品的分类</span>
           </div>
-          <el-button :icon="Refresh" circle :loading="loading" title="刷新" @click="fetchOverview" />
+          <el-button
+            :icon="Refresh"
+            circle
+            :loading="loading"
+            title="刷新"
+            @click="fetchOverview"
+          />
         </div>
 
         <div class="panel__body">
           <el-skeleton v-if="loading" :rows="4" animated />
 
-          <el-empty v-else-if="statistics.length === 0" description="还没有分类" :image="emptyStateImage" :image-size="96">
+          <el-empty
+            v-else-if="statistics.length === 0"
+            description="还没有分类"
+            :image="emptyStateImage"
+            :image-size="96"
+          >
             <el-button type="primary" @click="router.push('/categories')">去创建分类</el-button>
           </el-empty>
 
@@ -182,8 +184,12 @@ onMounted(() => {
             </div>
 
             <div class="distribution__footer">
-              <span>合计 {{ assignedProductTotal }} 件商品 · 平均每类 {{ averagePerCategory }} 件</span>
-              <span v-if="emptyCategories.length > 0">「{{ emptyCategories[0].name }}」暂无商品</span>
+              <span
+                >合计 {{ assignedProductTotal }} 件商品 · 平均每类 {{ averagePerCategory }} 件</span
+              >
+              <span v-if="emptyCategories.length > 0"
+                >「{{ emptyCategories[0].name }}」暂无商品</span
+              >
               <span v-else>所有分类均已有商品</span>
             </div>
           </template>
@@ -272,23 +278,13 @@ onMounted(() => {
         <el-table v-loading="loading" :data="recentProducts" class="data-table" row-key="id">
           <el-table-column prop="id" label="ID" width="80" class-name="id-cell" />
           <el-table-column prop="name" label="商品名称" width="400" show-overflow-tooltip />
-          <el-table-column
-            prop="category_name"
-            label="分类"
-            width="140"
-            show-overflow-tooltip
-          />
+          <el-table-column prop="category_name" label="分类" width="140" show-overflow-tooltip />
           <el-table-column label="价格" width="130" align="right">
             <template #default="{ row }">
               <span class="price-cell">{{ formatPrice(row.price) }}</span>
             </template>
           </el-table-column>
-          <el-table-column
-            prop="create_time"
-            label="创建时间"
-            width="260"
-            class-name="time-cell"
-          />
+          <el-table-column prop="create_time" label="创建时间" width="260" class-name="time-cell" />
           <el-table-column label="状态" width="134" align="center">
             <template #default="{ row }">
               <el-tag
