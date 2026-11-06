@@ -9,7 +9,7 @@
 | ID | 类别 | 问题 | 优先级 | 成本 |
 |---|---|---|---|---|
 | T-01 | 协作 | `AGENTS.md`、`docs/prompts/` 未提交，规则资产只在工作区 | P0 | S |
-| T-02 | 前端 | 零静态检查（无 ESLint / Prettier），按轻量档补 | P0 | S |
+| T-02 | 前端 | ~~零静态检查（无 ESLint / Prettier）~~ ✅ 轻量档门禁已落地 | P0 | S |
 | T-03 | 前端 | 零单测、CI 不覆盖前端，按轻量档补 | P0 | S |
 | T-04 | 后端 | 测试完全不连库，SQL/约束/事务路径没有任何自动化覆盖 | P1 | M |
 | T-05 | 数据库 | ~~无迁移工具，靠 `create_all` 建表~~ ✅ 已由 Alembic 接管 | P1 | M |
@@ -43,13 +43,14 @@
 
 ## 2. 前端质量（最大空白）
 
-### T-02 零静态检查（P0 · S）
-- **证据**：仓库内不存在 `eslint.config.*` / `.eslintrc*` / `.prettierrc*` / `biome.json`（`find` 实测为空）。
+### T-02 零静态检查（P0 · S）—— ✅ 已于 2026-11-07 解决
+- **证据（当时）**：仓库内不存在 `eslint.config.*` / `.eslintrc*` / `.prettierrc*` / `biome.json`（`find` 实测为空）。
 - **影响**：后端有 ruff 兜底，前端全靠 `vue-tsc --noEmit`；类型之外的问题（未定义变量、模板里写错指令、重复声明）无人拦。
-- **建议**（已按 [ADR-0002](../adr/0002-frontend-quality-gate-lite.md) 降为轻量档）：ESLint 10 flat config 只开 `eslint:recommended` + `plugin:vue/vue3-essential` + ts-eslint `recommended`（**不开 type-aware**）+ Prettier（仅保存时/手动执行，不进 CI 阻断）；CI 只跑 `pnpm build` + `pnpm lint`。不采用 Biome（Vue 支持仍实验性）。
+- **解决**（按 [ADR-0002](../adr/0002-frontend-quality-gate-lite.md)「轻量档」）：`eslint@10.14.0` flat config（`@eslint/js` recommended + `typescript-eslint` recommended + `eslint-plugin-vue` flat/essential，**不开 type-aware**）+ Prettier 3（不进 CI 阻断）；CI 新增 `frontend` job（`pnpm build` + `pnpm lint`）。存量代码只报 2 个 error，已修。
+- **遗留**：未启用 type-aware 规则，`any` 泛滥一类问题仍靠 review 兜底。
 
-### T-03 零单元测试 / 零 CI（P0 · S）
-- **证据**：`fullstack/product-admin` 下无 `tests/`、无 `vitest.config.*`；`.github/workflows/ci.yml` 的 `paths` 只包含 `python/fastapi-demo/**`。
+### T-03 零单元测试（P0 · S）—— CI 覆盖已补，单测未做
+- **证据**：`fullstack/product-admin` 下无 `tests/`、无 `vitest.config.*`（CI 覆盖已于 2026-11-07 补上，见 T-02）。
 - **影响**：前端唯一的质量网是 18 项 E2E，跑一次要装 Chrome、起两个服务、改动真实数据库；改一个组件无法快速验证。
 - **建议**（轻量档）：Vitest 只覆盖 `src/api`（错误映射）、`src/utils`（格式化）两类纯逻辑，**不写组件快照、不设覆盖率门槛**；CI 增加前端 job（`pnpm install --frozen-lockfile && pnpm build && pnpm lint`）。组件层继续由 18 项 E2E + 人工验收兜底。
 
@@ -182,7 +183,7 @@
 
 ## 9. 建议的处理顺序
 
-1. **本周（P0）**：T-01 提交规范资产 → T-02/T-03 前端 lint + 单测 + CI → T-12 统一 Python 版本。
+1. **本周（P0）**：T-02 ✅ 前端 lint + CI（已完成）→ T-03 前端单测 → T-12 统一 Python 版本。
 2. **阶段 3（架构/基建）**：T-06 泛型响应、T-08 配置分层、T-04 集成测试小集合（T-05 Alembic 已完成）。
 3. **阶段 4（部署）**：T-09 容器化与反代、T-10 API 基址、T-17 最小鉴权、T-24 装 Docker。
 4. **持续**：T-11 验收脚本隔离、T-15/T-16 查询优化、T-19/T-20 文档整理。

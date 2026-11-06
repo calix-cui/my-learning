@@ -34,6 +34,27 @@ pnpm type-check
 
 > 端口约定：dev 5173、preview 4173，均不会占用后端 8000 端口；`strictPort: true` 保证端口被占用时直接报错而不是静默换端口。
 
+## 代码规范与检查
+
+按 [ADR-0002](../../docs/adr/0002-frontend-quality-gate-lite.md) 的「轻量档」配置：只拦会出错的问题，不追求类型感知规则与格式统一率。
+
+```bash
+pnpm lint          # ESLint 全量检查（CI 会跑，有 error 即失败）
+pnpm lint:fix      # 自动修可修的问题
+pnpm format        # Prettier 格式化（本地用，不进 CI 阻断）
+pnpm format:check  # 只检查格式，不写入
+```
+
+| 项 | 配置 | 说明 |
+| --- | --- | --- |
+| ESLint | `eslint.config.js`（flat config，ESLint 10） | `@eslint/js` recommended + `typescript-eslint` recommended + `eslint-plugin-vue` flat/essential + `eslint-config-prettier` 收尾 |
+| 关闭项 | 不启用 type-aware 规则 | 需要 `parserOptions.projectService`，跑得慢、误报多；`vue-tsc --noEmit` 已经把类型错拦在构建里 |
+| Prettier | `.prettierrc.json` | 单引号、无分号、行宽 100、`trailingComma: all`；**不参与 CI**，避免为格式改代码 |
+| CI | `.github/workflows/ci.yml` 的 `frontend` job | 只有两条：`pnpm build`（含 `vue-tsc`）与 `pnpm lint` |
+
+四条红线（出现即本次改动不算完成）：构建失败、ESLint 报 error、引入未声明的依赖、E2E 用例退化。
+升级触发条件写在 ADR-0002 里（前端 > 8000 行 / 组件 > 40 个 / 同类事故 ≥ 2 次 / E2E > 30 条）。
+
 ## 与后端联调
 
 - 后端地址：`http://127.0.0.1:8000`（FastAPI，代码位于仓库 `python/fastapi-demo/`）。

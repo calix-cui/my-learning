@@ -13,7 +13,6 @@
 // 前置数据：库里最好有 ≥2 页商品（本仓库 seed 后 14 条），脚本会自己创建并清理 E2E 数据。
 import puppeteer from 'puppeteer-core'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 
 const CHROME =
@@ -106,7 +105,7 @@ const cleanRow = async (name) => {
   await page.keyboard.press('Enter')
   await sleep(1500)
   let list = await rows()
-  for (const r of list.filter((t) => t.includes(name))) {
+  for (const _ of list.filter((t) => t.includes(name))) {
     await page.evaluate((n) => {
       const row = [...document.querySelectorAll('.el-table__body .el-table__row')].find((x) =>
         x.innerText.includes(n),
@@ -169,7 +168,9 @@ await sleep(800)
   await page.click('.el-dialog .el-dialog__header')
   await sleep(600)
   const errs = await page.evaluate(() =>
-    [...document.querySelectorAll('.el-dialog .el-form-item__error')].map((e) => e.innerText.trim()),
+    [...document.querySelectorAll('.el-dialog .el-form-item__error')].map((e) =>
+      e.innerText.trim(),
+    ),
   )
   if (errs.some((t) => t.includes('2 位小数'))) pass('UI-06 价格精度校验', errs.join('; '))
   else fail('UI-06 价格精度校验', JSON.stringify(errs))

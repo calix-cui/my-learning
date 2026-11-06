@@ -51,3 +51,21 @@
 - 出现「改一处、坏一片」且 E2E 没拦住的事故 ≥ 2 次。
 - E2E 用例数 > 30（此时 Playwright 的 runner/trace 收益开始大于迁移成本）。
 - 有第二个人参与前端开发（风格统一开始有协作价值）。
+
+## 落地记录（2026-11-07）
+
+| 组成 | 实际版本 / 位置 |
+| --- | --- |
+| ESLint | `eslint@10.14.0`（flat config，`fullstack/product-admin/eslint.config.js`） |
+| 插件 | `@eslint/js@10.0.1`、`typescript-eslint@8.72.1`、`eslint-plugin-vue@10.12.0`（`flat/essential`）、`eslint-config-prettier@10.1.8`（放最后） |
+| 其余 | `prettier@3.9.10` + `.prettierrc.json` / `.prettierignore`、`globals@17.14.0`（浏览器与 Node 全局） |
+| 脚本 | `pnpm lint` / `lint:fix` / `format` / `format:check` |
+| CI | `.github/workflows/ci.yml` 的 `frontend` job：`pnpm install --frozen-lockfile` → `pnpm build` → `pnpm lint`（Node 22 + pnpm 12.10.1） |
+
+规则口径：`@eslint/js` recommended + `typescript-eslint` recommended + `vue` flat/essential，**未启用** type-aware 规则（不设 `projectService`）；仅额外调整两条——`@typescript-eslint/no-unused-vars` 允许 `_` 前缀、关闭 `vue/multi-word-component-names`（视图均已是多词名，规则无收益）。
+
+首次接入的实际产出：存量代码只报出 2 个 error（`scripts/acceptance.mjs` 的未使用 `os` 导入与循环变量），修掉后全绿；另有 6 个文件存在格式漂移，已用 `pnpm format` 一次性收敛为独立提交，便于 review。
+
+门禁有效性实测（break-glass）：临时写入未使用变量（`.ts` 与 `<script setup>` 各一处）+ 缺失 `v-for` key 的模板，`pnpm lint` 报 3 个 error 且退出码 1；删除临时文件后恢复 `exit=0`。
+
+未做（按本 ADR 的「暂缓」）：Vitest 单测、Playwright、覆盖率门槛、Prettier 参与 CI。
