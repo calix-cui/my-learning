@@ -27,7 +27,8 @@ const backendStatusText = computed(() => {
   if (backendOnline.value === null) {
     return '正在检测后端'
   }
-  return backendOnline.value ? '已连接后端 · 127.0.0.1:8000' : '后端未连接'
+  // 容器部署时前后端同源，写死 127.0.0.1:8000 会误导，这里只报可达性
+  return backendOnline.value ? '已连接后端' : '后端未连接'
 })
 
 const sidebarStatusText = computed(() => {

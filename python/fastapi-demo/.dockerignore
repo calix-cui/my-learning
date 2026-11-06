@@ -1,0 +1,10 @@
+# 本地环境与产物不进构建上下文
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.env
+docs/
+tests/

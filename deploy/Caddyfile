@@ -1,0 +1,20 @@
+# Caddy 反向代理：默认给 localhost 签本地证书，换成真实域名会自动申请 Let's Encrypt。
+# SITE_ADDRESS 由 compose 从 .env 传入，例如 admin.example.com 或 localhost。
+{$SITE_ADDRESS:localhost} {
+	encode zstd gzip
+
+	# 探针不让 Caddy 缓存，排障直接看后端
+	handle /healthz {
+		reverse_proxy frontend:80
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}

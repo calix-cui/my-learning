@@ -1,0 +1,87 @@
+# 商品管理网站的一键部署编排
+# 用法：cp .env.example .env 改好密码 → docker compose up -d --build
+#      需要 HTTPS 时：docker compose --profile https up -d --build
+
+name: product-admin
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 里设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-fastapi_demo}
+      MYSQL_USER: ${MYSQL_USER:-fastapi}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请在 .env 里设置 MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      # 用业务账号探活，顺带确认库和用户都建好了
+      test:
+        ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u${MYSQL_USER:-fastapi} -p${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  backend:
+    build:
+      context: ./python/fastapi-demo
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-fastapi}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-fastapi_demo}?charset=utf8mb4
+      TZ: Asia/Shanghai
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).status == 200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./fullstack/product-admin
+    restart: unless-stopped
+    ports:
+      # 不开 Caddy 时直接用它访问站点
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # 反向代理与 HTTPS 入口，默认不启动；用 --profile https 才拉起
+  caddy:
+    image: caddy:2.9-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
