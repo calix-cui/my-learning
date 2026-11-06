@@ -76,11 +76,16 @@
 
 ## 8. 工作区状态
 
-干净。本地 `main` 领先 `origin/main` 2 个提交：
+干净。`main` 与 `origin/main` 同步于 `cf3f483`。
+
+近期提交（均已推送）：
 
 ```
-ae327d0 chore: 前端接入 ESLint 与 Prettier 并补 CI 前端 job
-a8549fc style: 用 Prettier 统一商品管理后台代码格式
+cf3f483 ci: 前端质量门禁 job 与后端 job 改用 uv
+dab9d40 docs: 更新项目状态到前端门禁与 uv 依赖落地
+a09763d build: 依赖改由 uv 统一声明与锁定
+7886578 style: 用 Prettier 统一商品管理后台代码格式
+aeab2fa chore: 前端接入 ESLint 与 Prettier
 ```
 
-CI 新增的 `frontend` job 需推送到远端后才会在 GitHub 上实际跑一次（本地已用同样的命令验证）。
+CI：`42262805773` 两个 job 全绿（frontend 31s、backend 11s）。中间 `42262148247` 是一次预期的失败——当时远端 workflow 还在用 `requirements-dev.txt`，而该文件已随 uv 改造删除，`ci.yml` 因 token 缺 `workflow` scope 晚了几分钟才推上去。
