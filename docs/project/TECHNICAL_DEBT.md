@@ -12,7 +12,7 @@
 | T-02 | 前端 | 零静态检查（无 ESLint / Prettier），按轻量档补 | P0 | S |
 | T-03 | 前端 | 零单测、CI 不覆盖前端，按轻量档补 | P0 | S |
 | T-04 | 后端 | 测试完全不连库，SQL/约束/事务路径没有任何自动化覆盖 | P1 | M |
-| T-05 | 数据库 | 无迁移工具，靠 `create_all` 建表，schema 无法演进 | P1 | M |
+| T-05 | 数据库 | ~~无迁移工具，靠 `create_all` 建表~~ ✅ 已由 Alembic 接管 | P1 | M |
 | T-06 | 后端 | `Response.data: Any`，OpenAPI 看不到真实结构 | P1 | M |
 | T-07 | 后端 | 用 MySQL 私有错误码 1062 判重名，换库即失效 | P1 | S |
 | T-08 | 后端 | 配置只有 1 个字段、`.env` 按 cwd 相对查找、无环境区分 | P1 | S |
@@ -60,10 +60,11 @@
 - **影响**：分页 500 那类 bug（`scalars` vs `scalar`）之所以能上线，正是因为这条路径没测试。唯一键冲突、事务回滚、联表统计、PATCH 语义全无覆盖。
 - **建议**：二选一——(a) `dependency_overrides` 把 `get_db` 换成 SQLite 内存库（快，但 MySQL 方言差异会失真）；(b) testcontainers/本地 MySQL + 每用例事务回滚（准，慢）。推荐 (b) 作为「仓储层集成测试」小集合，(a) 作为日常快速回归。
 
-### T-05 无迁移工具（P1 · M）
-- **证据**：`app/init_db.py:14` `Base.metadata.create_all(bind=engine)`；仓库无 `alembic.ini` / `migrations/`。
+### T-05 无迁移工具（P1 · M）—— ✅ 已于 2026-11-07 解决
+- **证据（当时）**：`app/init_db.py:14` `Base.metadata.create_all(bind=engine)`；仓库无 `alembic.ini` / `migrations/`。
 - **影响**：`create_all` 只建表不改表。加字段、改类型、加索引都得手工 SQL，且没有回滚。
-- **建议**：引入 Alembic，首个 revision 用 `--autogenerate` 对齐现有 schema，`init_db` 退化为「执行迁移」。
+- **解决**：引入 Alembic 1.20.1（[ADR-0003](../adr/0003-database-migrations-alembic.md)）。首个 revision `2a89b3237f54` 对空库 autogenerate 生成、与本机库逐表 `SHOW CREATE TABLE` 比对一致后 `stamp head` 接管；`app/init_db.py` 改为执行 `upgrade head`；新增 `make migrate` / `make revision` / `make check-migration`。
+- **遗留**：CI 仍未校验迁移一致性（需 MySQL service）。
 
 ### T-06 `Response.data: Any`（P1 · M）
 - **证据**：`app/common/response.py:12` `data: Any = None`；`app/main.py:18` 又把 422 的 `model` 指向同一个 `Response`。
@@ -182,6 +183,6 @@
 ## 9. 建议的处理顺序
 
 1. **本周（P0）**：T-01 提交规范资产 → T-02/T-03 前端 lint + 单测 + CI → T-12 统一 Python 版本。
-2. **阶段 3（架构/基建）**：T-05 Alembic、T-06 泛型响应、T-08 配置分层、T-04 集成测试小集合。
+2. **阶段 3（架构/基建）**：T-06 泛型响应、T-08 配置分层、T-04 集成测试小集合（T-05 Alembic 已完成）。
 3. **阶段 4（部署）**：T-09 容器化与反代、T-10 API 基址、T-17 最小鉴权、T-24 装 Docker。
 4. **持续**：T-11 验收脚本隔离、T-15/T-16 查询优化、T-19/T-20 文档整理。

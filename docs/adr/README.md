@@ -6,6 +6,7 @@
 |---|---|---|---|
 | [ADR-0001](./0001-desktop-shell-electron.md) | 桌面端外壳选择 Electron | 已接受 | 2026-11-06 |
 | [ADR-0002](./0002-frontend-quality-gate-lite.md) | 前端质量门禁采用「轻量档」 | 已接受 | 2026-11-06 |
+| [ADR-0003](./0003-database-migrations-alembic.md) | 用 Alembic 接管表结构演进 | 已接受 | 2026-11-07 |
 
 ## 什么时候写 ADR
 

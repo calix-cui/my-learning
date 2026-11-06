@@ -1,4 +1,5 @@
 fastapi[standard]==0.124.4
 SQLAlchemy==2.0.44            # SQLAlchemy 用于描述表并操作数据库
 PyMySQL[rsa]==1.1.2           # PyMySQL 是实际连接 MySQL 的驱动. [rsa] 安装认证所需的额外依赖，以支持部分 MySQL 账号认证场景
+alembic==1.20.1               # Alembic 负责数据库迁移：生成版本化脚本、按版本升级/回滚
 pydantic-settings==2.12.0     # pydantic-settings 用来读取环境变量和 .env 中的配置

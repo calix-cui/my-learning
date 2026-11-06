@@ -23,12 +23,14 @@ fastapi-demo/
 │   ├── config.py         # Settings：读取 .env 中的 DATABASE_URL
 │   ├── database.py       # Engine、Session 工厂、Base（公共 id / create_time）
 │   ├── dependencies.py   # get_db：每个请求一个 Session，用完关闭
-│   ├── init_db.py        # 手动建表脚本：python -m app.init_db
+│   ├── init_db.py        # 把库升到最新迁移版本：python -m app.init_db
 │   ├── api/              # 接口层：只做参数接收、调用 service、包装响应
 │   ├── schemas/          # 数据契约：入参校验与出参序列化
 │   ├── services/         # 业务层：校验、事务提交/回滚、ORM 读写
 │   ├── models/           # ORM 模型：categories、products
 │   └── common/           # 统一响应 Response、业务异常与处理器
+├── migrations/           # Alembic 迁移脚本（versions/ 下按 revision 链执行）
+├── alembic.ini           # Alembic 配置（连接串不写这里，统一读 .env）
 ├── tests/                # 不依赖 MySQL 的自动化测试
 ├── docs/module-map.md    # 模块导图与职责说明（含 4 张图）
 ├── Makefile              # 常用命令入口
@@ -63,10 +65,10 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 #    DATABASE_URL=mysql+pymysql://root:密码@127.0.0.1:3306/fastapi_demo?charset=utf8mb4
 
-# 4. 建库（create_all 只建表，不建库）
+# 4. 建库（迁移只建表，不建库）
 mysql -u root -p -e "CREATE DATABASE fastapi_demo DEFAULT CHARSET utf8mb4;"
 
-# 5. 建表
+# 5. 迁移到最新表结构（等价于 alembic upgrade head，可重复执行）
 python -m app.init_db
 
 # 6. 启动
@@ -83,12 +85,38 @@ python -m uvicorn app.main:app --reload
 make install      # 安装运行时依赖
 make install-dev  # 安装开发依赖（ruff / pytest / pre-commit）
 make run          # 启动开发服务器（热重载）
-make init-db      # 建表
+make migrate      # 应用迁移（alembic upgrade head）
+make init-db      # 同上，保留旧命令名
+make revision m="新增 xxx 表"  # 按模型改动生成迁移文件
+make check-migration           # 校验模型与迁移脚本一致（需连库）
 make test         # 运行测试（不需要 MySQL）
 make lint         # 静态检查，只报告不改文件
 make fmt          # 自动修复导入顺序并格式化
 make check        # 提交前自检：lint + 测试
 ```
+
+## 数据库迁移（Alembic）
+
+表结构由 `migrations/versions/` 下的版本化脚本定义，**不要再直接改库**。
+
+```bash
+# 改了 app/models/ 之后：生成迁移文件（连的就是 .env 里的库）
+make revision m="为商品增加备注字段"
+
+# 生成后务必人工 review：autogenerate 对「表/列改名」识别为「删旧的 + 建新的」，会丢数据
+git diff migrations/versions/
+
+# 应用到数据库（可重复执行，已是最新则什么都不做）
+make migrate
+
+# 确认模型与脚本没有漂移（需要能连上 MySQL）
+make check-migration
+```
+
+- 连接串只有一处来源：`app/config.py` 读 `.env` 的 `DATABASE_URL`；`alembic.ini` 里**故意不写** `sqlalchemy.url`。
+- 想在别的库上试跑：`alembic -x db_url=mysql+pymysql://user:pass@host:3306/other_db upgrade head`。
+- 已有库第一次接入：确认表结构与脚本一致后 `alembic stamp head`，只写 `alembic_version`，不动数据。
+- `make check` 仍然只跑 lint + 测试（不需要数据库），CI 依赖这一点。
 
 ## 接口一览
 
@@ -136,7 +164,7 @@ make test
 ## 已知限制与后续计划
 
 - 唯一约束冲突判断依赖 MySQL 错误码 `1062`（`app/services/category_service.py`、`product_service.py`），换数据库需调整。
-- 建表用 `Base.metadata.create_all`，没有迁移版本记录；后续建议引入 Alembic。
+- 迁移写库需要真实 MySQL：`make check-migration` 只在本机跑，CI 目前不校验迁移一致性。
 - `Response.data` 是 `Any`，OpenAPI 里看不到具体结构；可为每个接口声明具体 `response_model`。
 - 列表接口的 `total` 与 `items` 是两次查询，极端并发下可能不一致。
 - 没有 Docker / 部署脚本，目前面向本地学习。
