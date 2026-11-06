@@ -76,16 +76,18 @@
 
 ## 8. 工作区状态
 
-干净。`main` 与 `origin/main` 同步于 `cf3f483`。
+干净。`main` 与 `origin/main` 同步于 `40728d5`。
 
 近期提交（均已推送）：
 
 ```
+40728d5 docs: 补充部署指南与容器化 ADR
+9583996 feat: 新增 Docker 化部署编排
+81e07e8 feat: 后端新增存活与就绪探针
 cf3f483 ci: 前端质量门禁 job 与后端 job 改用 uv
-dab9d40 docs: 更新项目状态到前端门禁与 uv 依赖落地
 a09763d build: 依赖改由 uv 统一声明与锁定
-7886578 style: 用 Prettier 统一商品管理后台代码格式
-aeab2fa chore: 前端接入 ESLint 与 Prettier
 ```
 
-CI：`42262805773` 两个 job 全绿（frontend 31s、backend 11s）。中间 `42262148247` 是一次预期的失败——当时远端 workflow 还在用 `requirements-dev.txt`，而该文件已随 uv 改造删除，`ci.yml` 因 token 缺 `workflow` scope 晚了几分钟才推上去。
+CI：`42265794616` 两个 job 全绿（backend 12s、frontend 22s）。
+
+容器化验证记录：用 colima（`HOME=/tmp/home`）起 Docker 后 `docker compose up -d --build` 三容器全部 healthy；`/api/products`、`/healthz`、`/readyz`、SPA 首页经 `http://localhost:8080` 全部 200；`docker compose down && up -d` 后数据仍在（12 商品 / 3 分类）。
