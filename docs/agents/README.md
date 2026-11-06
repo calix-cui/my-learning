@@ -80,6 +80,22 @@
 - 桌面端外壳 = Electron（[ADR-0001](../adr/0001-desktop-shell-electron.md)）→ 未来 `desktop/` 相关任务按此执行，不要重新推荐 Tauri。
 - 前端门禁 = 轻量档（[ADR-0002](../adr/0002-frontend-quality-gate-lite.md)）→ vue-frontend-dev 不要自行加严。
 
+## 6.1 项目级 Skill 清单
+
+技术类 Skill 放在仓库内 `.agents/skills/`，DSH 会在会话目录里自动发现（机制已验证，见 [AI_ENVIRONMENT_AUDIT §2](../project/AI_ENVIRONMENT_AUDIT.md)）。**引入/升级任何 Skill 都要更新下表。**
+
+| Skill | 上游 | 引入 commit | 许可 | 本地修改 | 用途 |
+|---|---|---|---|---|---|
+| `fastapi` | [fastapi/fastapi](https://github.com/fastapi/fastapi) `fastapi/.agents/skills/fastapi/` | `1ca09c1` | MIT | frontmatter 后插入「本项目适配」段 | 官方 FastAPI 约定：`Annotated`、不用 `...`、return type/`response_model`、router 级 prefix/tags、`def` 优先 |
+| `vue-best-practices` | [ejirocodes/agent-skills](https://github.com/ejirocodes/agent-skills) `vue/skills/vue-best-practices/` | `6e805e4` | MIT | 同上（声明技术栈与「新依赖先说明」） | Vue 3.5 + TS 事实与坑：props 提取、`defineModel`、Volar/`vue-tsc`、Pinia 测试 |
+
+规则：
+
+1. 只引**单一职责**、有明确上游维护者的 Skill；不引「一键生成整个项目」类。
+2. 与项目约定冲突时，在 `SKILL.md` frontmatter 之后加「本项目适配」段（保留上游原文，便于 diff 升级），不要删改原文。
+3. 每个 Skill 目录必须有 `SOURCE.md`（来源、commit、日期、本地修改说明）与 `LICENSE`。
+4. 仓库是 PUBLIC：Skill 内容会公开，不得写入内部约定、密钥、客户信息。
+
 ## 7. 与 DSH 自身机制的关系
 
 本目录的「子智能体」= 会话内的 **teammate**（`spawn_teammate` 派生，durable，有任务板与互相通信）。

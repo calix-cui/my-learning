@@ -49,14 +49,50 @@ DSH 会话目录共 8 个，来源是 profile bundles（`@deepseek-ai/dsh-base` 
 
 **主目录另有 Cursor 的 26 个 Skill**（`~/.cursor/skills-cursor/*/SKILL.md`），含 `create-subagent`、`create-skill`、`review`、`split-to-prs`、`visualize` 等。这些属于 Cursor IDE，**DSH 不读取**，但其中 `create-subagent` 的思路可参考。
 
-**缺口**：没有任何与「FastAPI/Vue 开发、测试、部署、Agent 编排、RAG」相关的项目级 Skill。这意味着每次任务都要靠提示词口述规范。
+**现状（2026-11-06 已引入 2 个）**：`.agents/skills/` 下现在有 `fastapi`（来自官方 [fastapi/fastapi](https://github.com/fastapi/fastapi) 仓库自带的 `.agents/skills/fastapi/`）与 `vue-best-practices`（来自 ejirocodes/agent-skills），均 MIT、原文保留 + 顶部「本项目适配」段。清单与升级方式见 [docs/agents/README.md §6.1](../agents/README.md)。
 
-**补充决策（2026-11-06，项目 owner）**：项目级 Skill **按需从 GitHub 获取开源 Skill**，不自行从零编写。落地方式（尚未执行，属阶段 2 事项）：
+**仍缺**：测试（pytest/Playwright）、部署（Docker/Caddy）、Agent 编排（MCP/Agents SDK）、RAG 方向的项目级 Skill。
 
-1. 先确认 DSH 是否支持仓库内 `.dsh/skills/` 或项目级 skill 目录（当前未见此约定，需先在 DSH 侧验证，**不要假设**）。
+**补充决策（2026-11-06，项目 owner）**：项目级 Skill **按需从 GitHub 获取开源 Skill**，不自行从零编写。
+
+### 项目级 Skill 目录：DSH 已验证支持（2026-11-06 实测）
+
+结论：**支持，无需重启、无需改 DSH 配置**。
+
+机制（`@deepseek-ai/dsh-skill-filesystem`，随 `dsh-base` 无条件挂载，默认 `includeDefaultRoots: true`）扫描五个根，按 rank 从小到大取优先级：
+
+| rank | 来源 | 路径 | 本项目对应 |
+|---|---|---|---|
+| 100 | project-dsh | `<项目根>/.dsh/skills` | 仓库根 |
+| 200 | project-agents | `<项目根>/.agents/skills` | 仓库根（跨工具共享约定） |
+| 300 | custom | `Config.customSkillDirs` | 未配置 |
+| 400 | user-dsh | `~/.dsh/skills` | 用户级 |
+| 500 | user-agents | `~/.agents/skills` | 用户级（跨工具共享） |
+
+- 项目根 = 含 `.git` 的最近祖先目录（没有则用 cwd）。
+- 只识别**根下直接子项**：目录包 `<name>/SKILL.md` 或平铺文件 `<name>.md`；嵌套 `**/SKILL.md` 故意不发现。
+- frontmatter 必填 `name`（kebab-case）与 `description`；可选 `whenToUse`、`metadata`、`disable-model-invocation`、`user-invocable`。缺 `description` 的 skill 会被静默跳过（不报错、不进目录）。
+- 目录会监视根目录，新增/删除/改名在下一步即生效；正文每次加载重新读取，改正文不必重启。
+
+实测证据（2026-11-06，本仓库，验证后已删除探针文件）：
+
+| 探针 | 结果 |
+|---|---|
+| `.dsh/skills/probe-skill/SKILL.md` | ✅ 出现在会话目录，`skill` 工具可加载正文 |
+| `.dsh/skills/flat-probe.md` | ✅ 平铺形式生效 |
+| `.agents/skills/agents-probe/SKILL.md` | ✅ 生效 |
+| `.dsh/skills/nested/child/SKILL.md` | ❌ 未被发现（与文档一致） |
+| `.dsh/skills/bad-probe/SKILL.md`（缺 description） | ❌ 被跳过，无任何诊断输出 |
+| 同名 skill 同时在 `.dsh` 与 `.agents` | 只出现一条，加载 `.dsh` 版本（rank 100 胜 200） |
+
+落地约定（阶段 2 执行）：
+
+1. 项目自研 Skill 放 `.agents/skills/`（跨工具共享，Cursor/Codex 也认这个约定）；仅 DSH 专用、且需要压过同名 `.agents` 版本时才放 `.dsh/skills/`。
 2. 只引入**单一职责、说明完整**的 Skill（如 FastAPI 路由规范、Vue SFC 规范），每个都要在 `docs/agents/README.md` 登记来源、版本/commit、引入理由。
 3. 引入前先读其完整 `SKILL.md`，确认不会与本项目 `AGENTS.md` 冲突；冲突时以 `AGENTS.md` 为准。
-4. 不引入「一键生成整个项目」类重型 Skill——与 §2.2「小步开发」直接冲突。
+4. 不引入「一键生成整个项目」类重型 Skill——与 AGENTS.md §2.2「小步开发」直接冲突。
+5. ⚠️ 本仓库是 **PUBLIC**：写进 `.agents/skills/` 的内容会公开，不要把内部约定、密钥、客户信息放进去。
+6. 当前 `.gitignore` 未忽略 `.dsh/`、`.agents/`，即会被提交；`node_modules`/`.venv` 等已在忽略列表内。
 
 ## 3. MCP Server 配置
 
