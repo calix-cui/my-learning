@@ -82,7 +82,7 @@ flowchart LR
 ```bash
 cd python/fastapi-demo
 python3 -m venv .venv && source .venv/bin/activate    # 首次
-pip install -r requirements.txt                        # 首次
+uv sync                                               # 首次按 uv.lock 装依赖
 cp .env.example .env                                   # 首次，改 DATABASE_URL
 mysql -uroot -p -e "CREATE DATABASE IF NOT EXISTS fastapi_demo DEFAULT CHARSET utf8mb4;"
 python -m app.init_db      # 建表

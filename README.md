@@ -52,16 +52,13 @@ my-learning/
 
 ```bash
 cd python/fastapi-demo
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+uv sync            # 按 pyproject.toml + uv.lock 建好 .venv 并安装依赖
+uv run python -m uvicorn app.main:app --reload
 ```
 
-退出虚拟环境：
-
-```bash
-deactivate
-```
+- 依赖声明在 `pyproject.toml`，版本锁定在 `uv.lock`，两者都提交；**不要再手写 requirements.txt**。
+- `.venv` 由 uv 管理，不要提交到 Git。
+- 直接用 pip 也可以（`source .venv/bin/activate` 后再 `pip install ...`），但那样就拿不到锁文件的确定性，不推荐。
 
 如果项目使用 `pyproject.toml`，请以该项目 README 中的安装说明为准。
 

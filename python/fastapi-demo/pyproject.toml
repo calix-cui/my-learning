@@ -1,6 +1,32 @@
-# 本文件只放“工程工具”配置（lint、格式、测试），不声明运行时依赖。
-# 依赖仍由 requirements.txt / requirements-dev.txt 管理，保持学习项目“pip install -r”即可运行。
+# 单一依赖来源：运行时依赖在 [project.dependencies]，开发工具在 [dependency-groups]。
+# 版本锁定由 uv.lock 负责（`uv lock` 生成、`uv sync --frozen` 安装），不要再手写 requirements.txt。
 # 工具说明：ruff 同时负责 lint 与格式化，pytest 负责测试，pre-commit 负责提交前检查。
+
+[project]
+name = "fastapi-demo"
+version = "0.1.0"
+description = "FastAPI + SQLAlchemy 商品管理示例后端（学习项目）"
+# 应用代码 3.10 即可运行（ruff target 仍是 py310），但 dev 组的 pre-commit 4.x 要求 >=3.11，
+# 统一取 3.11 以免 uv 为 3.10 解析出一套装不上的依赖
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]==0.124.4",
+    "SQLAlchemy==2.0.44",          # 用 ORM 描述表并操作数据库
+    "PyMySQL[rsa]==1.1.2",         # MySQL 驱动；[rsa] 提供认证所需额外依赖
+    "alembic==1.20.1",             # 迁移：生成版本化脚本、按版本升级/回滚
+    "pydantic-settings==2.12.0",   # 读环境变量与 .env
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.17.3",
+    "pytest==9.2.0",
+    "pre-commit==4.7.0",
+]
+
+[tool.uv]
+# 这不是要发布成包的应用，uv 只需同步依赖，不要尝试构建/安装本项目
+package = false
 
 [tool.ruff]
 # 与 fastapi 0.124 / SQLAlchemy 2.0 支持的 Python 版本对齐：代码用到 X | None 语法，最低 3.10

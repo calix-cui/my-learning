@@ -1,17 +1,21 @@
 # fastapi-demo 常用命令入口：不用记长命令，make <目标> 即可
-# 约定：虚拟环境放在项目目录下（.venv），Python 解释器用 PY 变量覆盖，例如 make test PY=python3
+# 约定：依赖由 uv 管理（pyproject.toml + uv.lock），虚拟环境放在项目目录下（.venv）；
+#       Python 解释器用 PY 变量覆盖，例如 make test PY=python3
 PY ?= .venv/bin/python
+UV ?= uv
 
-.PHONY: help install install-dev run init-db migrate revision check-migration test lint fmt check
+.PHONY: help install install-dev lock run init-db migrate revision check-migration test lint fmt check
 
 help:  ## 列出所有命令
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-install:  ## 安装运行时依赖
-	$(PY) -m pip install -r requirements.txt
+install:  ## 按 uv.lock 安装全部依赖（含 ruff / pytest / pre-commit）
+	$(UV) sync
 
-install-dev:  ## 安装开发依赖（含 ruff / pytest / pre-commit）
-	$(PY) -m pip install -r requirements-dev.txt
+install-dev: install  ## 兼容旧命令名，等价于 make install
+
+lock:  ## 改了 pyproject.toml 的依赖后重新解析并更新 uv.lock
+	$(UV) lock
 
 run:  ## 启动开发服务器（热重载，http://127.0.0.1:8000/docs）
 	$(PY) -m uvicorn app.main:app --reload

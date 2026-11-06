@@ -6,13 +6,14 @@ FastAPI + SQLAlchemy 的商品/分类接口练习项目：覆盖增删改查、�
 
 | 组件 | 版本 | 说明 |
 |---|---|---|
-| Python | ≥ 3.10（本地 3.15） | 代码使用 `X \| None` 语法 |
+| Python | ≥ 3.11（本地 3.15，CI 3.12） | 代码语法 3.10 即可，dev 组工具要求 3.11 |
 | FastAPI | 0.124.4 | Web 框架与依赖注入 |
 | SQLAlchemy | 2.0.44 | ORM（`Mapped` / `mapped_column` 写法） |
 | PyMySQL | 1.1.2 | MySQL 驱动 |
 | pydantic-settings | 2.12.0 | 读取 `.env` 配置 |
 | MySQL | 8.x | 数据库，库名 `fastapi_demo` |
-| ruff / pytest / pre-commit | 见 `requirements-dev.txt` | 工程化工具链 |
+| 依赖管理 | uv 0.13.4（`pyproject.toml` + `uv.lock`） | 不用 requirements.txt，`.venv` 由 `uv sync` 维护 |
+| ruff / pytest / pre-commit | 见 `pyproject.toml` 的 `[dependency-groups].dev` | 工程化工具链 |
 
 ## 目录结构
 
@@ -34,9 +35,8 @@ fastapi-demo/
 ├── tests/                # 不依赖 MySQL 的自动化测试
 ├── docs/module-map.md    # 模块导图与职责说明（含 4 张图）
 ├── Makefile              # 常用命令入口
-├── pyproject.toml        # ruff / pytest 配置（不放运行时依赖）
-├── requirements.txt      # 运行时依赖（锁定版本）
-├── requirements-dev.txt  # 开发依赖
+├── pyproject.toml        # 依赖声明（[project] / [dependency-groups]）+ ruff / pytest 配置
+├── uv.lock               # 依赖锁定（`uv sync` 按它安装，不要手改）
 └── .env.example          # 环境变量模板
 ```
 
@@ -54,36 +54,32 @@ common（Response / BusinessError）被 api 与 main 复用
 ```bash
 cd python/fastapi-demo
 
-# 1. 虚拟环境（项目内 .venv，不要提交）
-python3 -m venv .venv
-source .venv/bin/activate
+# 1. 依赖：uv 会按 uv.lock 建好 .venv 并装齐（含 dev 工具），不需要先手动 venv
+uv sync
 
-# 2. 依赖
-python -m pip install -r requirements.txt
-
-# 3. 配置：复制模板后改成自己的账号密码
+# 2. 配置：复制模板后改成自己的账号密码
 cp .env.example .env
 #    DATABASE_URL=mysql+pymysql://root:密码@127.0.0.1:3306/fastapi_demo?charset=utf8mb4
 
-# 4. 建库（迁移只建表，不建库）
+# 3. 建库（迁移只建表，不建库）
 mysql -u root -p -e "CREATE DATABASE fastapi_demo DEFAULT CHARSET utf8mb4;"
 
-# 5. 迁移到最新表结构（等价于 alembic upgrade head，可重复执行）
-python -m app.init_db
+# 4. 迁移到最新表结构（等价于 alembic upgrade head，可重复执行）
+uv run python -m app.init_db
 
-# 6. 启动
-python -m uvicorn app.main:app --reload
+# 5. 启动
+uv run python -m uvicorn app.main:app --reload
 ```
 
 打开 <http://127.0.0.1:8000/docs> 查看接口文档。
 
-> 若虚拟环境由 `uv venv` 创建（默认不含 pip），把上面的 `python -m pip install` 换成 `uv pip install --python .venv/bin/python -r requirements.txt`。
+> 没装 uv？`brew install uv` 或 `curl -LsSf https://astral.sh/uv/install.sh | sh`。不打算用 uv 时，`uv export --format requirements-txt --no-hashes > /tmp/req.txt` 可以导出成 pip 能用的依赖清单（属临时方案，版本以 uv.lock 为准）。
 
 ## 常用命令
 
 ```bash
-make install      # 安装运行时依赖
-make install-dev  # 安装开发依赖（ruff / pytest / pre-commit）
+make install      # 按 uv.lock 装齐依赖（含 ruff / pytest / pre-commit）
+make lock         # 改了 [project] 的依赖后重新解析 uv.lock
 make run          # 启动开发服务器（热重载）
 make migrate      # 应用迁移（alembic upgrade head）
 make init-db      # 同上，保留旧命令名
@@ -156,7 +152,7 @@ make test
 |---|---|---|
 | 代码风格 | ruff（lint + format，行宽 100） | `make lint` / `make fmt` |
 | 导入顺序 | isort 规则，`app` 视为一方包 | 随 `make fmt` 自动修复 |
-| 提交前检查 | pre-commit：ruff、尾随空格、yaml/toml、密钥检测 | `pip install -r requirements-dev.txt && pre-commit install` |
+| 提交前检查 | pre-commit：ruff、尾随空格、yaml/toml、密钥检测 | `uv sync && uv run pre-commit install` |
 | CI | GitHub Actions：ruff + format + pytest（Python 3.12） | `.github/workflows/ci.yml` |
 | 配置管理 | `.env` 不入库，模板 `.env.example` | `cp .env.example .env` |
 | 依赖锁定 | 全部 `==` 固定版本 | — |

@@ -81,7 +81,7 @@ my-learning/
 | 层 | 组件 | 版本 | 证据 |
 |---|---|---|---|
 | 运行时 | Python | 3.15.0（CI 用 3.12） | `python3 -V` / `.github/workflows/ci.yml` |
-| 后端 | FastAPI | 0.124.4 | `requirements.txt` |
+| 后端 | FastAPI | 0.124.4 | `uv.lock（2026-11-07 起由 pyproject.toml 取代 requirements*.txt）` |
 | | SQLAlchemy | 2.0.44（`Mapped`/`mapped_column`） | 同上 |
 | | PyMySQL[rsa] | 1.1.2 | 同上 |
 | | pydantic-settings | 2.12.0 | 同上 |
@@ -91,7 +91,7 @@ my-learning/
 | | Vue / Vue Router | ^3.5.13 / ^4.5.0 | `package.json` |
 | | Vite / TypeScript | ^6.0.7 / ~5.7.3 | 同上 |
 | | Element Plus | ^2.9.1 | 同上 |
-| 工具链 | ruff 0.17.3 / pytest 9.2.0 / pre-commit 4.7.0 | 锁定于 `requirements-dev.txt` | — |
+| 工具链 | ruff 0.17.3 / pytest 9.2.0 / pre-commit 4.7.0 | 声明于 `pyproject.toml` 的 `[dependency-groups].dev`，锁定于 `uv.lock` | — |
 
 ## 6. 规模与质量基线
 
