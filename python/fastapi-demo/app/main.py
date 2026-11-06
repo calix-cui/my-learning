@@ -1,7 +1,12 @@
-from fastapi import FastAPI
+from typing import Annotated
+
+from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import router as api_router
@@ -14,6 +19,7 @@ from app.common.exceptions import (
     handle_validation_error,
 )
 from app.common.response import Response
+from app.dependencies import get_db
 
 app = FastAPI(responses={422: {"model": Response, "description": "请求参数校验失败"}})
 
@@ -47,3 +53,22 @@ app.add_exception_handler(Exception, handle_unexpected_error)
 @app.get("/")
 def read_root():
     return {"message": "FastAPI服务正在运行中"}
+
+
+@app.get("/healthz", summary="存活探针")
+def healthz():
+    """只证明进程还在跑，不碰数据库：容器编排用它判断是否重启容器。"""
+    return {"status": "ok"}
+
+
+@app.get("/readyz", summary="就绪探针")
+def readyz(db: Annotated[Session, Depends(get_db)]):
+    """真正打一次数据库：连不上就返回 503，让编排层暂时不要把流量导进来。"""
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable", "database": "down"},
+        )
+    return {"status": "ready", "database": "up"}

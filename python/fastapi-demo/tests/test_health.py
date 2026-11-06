@@ -26,3 +26,18 @@ def test_openapi_exposes_business_routes():
     assert "/api/categories" in paths
     assert "/api/categories/{category_id}" in paths
     assert "/api/categories/statistics" in paths
+
+
+def test_healthz_is_independent_of_database():
+    response = client.get("/healthz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_readyz_reports_unavailable_when_database_is_down():
+    # 占位连接串指向不存在的库/账号，就绪探针必须转成 503 而不是抛 500
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "unavailable", "database": "down"}
