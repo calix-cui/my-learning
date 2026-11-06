@@ -1,19 +1,23 @@
 name: CI
 
-# 只在改动到该项目时触发，避免 monorepo 里其他目录的提交也跑一遍
+# 只在改动到对应项目时触发，避免 monorepo 里其他目录的提交也跑一遍。
+# 两个 job 各自独立，但共用一次 workflow 触发（改前端也会跑后端 job，代价约 40s，
+# 换来单文件维护；真要省再拆成两个 workflow）。
 on:
   push:
     branches: [main]
     paths:
       - "python/fastapi-demo/**"
+      - "fullstack/product-admin/**"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
       - "python/fastapi-demo/**"
+      - "fullstack/product-admin/**"
       - ".github/workflows/ci.yml"
 
 jobs:
-  fastapi-demo:
+  backend:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -21,20 +25,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # uv 负责解析与安装（依赖来源是 pyproject.toml，锁定于 uv.lock）
+      - uses: astral-sh/setup-uv@v6
         with:
+          version: "0.13.4"
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: python/fastapi-demo/requirements*.txt
+          enable-cache: true
+          cache-dependency-glob: python/fastapi-demo/uv.lock
 
       - name: 安装依赖
-        run: pip install -r requirements-dev.txt
+        run: uv sync --frozen
 
       - name: 静态检查
         run: |
-          ruff check .
-          ruff format --check .
+          uv run ruff check .
+          uv run ruff format --check .
 
-      # 测试用占位 DATABASE_URL，不连接 MySQL，因此不需要 service 容器
+      # 测试用占位 DATABASE_URL，不连接 MySQL，因此不需要 service 容器；
+      # 迁移一致性（alembic check）需要数据库，故不在此步骤内，见 T-05 遗留项。
       - name: 运行测试
-        run: pytest -q
+        run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fullstack/product-admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.10.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: fullstack/product-admin/pnpm-lock.yaml
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # 质量门禁按 ADR-0002「轻量档」：只有 build 与 lint 两条。
+      # Prettier 只提供 pnpm format 供本地使用，不进 CI 阻断。
+      - name: 类型检查与构建
+        run: pnpm build
+
+      - name: 静态检查
+        run: pnpm lint
