@@ -1,0 +1,53 @@
+# ADR-0002：前端质量门禁采用「轻量档」
+
+- **状态**：已接受（Accepted）
+- **日期**：2026-11-06
+- **决策人**：项目 owner（用户）
+- **影响范围**：前端 lint / 格式化 / 单测 / CI 的严格程度
+
+## 背景
+
+阶段 1 发现前后端质量门禁严重不对称：后端有 ruff + pytest(23) + pre-commit + CI，前端**零 lint、零单测、CI 不覆盖**（见 `TECHNICAL_DEBT.md` T-02/T-03）。
+
+调研推荐的「完整档」是：ESLint 10 flat + typescript-eslint（含 **type-aware 规则**）+ vue 插件 + Prettier + Vitest（含覆盖率门槛）+ Playwright（替换自研 E2E 脚本）+ 前端 CI job 全量阻断。
+
+项目 owner 的判断：**完整档对单人维护的学习项目负担过重**，会让「加一个字段」变成「改三处配置」；但完全不设门禁又会持续产生新的前端债。
+
+## 决策
+
+前端质量门禁采用**轻量档**，只拦住"明显错误"，不追求"风格统一 + 全覆盖"。
+
+| 能力 | 采用 | 不采用 | 原因 |
+|---|---|---|---|
+| ESLint | `eslint:recommended` + `plugin:vue/vue3-essential` + `typescript-eslint` 的 `recommended`（**非 type-aware**） | type-aware 规则集、`strict-type-checked` | type-aware 要配 `projectService`，慢且误报多；类型正确性由 `vue-tsc --noEmit` 兜底 |
+| Prettier | 采用，配置极简（默认 + 100 列） | 进 CI 阻断 | 格式化是「保存时/需要时」的事，不该卡提交 |
+| Vitest | 只覆盖 `src/api`、`src/utils` 等**纯逻辑** | 组件快照、覆盖率门槛 | 组件测试维护成本高、收益低；逻辑层才是 bug 源 |
+| Playwright | **暂缓**，继续用 `scripts/acceptance.mjs`（18 项） | 现在替换 | 现有脚本能跑通；E2E 用例 < 30 条时自研脚本成本更低 |
+| CI 前端 job | `pnpm build`（含 `vue-tsc`）+ `pnpm lint` | 覆盖率门槛、format check | 只挡「构建不过」和「明显写错」 |
+
+**红线（这四条仍然阻断）**：
+1. `pnpm build` 失败（含类型错误）。
+2. ESLint 报 error 级问题（未定义变量、重复声明、无效指令等）。
+3. 引入未声明依赖。
+4. E2E 验收脚本从 18 项退化为通过项减少。
+
+## 理由
+
+1. **门禁的价值 = 拦住的 bug / 增加的摩擦**。type-aware lint 与覆盖率门槛在单人项目里摩擦 > 收益。
+2. **类型检查已经兜住大部分低级错误**：`vue-tsc --noEmit` 本来就在 build 里。
+3. **可持续**：能长期开着的门禁才是门禁；设了就跑不动、最后被注释掉的规则等于没有。
+
+## 接受的成本
+
+- 会有**风格漂移**（不同文件格式略有差异）——由 Prettier 手动执行收敛，不强制。
+- **部分类型安全问题不会被 lint 捕获**（如 `any` 泛滥）——依靠后端契约 + review 兜底。
+- 前端**没有回归网**（无单测覆盖组件）——靠 18 项 E2E + 人工验收。
+
+## 升级触发条件
+
+出现以下任一情况时，重新评估是否升到完整档：
+
+- 前端代码超过 ~8000 行，或组件数 > 40。
+- 出现「改一处、坏一片」且 E2E 没拦住的事故 ≥ 2 次。
+- E2E 用例数 > 30（此时 Playwright 的 runner/trace 收益开始大于迁移成本）。
+- 有第二个人参与前端开发（风格统一开始有协作价值）。
