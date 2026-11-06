@@ -34,7 +34,7 @@
 
 无硬阻塞。以下为**环境级限制**（会在对应阶段变成阻塞）：
 
-- `docker` CLI 可用但 **daemon 未运行**，且无 `docker compose` 子命令 → 阶段 4 容器化前必须解决（T-24）。
+- 本机 `docker` CLI 无 compose 插件、daemon 默认未运行；本轮用 colima 起的 VM（`HOME=/tmp/home`）验证过容器化，日常部署需自行启动 Docker Desktop/colima。
 - `gh` 凭据未接入 git → 每次 push 需临时绕过（T-13）。
 
 ## 5. 当前技术决策
@@ -68,8 +68,8 @@
 
 1. ✅ **Alembic 接管 schema**（已完成，见 §3）——CI 校验迁移一致性和「加 MySQL service」仍待办。
 2. ✅ **前端轻量门禁**（已完成，见 §3）——ESLint 10 flat（recommended 档）+ Prettier + CI 前端 job（`pnpm build` + `pnpm lint`），口径见 [ADR-0002](adr/0002-frontend-quality-gate-lite.md)。
-3. **uv 统一依赖源**（P0，半天）——`pyproject.toml` 的 `[project.dependencies]` 成为唯一来源 + 提交 `uv.lock`，CI 用 `uv sync --frozen`。
-4. **容器化与一键部署**（P1，需先解决 T-24 Docker daemon）——多阶段 Dockerfile + Compose + Caddy + `/healthz`。
+3. ✅ **uv 统一依赖源**（已完成）——`pyproject.toml` 是唯一来源 + `uv.lock`，CI 用 `uv sync --frozen`。
+4. ✅ **容器化与一键部署**（已完成）——多阶段 Dockerfile（uv 后端 / node+nginx 前端）+ Compose（db/backend/frontend/可选 caddy）+ `/healthz` `/readyz`，见 [ADR-0004](adr/0004-deployment-docker-compose.md) 与 [部署指南](deploy/README.md)。
 5. **测试基线**（P1，半天）——后端 pytest-cov 门槛、前端 Vitest 仅纯逻辑。
 
 后续：阶段 2 架构与 Agent 能力设计（MCP client 先行）、桌面端 Electron 骨架（按 ADR-0001）、项目级 Skill 从 GitHub 按需引入（见 AUDIT §2）。

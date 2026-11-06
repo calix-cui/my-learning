@@ -16,7 +16,7 @@
 | T-06 | 后端 | `Response.data: Any`，OpenAPI 看不到真实结构 | P1 | M |
 | T-07 | 后端 | 用 MySQL 私有错误码 1062 判重名，换库即失效 | P1 | S |
 | T-08 | 后端 | 配置只有 1 个字段、`.env` 按 cwd 相对查找、无环境区分 | P1 | S |
-| T-09 | 部署 | 完全没有容器化 / 反代 / 健康检查 / 发布脚本 | P1 | L |
+| ~~T-09~~ | 部署 | ~~完全没有容器化 / 反代 / 健康检查 / 发布脚本~~ ✅ 2026-11-07 已解决 | P1 | L |
 | T-10 | 前端 | API 基址硬编码 `/api`，生产环境只能靠同域反代 | P1 | S |
 | T-11 | 验收 | E2E 脚本依赖本地起服务、且会写真实库（曾误删商品） | P1 | M |
 | T-12 | 环境 | 本机 Python 3.15 / CI 3.12，无 `.python-version` | P1 | S |
@@ -31,7 +31,7 @@
 | T-21 | 前端 | Element Plus 打成 943KB 单 chunk，首屏成本偏高 | P2 | M |
 | T-22 | 后端 | 分类改名不 `strip()` 空白，可存入全空格名称 | P2 | S |
 | T-23 | 后端 | 日志无统一配置、无 request id，排障靠 print 级信息 | P2 | M |
-| T-24 | 环境 | Docker 守护进程未运行、无 compose 子命令 | P2 | S |
+| ~~T-24~~ | 环境 | ~~Docker 守护进程未运行、无 compose 子命令~~ ✅ 2026-11-07 已解决 | P2 | S |
 | T-25 | 卫生 | `.DS_Store`、`__pycache__`、`dist/`、`.ruff_cache` 残留在工作区 | P2 | S |
 
 ## 1. 协作与规则资产
@@ -123,10 +123,10 @@
 
 ## 5. 部署与交付
 
-### T-09 零部署能力（P1 · L）
-- **证据**：仓库无 `Dockerfile`、`docker-compose.yml`、反代配置、部署脚本；`.github/workflows/` 只有 `ci.yml`。
-- **影响**：AGENTS.md 要求「第一天就考虑部署」，目前一条都没有。阶段 4 会集中补，但现在连「后端怎么在生产跑」都没答案。
-- **建议**：按 `docs/prompts/4` 的产出要求做；最小闭环 = 多阶段 Dockerfile + compose（api + mysql）+ Caddy 反代 + `/healthz`。
+### T-09 零部署能力 ✅ 已解决（2026-11-07）
+- **原证据**：仓库无 `Dockerfile`、`docker-compose.yml`、反代配置、部署脚本。
+- **已补**：`python/fastapi-demo/Dockerfile`（uv 多阶段）、`fullstack/product-admin/Dockerfile`（node→nginx）、`docker-compose.yml`（db/backend/frontend/caddy）、`deploy/Caddyfile`、`.env.example`、`/healthz` `/readyz`、`docs/deploy/README.md`、ADR-0004。
+- **遗留**：镜像构建未进 CI；无发布脚本与回滚流程；`readyz` 未纳入 compose 的 backend healthcheck（用的是 `/healthz`）。
 
 ### T-10 前端 API 基址硬编码（P1 · S）
 - **证据**：`src/api/client.ts` `baseURL: '/api'`；`vite.config.ts` 用 proxy 转发。
@@ -138,10 +138,10 @@
 - **影响**：验收 = 破坏数据。多跑几次，库里就有 `E2E测试商品` 之类的残留。
 - **建议**：脚本内所有写操作加唯一前缀并在 `finally` 清理（已有部分）；更彻底的做法是让后端支持「测试专用 schema」或由脚本先 `pg_dump`/快照。
 
-### T-24 Docker 不可用（P2 · S）
-- **证据**：`docker --version` 有（29.9.2），但 `docker info` 报 `failed to connect to the docker API at unix:///var/run/docker.sock`，`docker compose version` → `unknown command`。
-- **影响**：阶段 4 的容器化没有执行环境。
-- **建议**：装 Docker Desktop / OrbStack，或评估 `colima`（轻量、brew 可装）。装之前先确认磁盘与内存占用。
+### T-24 Docker 不可用 ✅ 已解决（2026-11-07）
+- **原证据**：`docker --version` 有（29.9.2），但 `docker info` 报连不上 `unix:///var/run/docker.sock`，`docker compose version` → `unknown command`。
+- **解决方式**：用已安装的 colima 0.10.3 起 docker runtime（`HOME=/tmp/home` + `dns: [223.5.5.5, 8.8.8.8]` 解决 VM 内 DNS 解析失败），compose 用官方 v2 独立二进制（本机 CLI 无插件）。
+- **遗留**：本机默认 `HOME` 下仍需用户自行 `colima start` 或装 Docker Desktop；CI 尚未构建镜像。
 
 ## 6. 环境与工具链
 

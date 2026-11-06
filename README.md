@@ -42,6 +42,20 @@ my-learning/
 商品管理网站的交付与验收说明见 [docs/product-admin/README.md](./docs/product-admin/README.md)，
 包含如何启动前后端、P0 需求对照表、验收证据与已知限制。
 
+### 部署
+
+| 文档 | 内容 |
+|---|---|
+| [docs/deploy/README.md](./docs/deploy/README.md) | Docker Compose 一键部署：MySQL + FastAPI + nginx 前端 + 可选 Caddy HTTPS，含健康检查、备份与排障 |
+
+一条命令起整套服务（详见部署文档）：
+
+```bash
+cp .env.example .env   # 改掉数据库密码
+docker compose up -d --build
+open http://localhost:8080
+```
+
 > 项目名称、状态和说明应随实际进度更新；尚未创建的项目可以删除对应索引。
 
 ## 环境与依赖管理
