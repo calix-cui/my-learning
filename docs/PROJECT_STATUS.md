@@ -17,6 +17,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-07 | **名称空白校验统一**：分类改名、商品改名与新增同规则（先 strip 再判空，纯空白 400），补 5 个用例 | T-22 已解决、[api.md](../python/fastapi-demo/docs/api.md) §2.5/§3.3 |
 | 11-07 | **文档体系重构**：三层结构 + 架构图/工具链图，人读部分从 2900 行降到 1350 行，重复事实收敛到单一来源 | [docs/README.md](README.md)、[CONTRIBUTING.md](../CONTRIBUTING.md) |
 | 11-07 | **测试基线**：后端 50 例 + 覆盖率门槛 80%（实测 85.12%），前端 Vitest 17 例 | [ADR-0005](adr/0005-testing-baseline.md) |
 | 11-07 | **容器化**：多阶段镜像 + Compose（db/backend/frontend/可选 Caddy）+ `/healthz` `/readyz` | [ADR-0004](adr/0004-deployment-docker-compose.md)、[deploy.md](deploy.md) |
@@ -62,7 +63,7 @@
 2. **T-05 遗留** — CI 不校验迁移一致性（`alembic check` 需要 MySQL service）
 3. **T-02 遗留** — 前端 ESLint 未启 type-aware（ADR-0002 已接受该取舍）
 4. **T-12** — 本机 Python 3.15 / CI 3.12，无 `.python-version`
-5. **L-05/L-06** — 404 文案不统一、分类改名不 strip 空白（见 [delivery.md](delivery.md) §7）
+5. **L-05** — 404 文案不统一（详情/删除「商品不存在」、改商品「未找到商品」），见 [delivery.md](delivery.md) §7
 
 ## 6. 阻塞与环境限制
 
@@ -76,5 +77,5 @@
 - 最近提交：文档体系重构（三层结构 + 架构图/工具链图/契约精简），详见 `git log --oneline -8`
 - CI：最近一次（测试基线）run `42358433933` 双 job 绿（backend 13s / frontend 26s）；本轮只改文档，不触发后端/前端 job
 - 文档：人读 1350 行 / AI 向 1670 行 / 归档 670 行；全仓相对链接 0 失效（`/tmp/linkcheck.py` 口径）
-- 测试基线：后端 50 passed / 85.12%；前端 17 passed
+- 测试基线：后端 55 passed / 85.38%；前端 17 passed
 - 容器验证：三容器 healthy，`http://localhost:8080` 首页、`/api/products`、`/healthz`、`/readyz` 均 200；`down && up -d` 后数据仍在

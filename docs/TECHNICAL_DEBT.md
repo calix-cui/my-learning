@@ -29,7 +29,7 @@
 | T-19 | 文档 | `docs/README.md` 定位过期；`app/README.md` 与项目 README 重复 | P2 | S |
 | T-20 | 文档 | `docs/design/images/` 与 `docs/images/` 同名不同源，易混 | P2 | S |
 | T-21 | 前端 | Element Plus 打成 943KB 单 chunk，首屏成本偏高 | P2 | M |
-| T-22 | 后端 | 分类改名不 `strip()` 空白，可存入全空格名称 | P2 | S |
+| ~~T-22~~ | 后端 | ~~分类改名不 `strip()` 空白，可存入全空格名称~~ ✅ 2026-11-07 已修复 | P2 | S |
 | T-23 | 后端 | 日志无统一配置、无 request id，排障靠 print 级信息 | P2 | M |
 | ~~T-24~~ | 环境 | ~~Docker 守护进程未运行、无 compose 子命令~~ ✅ 2026-11-07 已解决 | P2 | S |
 | T-25 | 卫生 | `.DS_Store`、`__pycache__`、`dist/`、`.ruff_cache` 残留在工作区 | P2 | S |
@@ -103,8 +103,9 @@
 - **影响**：本地练习无妨，**一旦部署到公网就是裸奔**（任何人可增删商品）。
 - **建议**：部署前必须加最小鉴权（哪怕是单一 API Key / HTTP Basic），CORS 来源改为配置项，且 `allow_methods` 收敛。
 
-### T-22 分类改名不 strip（P2 · S）
-- **证据**：`app/services/category_service.py` 的 `update_category` 直接使用入参，无 `strip()`；创建路径有全空白校验。
+### T-22 分类改名不 strip（P2 · S）✅ 已于 2026-11-07 解决
+- **已修复**：`update_category` 改为先查资源（404 优先）再 `strip()` 判空（400），与创建路径同一套规则；`update_product` 同名处理，并把 `ProductUpdateRequest` 的 `str_strip_whitespace` 移除，避免纯空白被 Pydantic 拦成 422；补 5 个用例（55 passed）。
+- **证据（修复前）**：`app/services/category_service.py` 的 `update_category` 直接使用入参，无 `strip()`；创建路径有全空白校验。
 - **影响**：可以把分类改成 `"   "`，前端显示为空白行。
 - **建议**：与创建路径共用同一个 `normalize_name()` 校验。
 

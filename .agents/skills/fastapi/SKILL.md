@@ -5,13 +5,13 @@ description: FastAPI best practices and conventions. Use when working with FastA
 
 > **本项目适配（本地追加，非上游内容）**
 >
-> 本仓库锁定 `fastapi==0.124.4`（`python/fastapi-demo/requirements.txt`）。下列上游用法**已实测不可用**，不要照抄：
+> 本仓库锁定 `fastapi==0.124.4`（`python/fastapi-demo/pyproject.toml` + `uv.lock`）。下列上游用法**已实测不可用**，不要照抄：
 >
 > | 上游建议 | 本项目实测 | 替代做法 |
 > |---|---|---|
 > | `app.frontend()` / `router.frontend()` | `hasattr(FastAPI, "frontend") == False` | 静态托管用 `StaticFiles`；开发期仍由 Vite dev server + proxy 承担 |
 > | `fastapi.sse`（`EventSourceResponse`、`ServerSentEvent`） | `ModuleNotFoundError: fastapi.sse` | 用 `StreamingResponse` 手写 `text/event-stream`；如需现成实现先讨论 `sse-starlette` |
-> | 原生 OpenTelemetry（`FastAPI(telemetry=...)`、`FASTAPI_OTEL_AUTO_CONFIGURE`） | 该版本无此入口 | 现阶段用 uvicorn 日志 + 结构化日志方案（见 `docs/project/REUSE_CANDIDATES.md` §6） |
+> | 原生 OpenTelemetry（`FastAPI(telemetry=...)`、`FASTAPI_OTEL_AUTO_CONFIGURE`） | 该版本无此入口 | 现阶段用 uvicorn 日志 + 结构化日志方案（见 `docs/archive/REUSE_CANDIDATES.md` §6） |
 > | `fastapi dev` / `fastapi run` | CLI 已随 `fastapi[standard]` 安装 | 本项目统一用 `uvicorn app.main:app`（`make run`），保持一致即可 |
 >
 > 其余建议全部适用，并且正好契合本项目：`Annotated` 声明、不用 `...`、return type / `response_model`、router 级 `prefix`/`tags`、**能用 `def` 就用 `def`**（同步 SQLAlchemy 走线程池，不要塞进 `async def`）。
