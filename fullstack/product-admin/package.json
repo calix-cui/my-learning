@@ -9,6 +9,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
     "type-check": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "acceptance": "node scripts/acceptance.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -35,6 +37,7 @@
     "typescript": "~5.7.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^6.0.7",
+    "vitest": "^3.2.7",
     "vue-tsc": "^2.2.0"
   },
   "packageManager": "pnpm@12.10.1"

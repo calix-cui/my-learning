@@ -43,6 +43,8 @@ pnpm lint          # ESLint 全量检查（CI 会跑，有 error 即失败）
 pnpm lint:fix      # 自动修可修的问题
 pnpm format        # Prettier 格式化（本地用，不进 CI 阻断）
 pnpm format:check  # 只检查格式，不写入
+pnpm test          # Vitest 单测（src/api，17 个用例，无 DOM、不连后端）
+pnpm test:watch    # 监听模式，开发时用
 ```
 
 | 项 | 配置 | 说明 |
@@ -50,9 +52,13 @@ pnpm format:check  # 只检查格式，不写入
 | ESLint | `eslint.config.js`（flat config，ESLint 10） | `@eslint/js` recommended + `typescript-eslint` recommended + `eslint-plugin-vue` flat/essential + `eslint-config-prettier` 收尾 |
 | 关闭项 | 不启用 type-aware 规则 | 需要 `parserOptions.projectService`，跑得慢、误报多；`vue-tsc --noEmit` 已经把类型错拦在构建里 |
 | Prettier | `.prettierrc.json` | 单引号、无分号、行宽 100、`trailingComma: all`；**不参与 CI**，避免为格式改代码 |
-| CI | `.github/workflows/ci.yml` 的 `frontend` job | 只有两条：`pnpm build`（含 `vue-tsc`）与 `pnpm lint` |
+| Vitest | `vitest.config.ts` | 只测 `src/api` 的请求封装与错误映射，`environment: node`，不引 jsdom、不设覆盖率门槛 |
+| CI | `.github/workflows/ci.yml` 的 `frontend` job | 三条：`pnpm build`（含 `vue-tsc`）、`pnpm lint`、`pnpm test` |
 
 四条红线（出现即本次改动不算完成）：构建失败、ESLint 报 error、引入未声明的依赖、E2E 用例退化。
+
+单测边界：`src/views`、`src/components` 不写组件快照——那部分由 18 项 E2E（`pnpm acceptance`）与人工验收兜底；
+单测只锁定「请求怎么发、错误怎么翻译成中文提示」这类改起来最容易静默出错的逻辑。
 升级触发条件写在 ADR-0002 里（前端 > 8000 行 / 组件 > 40 个 / 同类事故 ≥ 2 次 / E2E > 30 条）。
 
 ## 与后端联调
