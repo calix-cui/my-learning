@@ -85,7 +85,7 @@ make migrate      # 应用迁移（alembic upgrade head）
 make init-db      # 同上，保留旧命令名
 make revision m="新增 xxx 表"  # 按模型改动生成迁移文件
 make check-migration           # 校验模型与迁移脚本一致（需连库）
-make test         # 运行测试（不需要 MySQL）
+make test         # 运行测试并检查覆盖率（不需要 MySQL）
 make lint         # 静态检查，只报告不改文件
 make fmt          # 自动修复导入顺序并格式化
 make check        # 提交前自检：lint + 测试
@@ -136,15 +136,22 @@ make check-migration
 ## 测试
 
 ```bash
-make test
+make test        # 50 个用例 + 覆盖率门槛（80%），全程不连 MySQL
+make check       # lint + 测试，提交前跑这个
 ```
 
-测试只覆盖不依赖数据库的部分，因此 CI 不需要 MySQL：
+两类用例共用 `tests/conftest.py` 里的占位 `DATABASE_URL`：
 
-- `tests/test_health.py`：应用装配、OpenAPI 路由是否齐全
-- `tests/test_schemas.py`：入参校验规则、出参序列化格式
-- `tests/test_errors.py`：统一响应外壳、`BusinessError` 状态码
-- `tests/test_api_validation.py`：422 / 400 / 404 的接口级行为
+- **接口层**（`test_health` / `test_schemas` / `test_errors` / `test_api_validation`）：
+  `TestClient` 直连 ASGI 应用，用例停在参数校验与异常处理阶段，`create_engine` 惰性所以不会连库
+- **服务层**（`test_category_service` / `test_product_service`）：`db_session` 夹具给**内存 SQLite**，
+  真跑 insert/select/update/delete、分页、关键词与分类筛选、删除保护，验证的是 SQL 与业务分支
+
+覆盖率门槛写在 `pyproject.toml` 的 `[tool.coverage.report] fail_under = 80`，
+`app/init_db.py` 与 `app/seed.py` 是手工执行的脚本，已 `omit` 掉。当前实测 85%。
+
+**没有覆盖到的**：MySQL 专有行为——唯一键冲突的 `1062` 分支、外键约束、`utf8mb4` 排序规则。
+这类用例需要真实 MySQL（或 testcontainers），属于后续工作。
 
 ## 工程规范
 
@@ -153,7 +160,7 @@ make test
 | 代码风格 | ruff（lint + format，行宽 100） | `make lint` / `make fmt` |
 | 导入顺序 | isort 规则，`app` 视为一方包 | 随 `make fmt` 自动修复 |
 | 提交前检查 | pre-commit：ruff、尾随空格、yaml/toml、密钥检测 | `uv sync && uv run pre-commit install` |
-| CI | GitHub Actions：ruff + format + pytest（Python 3.12） | `.github/workflows/ci.yml` |
+| CI | GitHub Actions：ruff + format + pytest（含覆盖率，Python 3.12） | `.github/workflows/ci.yml` |
 | 配置管理 | `.env` 不入库，模板 `.env.example` | `cp .env.example .env` |
 | 依赖锁定 | 全部 `==` 固定版本 | — |
 

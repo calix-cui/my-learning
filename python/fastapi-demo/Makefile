@@ -33,7 +33,7 @@ revision:  ## 按当前 ORM 模型生成迁移文件，用法：make revision m=
 check-migration:  ## 确认 ORM 模型与迁移脚本一致（需要能连上 MySQL）
 	$(PY) -m alembic check
 
-test:  ## 运行测试（不需要 MySQL）
+test:  ## 运行测试并检查覆盖率（不需要 MySQL，门槛 80%）
 	$(PY) -m pytest
 
 lint:  ## 静态检查（只报告，不改文件）
