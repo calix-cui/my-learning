@@ -5,7 +5,9 @@
 
 ## 1. 现在在哪
 
-**阶段 1「工程基建」已完成，准备进入阶段 2「架构与 Agent 能力设计」。**
+**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–3 已完成，阶段 4「LLM 接入与基础对话」待开工。**
+
+阶段口径只以该文件为准。此前本文件里出现的「阶段 2 = MCP client / Agent PoC / Electron 骨架」是我自行归纳的临时说法（源自 `archive/REUSE_CANDIDATES.md` 的「MCP 建议尽早」与 ADR-0001 的 Electron 结论），**与 11 阶段计划无对应关系，已废弃**，勿再引用。
 
 已经有一个能跑、能测、能部署的最小闭环：
 
@@ -29,20 +31,36 @@
 
 ## 3. 下一步
 
-**阶段 2「架构与 Agent 能力」尚未开工**。进入前先满足 3 个门槛（缺哪个先补哪个，不并行铺开）：
+### 3.1 阶段对照表（严格按 11 阶段计划）
+
+| # | 阶段 | 状态 | 证据 / 缺口 |
+|---|---|---|---|
+| 1 | AI 开发基建 | ✅ | `AGENTS.md`、`agents/`、`.agents/skills/`、`adr/`、`playbooks/` |
+| 2 | 前后端项目骨架 | ✅ | `python/fastapi-demo/`、`fullstack/product-admin/` |
+| 3 | 基础 API 和数据库 | ✅ | 11 个业务接口、Alembic 迁移、MySQL |
+| 4 | **LLM 接入与基础对话** | ⏳ 下一阶段 | 见 §3.2 |
+| 5 | Agent 基础执行循环 | ⬜ | 依赖 4 |
+| 6 | Tool Calling | ⬜ | 依赖 5 |
+| 7 | Skill 和 MCP | ⬜ | 依赖 6；MCP client 在此阶段做（不自造协议，用官方 SDK） |
+| 8 | RAG 和 Memory | ⬜ | 依赖 7 |
+| 9 | Agent 应用功能完善 | ⬜ | 依赖 8 |
+| 10 | 桌面端集成 | ⬜ | 按 [ADR-0001](adr/0001-desktop-shell-electron.md)（Electron + PyInstaller onedir） |
+| 11 | 部署、测试和发布 | ⚠️ 部分 | 容器化 ✅、测试基线 ✅、CI ✅；**发布流程（版本号/镜像归档/回滚）未做** |
+
+### 3.2 阶段 4 的接入方式（已定）
+
+1. **先 C 打底**：定义 `LLMClient` 协议 + 一个返回固定文本的 `FakeLLM`，在没有 API key 的情况下把「请求 → 流式输出 → 错误处理 → 测试」整条链路立起来，可独立验证。
+2. **随后接 A**：用 OpenAI 兼容 API（`base_url` + `api_key`，走 `.env`），把 `FakeLLM` 换成真实现，其余代码不动。
+
+不做 B（本地 Ollama）作为主线：需要拉数 GB 模型，且与「应用层 Agent」目标无关；如后续要离线演示再作为可选实现接入。
+
+### 3.3 进入阶段 4 前要满足的门槛
 
 | 门槛 | 判定标准 | 现状 |
 |---|---|---|
 | 文档可信 | `docs/` 无已知过期事实 | ✅ 2026-11-07（见 [DOCUMENTATION_FINAL_REPORT.md](DOCUMENTATION_FINAL_REPORT.md) §3） |
-| 基线可跑 | `make check` 55 passed / ≥80%、`pnpm lint && pnpm test && pnpm build` 全过、容器三容器 healthy | ✅ 2026-11-07 |
-| 范围明确 | 阶段 2 只做「MCP client + 单 Agent PoC + Electron 骨架」，不做 RAG / 多 Agent | 待确认 |
-
-阶段 2 建议顺序（每步一个可独立验证的交付，先出 ADR 再动代码）：
-
-1. **MCP client 最小闭环** —— 能连一个 MCP server、调一个 tool、打印结果；独立于现有 API，不侵入业务代码
-2. **Agent 骨架 PoC** —— OpenAI Agents SDK 与 LangGraph 二选一（先写选型 ADR），单 Agent + 1 个工具 + 1 轮对话
-3. **Electron 桌面壳** —— 按 [ADR-0001](adr/0001-desktop-shell-electron.md) 起骨架，主进程 spawn 后端
-4. **文档与测试跟随** —— 每步补 ADR + 用例，并把结论写回本页
+| 基线可跑 | `make check` 55 passed / ≥80%、`pnpm lint && pnpm test && pnpm build` 全过 | ✅ 2026-11-07 |
+| 存储明确 | 对话数据存哪（新表 or 不落库）、是否需要会话 ID | 待定，阶段 4 设计阶段一并决定 |
 
 剩余技术债见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)：P0/P1 已清空，剩下以 P2 为主（日志规范 T-23、Element Plus 体积 T-21）。
 

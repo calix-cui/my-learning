@@ -8,7 +8,7 @@
 
 - 后端 `python/fastapi-demo/`：FastAPI + SQLAlchemy 2.0 + MySQL + Alembic，11 个业务接口 + 3 个运维探针。
 - 前端 `fullstack/product-admin/`：Vue 3 + TS + Vite + Element Plus，3 个页面。
-- 阶段 1（工程基建）已完成；阶段 2（MCP client / Agent PoC / Electron 骨架）尚未开始，见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) §3。
+- **阶段口径以 [`docs/playbooks/05-development-plan-and-mvp-tasks.md`](docs/playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划为准**：阶段 1–3（AI 基建 / 前后端骨架 / 基础 API 与数据库）已完成，当前准备进入阶段 4（LLM 接入与基础对话）；MCP 属阶段 7，桌面端属阶段 10。进度见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) §3.1。
 
 **据此行动**：除非任务明确要求做 Agent 能力，否则不要按「Agent 项目」预设立场写代码；不要删除或架空现有商品管理业务。
 
