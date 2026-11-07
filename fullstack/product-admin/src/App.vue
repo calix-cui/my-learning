@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Box, Files, Menu } from '@element-plus/icons-vue'
+import { Box, ChatDotRound, Files, Menu } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -60,6 +60,10 @@ const sidebarStatusText = computed(() => {
         <el-menu-item index="/categories">
           <el-icon><Files /></el-icon>
           <span>分类管理</span>
+        </el-menu-item>
+        <el-menu-item index="/chat">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>对话</span>
         </el-menu-item>
       </el-menu>
 

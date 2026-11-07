@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import CategoryManage from '@/views/CategoryManage.vue'
+import ChatView from '@/views/ChatView.vue'
 import Dashboard from '@/views/Dashboard.vue'
 import ProductList from '@/views/ProductList.vue'
 
@@ -19,6 +20,12 @@ const router = createRouter({
       name: 'categories',
       component: CategoryManage,
       meta: { title: '分类管理' },
+    },
+    {
+      path: '/chat',
+      name: 'chat',
+      component: ChatView,
+      meta: { title: '对话' },
     },
     {
       path: '/dashboard',

@@ -85,6 +85,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 | `/products` | 商品列表 | `views/ProductList.vue` + `components/ProductFormDialog.vue` |
 | `/categories` | 分类管理 | `views/CategoryManage.vue` + `components/CategoryFormDialog.vue` |
 | `/dashboard` | 概览 | `views/Dashboard.vue` |
+| `/chat` | 对话（会话列表 + 消息区，阶段 4） | `views/ChatView.vue`、`api/chat.ts` |
 
 **每个页面的字段、状态、空态与交互细节在 [`docs/design/design.md`](../../docs/design/design.md) 与 [`docs/product/prd.md`](../../docs/product/prd.md)** —— 那里是设计与需求的唯一来源，本文件只列路由归属。
 
@@ -111,7 +112,7 @@ product-admin/
     ├── main.ts                # 挂载 Element Plus（zh-cn）+ router
     ├── App.vue                # 侧栏（200px）+ 顶栏 + <router-view>
     ├── env.d.ts               # .vue 模块类型声明
-    ├── router/index.ts        # /products、/categories、/dashboard
+    ├── router/index.ts        # /products、/categories、/dashboard、/chat
     ├── api/
     │   ├── client.ts          # axios 实例 + 统一响应/错误拦截
     │   ├── products.ts        # 商品 6 个接口封装
