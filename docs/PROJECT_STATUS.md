@@ -76,7 +76,19 @@
 
 ## 8. 工作区状态
 
-干净。`main` 与 `origin/main` 同步于 `40728d5`（测试基线的改动已提交，见下）。
+干净。`main` 与 `origin/main` 同步于 `105f5c5`。
+
+本轮提交（均已推送）：
+
+```
+105f5c5 docs: 记录测试基线 ADR 与覆盖率约定
+5e46ffe chore: 修正 pre-commit 对 pnpm lockfile 与 alembic README 的误报
+b667d4e ci: 前后端流水线各自增加测试步骤
+e6d1897 test: 前端补 api 层单元测试
+7880528 test: 后端补服务层测试并接入覆盖率门槛
+```
+
+CI：run `42358433933` 两个 job 全绿（backend 13s、frontend 26s），新增步骤「运行测试与覆盖率」「单元测试」均已执行。
 
 测试基线（2026-11-07）：
 - 后端 50 passed / 覆盖率 85.12%（门槛 80%，`pyproject.toml` → `[tool.coverage.report] fail_under`）
