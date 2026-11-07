@@ -1,9 +1,9 @@
 # 交付与验收记录
 
 > 回答一个问题：**这个后台做到了没有？证据在哪？**
-> 需求与验收标准见 [`product/prd.md`](product/prd.md)；接口契约见 [`../python/fastapi-demo/docs/api.md`](../python/fastapi-demo/docs/api.md)。
+> 需求与验收标准见 [`product/prd.md`](product/prd.md)；接口契约见 [`../docs/api.md`](api.md)。
 
-![商品列表](images/01-product-list.png)
+![商品列表](images/shot-01-product-list.png)
 
 ## 1. 结论
 
@@ -80,7 +80,7 @@ cd fullstack/product-admin && pnpm acceptance
 | 概览第二行 | 三卡底边对齐、无半行裁切 | 三卡 bottom 均 435，4 行完整 44px |
 | 首屏 | 1440×900 无纵向滚动 | `scrollHeight = 900` |
 
-![](images/02-product-form.png)
+![新增弹窗的价格校验错误态](images/shot-02-product-form.png)
 
 ## 6. 交付过程中发现并修复的问题
 
@@ -115,5 +115,5 @@ cd fullstack/product-admin && pnpm acceptance
 
 - 需求与验收标准：[`product/prd.md`](product/prd.md)
 - 视觉规范：[`design/design.md`](design/design.md)
-- 接口契约：[`../python/fastapi-demo/docs/api.md`](../python/fastapi-demo/docs/api.md)
+- 接口契约：[`../docs/api.md`](api.md)
 - 前端说明：[`../fullstack/product-admin/README.md`](../fullstack/product-admin/README.md)

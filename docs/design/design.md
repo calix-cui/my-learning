@@ -148,11 +148,11 @@ PNG 为 2880 × 1800（1440 × 900 @2x）；HTML 自包含、内联 CSS 与 SVG�
 
 | 编号 | 页面 / 状态 | PNG | HTML | 前端实现 |
 | --- | --- | --- | --- | --- |
-| 01 | 商品列表（8 条数据 + 分页 + 统计条 + hover 行） | `images/01-product-list.png` | `mockups/01-product-list.html` | `views/ProductList.vue` |
-| 02 | 新增弹窗（价格 `12.345` 触发错误态） | `images/02-product-form.png` | `mockups/02-product-form.html` | `components/ProductFormDialog.vue` |
-| 03 | 分类管理（4 分类 + 占比条 + 删除确认 + 说明卡） | `images/03-category-manage.png` | `mockups/03-category-manage.html` | `views/CategoryManage.vue`、`components/CategoryFormDialog.vue` |
-| 04 | 空态（搜索「巧克力」0 结果） | `images/04-empty-state.png` | `mockups/04-empty-state.html` | `views/ProductList.vue`（空态分支） |
-| 05 | 概览（4 统计 + 分类分布 + 环形图 + 库存预警 + 最近新增） | `images/05-dashboard.png` | `mockups/05-dashboard.html` | `views/Dashboard.vue` |
+| 01 | 商品列表（示例数据 12 条 + 分页 + 统计条 + hover 行） | `images/design-01-product-list.png` | `mockups/01-product-list.html` | `views/ProductList.vue` |
+| 02 | 新增弹窗（价格 `12.345` 触发错误态） | `images/design-02-product-form.png` | `mockups/02-product-form.html` | `components/ProductFormDialog.vue` |
+| 03 | 分类管理（3 分类 + 占比条 + 删除确认 + 说明卡） | `images/design-03-category-manage.png` | `mockups/03-category-manage.html` | `views/CategoryManage.vue`、`components/CategoryFormDialog.vue` |
+| 04 | 空态（搜索「巧克力」0 结果） | `images/design-04-empty-state.png` | `mockups/04-empty-state.html` | `views/ProductList.vue`（空态分支） |
+| 05 | 概览（4 统计 + 三列布局：分类分布 / 环形图 / 库存预警 + 最近新增） | `images/design-05-dashboard.png` | `mockups/05-dashboard.html` | `views/Dashboard.vue` |
 
 Element Plus 适配：`--el-color-*` 五色改为上表 token、`--el-border-radius-base: 6px`、表格 `row-height: 48`、弹窗头/底 56 / 64、分页 `is-background` 后覆写为白底描边。深色模式与移动端不在 v1 范围。
 
