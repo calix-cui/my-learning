@@ -1,5 +1,7 @@
 # PROJECT_OVERVIEW — 项目现状总览
 
+> **归档文档**：阶段性产物，不再更新。结论已并入正式文档，见 [`README.md`](README.md)。
+
 > 调研时间：2026-11-06 · 基线提交：`4be025b`（`main`，已同步 `origin/main`）
 > 本文只描述**已核实的事实**，每项结论都标注了证据文件或命令；推测性内容统一放在 `TECHNICAL_DEBT.md`。
 
@@ -34,7 +36,7 @@ my-learning/
 │   ├── README.md                 # 「跨项目学习笔记」定位（已与现状不符，见技术债）
 │   ├── PROJECT_STATUS.md         # 工作状态看板（本阶段新增，未提交）
 │   ├── prompts/                  # 7 份分阶段 AI 提示词（1 调研 → 7 code review）
-│   ├── product/                  # PRD：product-admin-prd.md(399 行) + README
+│   ├── product/                  # PRD：prd.md
 │   ├── design/                   # 设计规范 234 行 + 5 份 HTML 稿 + 5 张 PNG
 │   └── product-admin/            # 交付说明 + 验收报告 + 5 张实机截图
 ├── python/
@@ -69,10 +71,10 @@ my-learning/
 
 | 文档 | 作用 | 规模 |
 |---|---|---|
-| `docs/product/product-admin-prd.md` | 16 条 P0 + 15 条验收标准 + 7 条待确认 | 399 行 |
-| `docs/design/product-admin-design.md` | 设计 token、组件规格、状态色语义 | 234 行 |
+| `docs/product/prd.md` | 16 条 P0 + 15 条验收标准 + 7 条待确认 | 399 行 |
+| `docs/design/design.md` | 设计 token、组件规格、状态色语义 | 234 行 |
 | `python/fastapi-demo/docs/api.md` | 接口契约（请求/响应/错误码） | 919 行 |
-| `docs/product-admin/acceptance.md` | 18 项用例逐条结果 + 5 处缺陷复盘 | — |
+| `docs/delivery.md` | 18 项用例逐条结果 + 5 处缺陷复盘 | — |
 | `python/fastapi-demo/README.md` | 后端技术栈/结构/命令/限制 | 148 行 |
 | `fullstack/product-admin/README.md` | 前端安装、脚本、目录 | — |
 

@@ -1,5 +1,7 @@
 # ADR-0001：桌面端外壳选择 Electron
 
+> **AI 向文档**：架构决策记录，人与 AI 共读；每条决策的「为什么」是重点。总入口见 [`../README.md`](../README.md)。
+
 - **状态**：已接受（Accepted）
 - **日期**：2026-11-06
 - **决策人**：项目 owner（用户）
@@ -9,7 +11,7 @@
 
 AGENTS.md §5 要求最终支持 macOS / Windows / Linux 三平台桌面客户端，并要求「尽可能复用 Web 前端和后端能力，避免维护三套独立业务实现」。
 
-阶段 1 的选型调研（见 [REUSE_CANDIDATES §7](../project/REUSE_CANDIDATES.md)）对比了三种外壳：
+阶段 1 的选型调研（见 [REUSE_CANDIDATES §7](../archive/REUSE_CANDIDATES.md)）对比了三种外壳：
 
 | 候选 | 壳 | 体积 | 复用现有 Vue 产物 | 拉起本地 Python 后端 |
 |---|---|---|---|---|

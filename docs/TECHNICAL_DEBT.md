@@ -27,7 +27,7 @@
 | T-17 | 后端 | 无鉴权、CORS 写死 localhost、`allow_methods=["*"]` | P2 | L |
 | T-18 | 数据 | `create_time` 用 naive `datetime.now`，无时区语义 | P2 | S |
 | T-19 | 文档 | `docs/README.md` 定位过期；`app/README.md` 与项目 README 重复 | P2 | S |
-| T-20 | 文档 | `docs/design/images/` 与 `docs/product-admin/images/` 同名不同源，易混 | P2 | S |
+| T-20 | 文档 | `docs/design/images/` 与 `docs/images/` 同名不同源，易混 | P2 | S |
 | T-21 | 前端 | Element Plus 打成 943KB 单 chunk，首屏成本偏高 | P2 | M |
 | T-22 | 后端 | 分类改名不 `strip()` 空白，可存入全空格名称 | P2 | S |
 | T-23 | 后端 | 日志无统一配置、无 request id，排障靠 print 级信息 | P2 | M |
@@ -46,7 +46,7 @@
 ### T-02 零静态检查（P0 · S）—— ✅ 已于 2026-11-07 解决
 - **证据（当时）**：仓库内不存在 `eslint.config.*` / `.eslintrc*` / `.prettierrc*` / `biome.json`（`find` 实测为空）。
 - **影响**：后端有 ruff 兜底，前端全靠 `vue-tsc --noEmit`；类型之外的问题（未定义变量、模板里写错指令、重复声明）无人拦。
-- **解决**（按 [ADR-0002](../adr/0002-frontend-quality-gate-lite.md)「轻量档」）：`eslint@10.14.0` flat config（`@eslint/js` recommended + `typescript-eslint` recommended + `eslint-plugin-vue` flat/essential，**不开 type-aware**）+ Prettier 3（不进 CI 阻断）；CI 新增 `frontend` job（`pnpm build` + `pnpm lint`）。存量代码只报 2 个 error，已修。
+- **解决**（按 [ADR-0002](adr/0002-frontend-quality-gate-lite.md)「轻量档」）：`eslint@10.14.0` flat config（`@eslint/js` recommended + `typescript-eslint` recommended + `eslint-plugin-vue` flat/essential，**不开 type-aware**）+ Prettier 3（不进 CI 阻断）；CI 新增 `frontend` job（`pnpm build` + `pnpm lint`）。存量代码只报 2 个 error，已修。
 - **遗留**：未启用 type-aware 规则，`any` 泛滥一类问题仍靠 review 兜底。
 
 ### T-03 零单元测试（P0 · S）—— CI 覆盖已补，单测未做
@@ -59,13 +59,13 @@
 ### T-04 测试不连库（P1 · M）—— ⚠️ 部分解决（2026-11-07）
 - **证据（当时）**：`python/fastapi-demo/tests/conftest.py` 注入的是占位 DSN（`test:test@127.0.0.1:3306`），用例只覆盖 422/400/404 这类「产生 SQL 之前」的路径；23 个用例 0.38s 跑完。
 - **影响**：分页 500 那类 bug（`scalars` vs `scalar`）之所以能上线，正是因为这条路径没测试。唯一键冲突、事务回滚、联表统计、PATCH 语义全无覆盖。
-- **已做**（[ADR-0005](../adr/0005-testing-baseline.md)）：`db_session` 夹具给内存 SQLite（`StaticPool`），新增 `tests/test_category_service.py`、`tests/test_product_service.py`，覆盖增删改查、分页、关键词与分类筛选、删除保护、PATCH 语义；用例数 23 → 50，覆盖率门槛 80%（实测 85%）。
+- **已做**（[ADR-0005](adr/0005-testing-baseline.md)）：`db_session` 夹具给内存 SQLite（`StaticPool`），新增 `tests/test_category_service.py`、`tests/test_product_service.py`，覆盖增删改查、分页、关键词与分类筛选、删除保护、PATCH 语义；用例数 23 → 50，覆盖率门槛 80%（实测 85%）。
 - **遗留**：MySQL 专有行为仍未测——唯一键 `1062` 分支、外键约束、`utf8mb4` 排序；内存建表走 `Base.metadata` 而非迁移脚本，模型与迁移不一致时测试仍会绿。彻底解决需要 testcontainers 或 CI 里加 MySQL service。
 
 ### T-05 无迁移工具（P1 · M）—— ✅ 已于 2026-11-07 解决
 - **证据（当时）**：`app/init_db.py:14` `Base.metadata.create_all(bind=engine)`；仓库无 `alembic.ini` / `migrations/`。
 - **影响**：`create_all` 只建表不改表。加字段、改类型、加索引都得手工 SQL，且没有回滚。
-- **解决**：引入 Alembic 1.20.1（[ADR-0003](../adr/0003-database-migrations-alembic.md)）。首个 revision `2a89b3237f54` 对空库 autogenerate 生成、与本机库逐表 `SHOW CREATE TABLE` 比对一致后 `stamp head` 接管；`app/init_db.py` 改为执行 `upgrade head`；新增 `make migrate` / `make revision` / `make check-migration`。
+- **解决**：引入 Alembic 1.20.1（[ADR-0003](adr/0003-database-migrations-alembic.md)）。首个 revision `2a89b3237f54` 对空库 autogenerate 生成、与本机库逐表 `SHOW CREATE TABLE` 比对一致后 `stamp head` 接管；`app/init_db.py` 改为执行 `upgrade head`；新增 `make migrate` / `make revision` / `make check-migration`。
 - **遗留**：CI 仍未校验迁移一致性（需 MySQL service）。
 
 ### T-06 `Response.data: Any`（P1 · M）
@@ -126,7 +126,7 @@
 
 ### T-09 零部署能力 ✅ 已解决（2026-11-07）
 - **原证据**：仓库无 `Dockerfile`、`docker-compose.yml`、反代配置、部署脚本。
-- **已补**：`python/fastapi-demo/Dockerfile`（uv 多阶段）、`fullstack/product-admin/Dockerfile`（node→nginx）、`docker-compose.yml`（db/backend/frontend/caddy）、`deploy/Caddyfile`、`.env.example`、`/healthz` `/readyz`、`docs/deploy/README.md`、ADR-0004。
+- **已补**：`python/fastapi-demo/Dockerfile`（uv 多阶段）、`fullstack/product-admin/Dockerfile`（node→nginx）、`docker-compose.yml`（db/backend/frontend/caddy）、`deploy/Caddyfile`、`.env.example`、`/healthz` `/readyz`、`docs/deploy.md`、ADR-0004。
 - **遗留**：镜像构建未进 CI；无发布脚本与回滚流程；`readyz` 未纳入 compose 的 backend healthcheck（用的是 `/healthz`）。
 
 ### T-10 前端 API 基址硬编码（P1 · S）
@@ -163,7 +163,7 @@
 - **建议**：`docs/README.md` 改成文档索引（学习笔记 / 项目文档 / 流程规范 三个分区）；删掉 `app/README.md` 或把它改成「本目录只讲分层职责，细节见 ../README.md」。
 
 ### T-20 两套同名设计图（P2 · S）
-- **证据**：`docs/design/images/01-product-list.png`（设计稿导出）与 `docs/product-admin/images/01-product-list.png`（实机截图）同名；`docs/design/mockups/*.html` 又是第三份。
+- **证据**：`docs/design/images/01-product-list.png`（设计稿导出）与 `docs/images/01-product-list.png`（实机截图）同名；`docs/design/mockups/*.html` 又是第三份。
 - **影响**：review 时极易贴错图；也让人分不清「哪张是设计、哪张是实现」。
 - **建议**：文件名加前缀（`design-01-*.png` / `shot-01-*.png`），或在各自 README 顶部放一张对照说明。
 

@@ -33,14 +33,13 @@ fastapi-demo/
 ├── migrations/           # Alembic 迁移脚本（versions/ 下按 revision 链执行）
 ├── alembic.ini           # Alembic 配置（连接串不写这里，统一读 .env）
 ├── tests/                # 不依赖 MySQL 的自动化测试
-├── docs/module-map.md    # 模块导图与职责说明（含 4 张图）
 ├── Makefile              # 常用命令入口
 ├── pyproject.toml        # 依赖声明（[project] / [dependency-groups]）+ ruff / pytest 配置
 ├── uv.lock               # 依赖锁定（`uv sync` 按它安装，不要手改）
 └── .env.example          # 环境变量模板
 ```
 
-分层与调用方向（详情见 [docs/module-map.md](docs/module-map.md)）：
+分层与调用方向（完整架构图与时序图见 [docs/how-it-works.md](../../docs/how-it-works.md)）：
 
 ```text
 api → services → models → database
@@ -175,5 +174,4 @@ make check       # lint + 测试，提交前跑这个
 
 ## 相关文档
 
-- [模块功能导图与职责说明](docs/module-map.md)
 - [目录职责速查](app/README.md)

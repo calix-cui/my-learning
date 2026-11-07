@@ -1,5 +1,7 @@
 # docs/agents — 子智能体角色卡与协作协议
 
+> **AI 向文档**：给 AI 协作者的作业指导书。人类读者可跳过——阅读路径见 [`docs/README.md`](docs/README.md)。
+
 > 目的：把「每个角色该做什么、不该做什么、交付什么、怎么验收」从对话里固化下来。
 > 上一次协作（商品管理网站，7 个提交）暴露的核心问题是：**角色边界靠临时提示词**，同一角色在不同任务里的输出质量不稳定。
 > 本目录把有效提示词沉淀成可复用角色卡，`spawn_teammate` 时直接引用。
@@ -22,7 +24,7 @@
 
 **不常设的角色**（有需求再建，现状是不需要）：
 - **QA / 测试工程师**：当前验收（18 项 E2E + 接口抽查）由 lead 兼任，量还不够拆角色。触发条件：后端有了集成测试套件、前端有了 Vitest 套件，需要人长期维护回归时再建。
-- **DevOps**：容器化/CI/CD 尚未开始（见 `docs/project/TECHNICAL_DEBT.md` T-09），阶段 4 再建。
+- **DevOps**：容器化/CI/CD 尚未开始（见 `docs/TECHNICAL_DEBT.md` T-09），阶段 4 再建。
 - **架构师**：架构决策由 lead 直接做并写 ADR，避免「架构师定方案、leader 背锅」的权责错位。
 
 ## 3. 协作协议（写进每个任务单）
@@ -82,7 +84,7 @@
 
 ## 6.1 项目级 Skill 清单
 
-技术类 Skill 放在仓库内 `.agents/skills/`，DSH 会在会话目录里自动发现（机制已验证，见 [AI_ENVIRONMENT_AUDIT §2](../project/AI_ENVIRONMENT_AUDIT.md)）。**引入/升级任何 Skill 都要更新下表。**
+技术类 Skill 放在仓库内 `.agents/skills/`，DSH 会在会话目录里自动发现（机制已验证，见 [AI_ENVIRONMENT_AUDIT §2](../archive/AI_ENVIRONMENT_AUDIT.md)）。**引入/升级任何 Skill 都要更新下表。**
 
 | Skill | 上游 | 引入 commit | 许可 | 本地修改 | 用途 |
 |---|---|---|---|---|---|

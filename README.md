@@ -1,122 +1,89 @@
-# Learning Lab
+# Learning Lab · 商品管理后台
 
-个人编程学习与实践仓库，集中记录 Python、前端、Agent 和全栈应用开发过程。
+一个用于学习 AI Agent 应用开发的全栈项目仓库。当前的可运行成果是**简易商品管理网站**：
+Vue 3 管理后台 + FastAPI 接口 + MySQL，既能本地开发，也能一条命令容器化部署。
 
-本仓库采用 **Monorepo** 组织方式：按技术领域划分目录，每个具体项目保持相对独立的依赖、运行方式和说明文档。
+| 项 | 状态 |
+|---|---|
+| 功能 | P0 十六条需求全部实现（商品增删改查、搜索筛选、分类管理、概览） |
+| 验收 | 端到端 18/18 通过；后端 50 个单测 + 覆盖率 85.12%；前端 17 个单测 |
+| CI | GitHub Actions 双 job 全绿（ruff / pytest / ESLint / Vitest / build） |
+| 部署 | Docker Compose 三容器 healthy，`/healthz` `/readyz` 探针可用 |
+
+## 快速开始
+
+### 方式一：本地开发（推荐先跑这个）
+
+前置：Python 3.11+、[uv](https://docs.astral.sh/uv/)、Node 22+、[pnpm](https://pnpm.io/)、MySQL 8。
+
+```bash
+# 1) 后端
+cd python/fastapi-demo
+cp ../../.env.example .env          # 填数据库密码（.env 不进版本库）
+uv sync                             # 按 uv.lock 装依赖
+make migrate                        # 建表（Alembic）
+uv run python -m app.seed           # 可选：写入演示数据
+make run                            # http://127.0.0.1:8000/docs
+
+# 2) 前端（另开一个终端）
+cd fullstack/product-admin
+pnpm install
+pnpm dev                            # http://127.0.0.1:5173（/api 代理到 8000）
+```
+
+### 方式二：容器一键起
+
+前置：[Docker Desktop](https://www.docker.com/products/docker-desktop/)（或 colima + docker compose 插件）。
+
+```bash
+cp .env.example .env                # 改掉数据库密码
+docker compose up -d --build
+open http://localhost:8080
+```
+
+细节见 [部署文档](docs/deploy.md)。
 
 ## 目录结构
 
 ```text
 my-learning/
-├── python/          # Python 基础、脚本、FastAPI 等
-├── frontend/        # React、TypeScript 等前端练习
-├── agent/           # Agent、工具调用、MCP、RAG 等实验
-├── fullstack/       # 前后端结合的完整应用
-├── docs/               # 跨项目的学习笔记和规划
-├── .editorconfig
-├── .gitattributes
-├── .gitignore
-└── README.md
+├── python/fastapi-demo/     # 后端：FastAPI + SQLAlchemy + Alembic + pytest
+├── fullstack/product-admin/ # 前端：Vue 3 + TS + Vite + Element Plus + Vitest
+├── docs/                    # 全部文档，入口见 docs/README.md
+├── deploy/Caddyfile         # 可选：Caddy 反向代理（HTTPS）
+└── docker-compose.yml       # db / backend / frontend / 可选 caddy
 ```
 
-每个子项目建议包含自己的 `README.md`，并在需要时维护独立的依赖文件，例如 `requirements.txt`、`pyproject.toml` 或 `package.json`。
+`frontend/`、`agent/` 是后续实验预留目录，当前不存在。
 
-## 项目索引
+## 文档怎么读
 
-### Python
+**别从文件树开始翻。** 先读 [docs/README.md](docs/README.md)——它给出三条阅读路径（10 分钟 / 40 分钟 / 要动手改），以及每个文档「给谁看、什么时候看」。
 
-| 项目 | 说明 | 状态 |
+最常用的三个：
+
+- 想搞懂代码怎么跑 → [docs/how-it-works.md](docs/how-it-works.md)（含架构图、请求时序、数据模型）
+- 想搞懂工具怎么用 → [docs/toolchain.md](docs/toolchain.md)（含工具链流程图）
+- 想知道进度到哪了 → [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)
+
+## 常用命令
+
+| 我要 | 命令 | 目录 |
 |---|---|---|
-| [fastapi-demo](./python/fastapi-demo/) | FastAPI 接口开发练习：CRUD、联表查询、统计、测试与 CI | 持续开发 |
-
-### Frontend
-
-### Agent
-
-### Fullstack
-
-| 项目 | 说明 | 状态 |
-|---|---|---|
-| [product-admin](./fullstack/product-admin/) | 简易商品管理后台：Vue 3 + TypeScript + Vite + Element Plus，对接 FastAPI 商品/分类接口；含 PRD、设计稿、API 契约与 18 项端到端验收脚本 | 可用（v1.0） |
-
-商品管理网站的交付与验收说明见 [docs/product-admin/README.md](./docs/product-admin/README.md)，
-包含如何启动前后端、P0 需求对照表、验收证据与已知限制。
-
-### 部署
-
-| 文档 | 内容 |
-|---|---|
-| [docs/deploy/README.md](./docs/deploy/README.md) | Docker Compose 一键部署：MySQL + FastAPI + nginx 前端 + 可选 Caddy HTTPS，含健康检查、备份与排障 |
-
-一条命令起整套服务（详见部署文档）：
-
-```bash
-cp .env.example .env   # 改掉数据库密码
-docker compose up -d --build
-open http://localhost:8080
-```
-
-> 项目名称、状态和说明应随实际进度更新；尚未创建的项目可以删除对应索引。
-
-## 环境与依赖管理
-
-### Python
-
-建议为每个具有独立依赖的 Python 项目创建虚拟环境，不要把 `.venv` 提交到 Git。
-
-```bash
-cd python/fastapi-demo
-uv sync            # 按 pyproject.toml + uv.lock 建好 .venv 并安装依赖
-uv run python -m uvicorn app.main:app --reload
-```
-
-- 依赖声明在 `pyproject.toml`，版本锁定在 `uv.lock`，两者都提交；**不要再手写 requirements.txt**。
-- `.venv` 由 uv 管理，不要提交到 Git。
-- 直接用 pip 也可以（`source .venv/bin/activate` 后再 `pip install ...`），但那样就拿不到锁文件的确定性，不推荐。
-
-如果项目使用 `pyproject.toml`，请以该项目 README 中的安装说明为准。
-
-### Frontend
-
-进入具体前端项目后，根据锁文件选择包管理器：
-
-```bash
-cd frontend/react-demo   # 换成实际项目目录
-npm install
-npm run dev
-```
-
-如果仓库使用 `pnpm-lock.yaml` 或 `yarn.lock`，应使用对应的包管理器，不要混用锁文件。
-
-### Agent
-
-Agent 项目可能同时包含 Python、前端和外部服务。请在各项目目录中分别说明：
-- Python / Node.js 版本要求
-- 依赖安装与启动命令
-- 所需环境变量
-- 模型服务、API 或数据库等外部依赖
+| 后端自检（lint + 测试 + 覆盖率） | `make check` | `python/fastapi-demo` |
+| 生成/应用数据库迁移 | `make revision m="说明"` / `make migrate` | `python/fastapi-demo` |
+| 前端自检（lint + 测试 + 构建） | `pnpm lint && pnpm test && pnpm build` | `fullstack/product-admin` |
+| 端到端验收（需先起前后端） | `pnpm acceptance` | `fullstack/product-admin` |
+| 起整套容器 | `docker compose up -d --build` | 仓库根 |
 
 ## 通用约定
 
-1. 一个目录对应一个边界清晰的练习或项目。
-2. 每个可独立运行的项目都应有自己的 README。
-3. 不同项目的依赖不要随意混用；出现版本冲突时拆分虚拟环境。
-4. 不提交密钥、访问令牌、个人配置、虚拟环境和构建产物。
-5. 重要实验应记录目标、关键实现、运行方式和遇到的问题。
-6. 项目从练习发展为完整作品后，可以迁移到独立仓库。
-
-## 提交信息建议
-
-采用简洁、可读的提交信息：
-
-```text
-feat(agent): add basic tool calling
-fix(fastapi): handle missing product
-docs: update project index
-refactor(react): extract shared component
-chore: update gitignore
-```
+1. 一个目录对应一个边界清晰的项目，各自维护依赖与 README。
+2. 依赖用 `uv.lock` / `pnpm-lock.yaml` 锁定并提交，不手写 `requirements.txt`，不混用包管理器。
+3. 不提交密钥、虚拟环境、构建产物；真实配置放 `.env`，模板放 `.env.example`。
+4. 改代码必须同一次提交里改对应文档（见 [docs/README.md](docs/README.md) §4「事实只有一个来源」）。
+5. 重要技术选择写进 [docs/adr/](docs/adr/README.md)，不写在聊天记录里。
 
 ## 安全提醒
 
-将真实密钥放在本地 `.env` 文件中，并提交 `.env.example` 作为变量模板。`.env.example` 只能包含变量名和无敏感信息的示例值，不能放入真实密钥。
+`.env.example` 只放变量名与示例值；`.env`、`*.pem`、私钥、令牌一律不进版本库。CI 里有 `detect-private-key` 钩子兜底。

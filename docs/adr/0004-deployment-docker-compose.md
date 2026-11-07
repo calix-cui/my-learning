@@ -1,7 +1,9 @@
 # ADR-0004：用 Docker Compose 做单机一键部署
 
+> **AI 向文档**：架构决策记录，人与 AI 共读；每条决策的「为什么」是重点。总入口见 [`../README.md`](../README.md)。
+
 - 状态：已采纳（2026-11-07）
-- 相关文档：[部署指南](../deploy/README.md)、[ADR-0001 桌面端 Electron](./0001-desktop-shell-electron.md)
+- 相关文档：[部署指南](../deploy.md)、[ADR-0001 桌面端 Electron](./0001-desktop-shell-electron.md)
 
 ## 背景
 
@@ -18,7 +20,7 @@
 | `frontend` | 多阶段构建（node 构建 → nginx 托管） | 静态资源 + `/api` 反代到 backend |
 | `caddy` | 官方 `caddy:2.9-alpine`，`profiles: ["https"]` | 可选的反向代理与 HTTPS 入口 |
 
-配套：根目录 `.env.example` 存部署变量（复制成 `.env`）、`deploy/Caddyfile`、`docs/deploy/README.md`。
+配套：根目录 `.env.example` 存部署变量（复制成 `.env`）、`deploy/Caddyfile`、`docs/deploy.md`。
 
 ## 关键落地方式
 

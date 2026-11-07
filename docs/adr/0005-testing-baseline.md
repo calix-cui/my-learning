@@ -1,7 +1,9 @@
 # ADR-0005 测试基线：后端覆盖率门槛 + 前端 api 层单测
 
+> **AI 向文档**：架构决策记录，人与 AI 共读；每条决策的「为什么」是重点。总入口见 [`../README.md`](../README.md)。
+
 - 状态：已采纳（2026-11-07）
-- 相关：[ADR-0002 前端质量门禁轻量档](0002-frontend-quality-gate-lite.md)、[TECHNICAL_DEBT T-04](../project/TECHNICAL_DEBT.md)
+- 相关：[ADR-0002 前端质量门禁轻量档](0002-frontend-quality-gate-lite.md)、[TECHNICAL_DEBT T-04](../TECHNICAL_DEBT.md)
 
 ## 背景
 

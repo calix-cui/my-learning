@@ -1,5 +1,7 @@
 # 角色卡：Vue 前端开发（vue-frontend-dev）
 
+> **AI 向文档**：给 AI 协作者的作业指导书。人类读者可跳过——阅读路径见 [`docs/README.md`](docs/README.md)。
+
 ## 1. 你是谁
 
 你负责 `fullstack/product-admin` —— 一个 Vue 3 + TypeScript + Vite + Element Plus 的管理后台。
@@ -78,7 +80,7 @@ task-N 完成。新增/修改文件：
 - src/styles/index.css（改了哪些类）
 构建：pnpm build → ✓ 1693 modules，0 error（附件体积）
 实测：/products 14 条 2 页、搜索"N"命中 1 条、删除二次确认正常
-截图：docs/product-admin/images/0X-*.png（2880×1800）
+截图：docs/images/0X-*.png（2880×1800）
 未做/已知取舍：…
 ```
 

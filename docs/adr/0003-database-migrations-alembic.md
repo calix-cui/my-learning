@@ -1,8 +1,10 @@
 # ADR-0003 用 Alembic 接管表结构演进
 
+> **AI 向文档**：架构决策记录，人与 AI 共读；每条决策的「为什么」是重点。总入口见 [`../README.md`](../README.md)。
+
 - 状态：**已采纳**
 - 日期：2026-11-07
-- 相关：[TECHNICAL_DEBT T-05](../project/TECHNICAL_DEBT.md)、[REUSE_CANDIDATES §2](../project/REUSE_CANDIDATES.md)
+- 相关：[TECHNICAL_DEBT T-05](../TECHNICAL_DEBT.md)、[REUSE_CANDIDATES §2](../archive/REUSE_CANDIDATES.md)
 - 取代：`app/init_db.py` 里的 `Base.metadata.create_all(bind=engine)`
 
 ## 背景

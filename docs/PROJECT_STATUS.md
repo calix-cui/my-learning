@@ -1,111 +1,80 @@
-# PROJECT_STATUS — 项目状态
+# 项目状态
 
-> 本文件由 AI 在每次任务开始前读取、任务结束后更新（AGENTS.md §7）。
-> 最近更新：2026-11-07 · 对应提交 `a8549fc`（工作区干净，本地领先 `origin/main` 2 个提交）
+> 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
+> 最近更新：2026-11-07 · 工作区干净 · `main` 与 `origin/main` 同步
 
-## 1. 当前阶段
+## 1. 现在在哪
 
-**阶段 1「Know the project」进行中**（按 `docs/prompts/` 的 7 阶段推进）。
-阶段 0 的最小闭环已完成：一个可运行的 FastAPI 后端 + Vue3 管理后台 + 完整需求/设计/验收文档 + 7 个已推送的提交。
+**阶段 1「工程基建」已完成，准备进入阶段 2「架构与 Agent 能力设计」。**
 
-## 2. 进行中
+已经有一个能跑、能测、能部署的最小闭环：
 
-| 任务 | 负责 | 状态 | 产出 |
-|---|---|---|---|
-| （无进行中任务，等待阶段 2 启动） | — | — | — |
-| 项目与 AI 环境调研 | lead | 完成 | `docs/project/` 4 份：PROJECT_OVERVIEW / AI_ENVIRONMENT_AUDIT / TECHNICAL_DEBT（T-01…T-25）/ REUSE_CANDIDATES（含 Top 5） |
-| 子智能体角色卡 | lead | 完成 | `docs/agents/` 5 张卡 + 协作协议 |
-| 本文件初始化 | lead | 完成 | 本文件 |
+- 后端 FastAPI（12 个业务接口 + 3 个运维路径，商品 + 分类 CRUD + 统计）
+- 前端 Vue 3 管理后台（3 个页面 + 3 个弹窗，18 项端到端验收全过）
+- 数据库迁移（Alembic）、依赖锁定（uv / pnpm）、质量门禁（ruff / ESLint / pytest / Vitest / CI）、容器化（Docker Compose）
 
-## 3. 已完成（近期，倒序）
+## 2. 已完成
 
-| 日期 | 交付 | 提交 |
+| 日期 | 交付 | 证据 |
 |---|---|---|
-| 11-07 | **前端质量门禁（轻量档）**：ESLint 10 flat + Prettier + CI `frontend` job，存量代码零 error、break-glass 验证能拦住（[ADR-0002](adr/0002-frontend-quality-gate-lite.md)） | `ae327d0`·`a8549fc` |
-| 11-07 | **Alembic 接管 schema**：首个 revision `2a89b3237f54`、现有库 `stamp`、`init_db` 改为执行迁移、新增 make 目标（[ADR-0003](adr/0003-database-migrations-alembic.md)） | `b2c09da` |
-| 11-06 | 项目级 Skill：`fastapi`（官方仓库）+ `vue-best-practices`，含来源登记与版本适配段 | `4bbcaed` |
-| 11-06 | 商品管理网站 v1：PRD / 设计规范+5 张设计稿 / 后端 seed+CORS / 前端 16 文件 / 验收 18 项全过 | `7c2d6fc`…`4be025b` |
-| 11-05 | 后端工程化：pyproject(ruff)/pytest 23 例/pre-commit/CI/Makefile/README | 已包含在上面的提交中 |
-| 11-05 | 修复 `/api/products` 分页 500（`scalars` → `scalar`） | 同上 |
-| 11-05 | 修复 VS Code 调试配置（cwd/interpreter/--reload） | `.vscode` 未入库 |
-| 11-03 | `python/fastapi-demo` 模块导图与请求生命周期文档 | `docs/module-map.md`（本地） |
+| 11-07 | **文档体系重构**：三层结构 + 架构图/工具链图，人读部分从 2900 行降到 1350 行，重复事实收敛到单一来源 | [docs/README.md](README.md)、[CONTRIBUTING.md](../CONTRIBUTING.md) |
+| 11-07 | **测试基线**：后端 50 例 + 覆盖率门槛 80%（实测 85.12%），前端 Vitest 17 例 | [ADR-0005](adr/0005-testing-baseline.md) |
+| 11-07 | **容器化**：多阶段镜像 + Compose（db/backend/frontend/可选 Caddy）+ `/healthz` `/readyz` | [ADR-0004](adr/0004-deployment-docker-compose.md)、[deploy.md](deploy.md) |
+| 11-07 | **uv 统一依赖**：`pyproject.toml` 唯一来源 + `uv.lock`，CI 用 `uv sync --frozen` | `a09763d` |
+| 11-07 | **前端轻量门禁**：ESLint 10 + Prettier + CI 前端 job | [ADR-0002](adr/0002-frontend-quality-gate-lite.md) |
+| 11-07 | **Alembic 接管 schema**：首个 revision `2a89b3237f54` | [ADR-0003](adr/0003-database-migrations-alembic.md) |
+| 11-06 | **商品管理网站 v1**：需求 → 设计 → 前后端 → 18 项验收 | [delivery.md](delivery.md) |
+| 11-05 | 后端工程化：ruff / pytest / pre-commit / CI / Makefile | `python/fastapi-demo/README.md` |
 
-## 4. 阻塞
+## 3. 下一步
 
-无硬阻塞。以下为**环境级限制**（会在对应阶段变成阻塞）：
+阶段 2 建议顺序（**尚未开工，需要确认**）：
 
-- 本机 `docker` CLI 无 compose 插件、daemon 默认未运行；本轮用 colima 起的 VM（`HOME=/tmp/home`）验证过容器化，日常部署需自行启动 Docker Desktop/colima。
-- `gh` 凭据未接入 git → 每次 push 需临时绕过（T-13）。
+1. **MCP client 最小闭环** —— 先做一个能连一个 MCP server、调一个 tool 的 Python 客户端
+2. **Agent 骨架 PoC** —— 选 OpenAI Agents SDK 或 LangGraph 做单 Agent + 工具调用
+3. **Electron 桌面壳** —— 按 [ADR-0001](adr/0001-desktop-shell-electron.md) 起骨架，主进程 spawn 后端
+4. **文档与测试跟随** —— 每步补 ADR + 用例
 
-## 5. 当前技术决策
+后续待办（来自技术债 T-01…T-25）：CI 校验迁移一致性（T-05 遗留）、前端 type-aware（T-02 遗留）、`.python-version` 对齐本地与 CI（T-12）。
 
-| 决策 | 选择 | 理由 | 记录位置 |
-|---|---|---|---|
-| 后端框架 | FastAPI + SQLAlchemy 2.0 + MySQL | 类型友好、OpenAPI 自动生成、生态成熟 | `python/fastapi-demo/README.md` |
-| 分层 | api / services / schemas / models / common | 控制器不写 SQL，业务可单测 | `docs/module-map.md` |
-| 前端 | Vue3 + TS + Vite + Element Plus | 与设计稿还原度高、组件齐、团队熟悉 | `docs/design/`、`docs/product-admin/README.md` |
-| 前后端通信 | REST + 统一响应 `{code,message,data}` | 简单、可被任意客户端消费 | `python/fastapi-demo/docs/api.md` |
-| 质量门禁 | 后端：ruff + pytest + pre-commit + CI；前端：**轻量档**（ESLint recommended + Prettier + Vitest 仅纯逻辑） | 单人项目，门禁的摩擦要小于收益 | `pyproject.toml`、`.github/workflows/ci.yml`、[ADR-0002](adr/0002-frontend-quality-gate-lite.md) |
-| 数据库迁移 | **Alembic**（首个 revision `2a89b3237f54`，现有库 `stamp` 接管） | 数据演进需要版本与回滚（[ADR-0003](adr/0003-database-migrations-alembic.md)） | `python/fastapi-demo/migrations/` |
-| 桌面端外壳 | **Electron**（主进程 spawn Python 子进程 + electron-builder 打包） | 复用 Node 工具链、拉起本地后端最省事、调试与打包生态成熟 | [ADR-0001](adr/0001-desktop-shell-electron.md) |
-| 桌面端后端打包 | **PyInstaller `--onedir`**（Nuitka 二期评估） | onefile 冷启动慢 | `docs/project/REUSE_CANDIDATES.md` §7 |
-| Agent 框架 | **未决策**：MCP Python SDK（先 client）+ OpenAI Agents SDK（先 PoC） | 需求未定，先用最小可验证路径 | `docs/project/REUSE_CANDIDATES.md` §8 |
-| 项目级 Skill | 按需从 GitHub 引入开源 Skill，不自研 | 成熟方案优先，见 AGENTS.md §2.1 | `docs/project/AI_ENVIRONMENT_AUDIT.md` §2 |
+## 4. 关键决策
 
-## 6. 已知问题
+完整理由见 [`adr/`](adr/README.md)，这里只列「选了 A 不选 B」的结论：
 
-按优先级见 `docs/project/TECHNICAL_DEBT.md`（T-01…T-25）。当前最该处理的五条：
+| 决策 | 选择 | 一句话理由 |
+|---|---|---|
+| 后端框架 | FastAPI + SQLAlchemy 2.0 + MySQL | 类型友好、OpenAPI 自动生成 |
+| 后端分层 | api / schemas / services / models / common | 控制器不写 SQL，业务可单测 |
+| 前端 | Vue 3 + TS + Vite + Element Plus | 与设计稿还原度高、组件齐 |
+| 通信 | REST + 统一响应 `{code,message,data}` | 简单，任意客户端可消费 |
+| 数据库迁移 | Alembic | 结构变更要能复现与回滚（ADR-0003） |
+| 依赖管理 | uv（后端）+ pnpm（前端） | 锁定完整依赖树，CI 可复现 |
+| 质量门禁 | 后端严（ruff+pytest+80% 覆盖）、前端轻（ESLint recommended + Vitest 纯逻辑） | 单人项目，摩擦要小于收益（ADR-0002） |
+| 部署 | Docker Compose（db/backend/frontend/可选 Caddy） | 一条命令起全套（ADR-0004） |
+| 桌面端外壳 | Electron + PyInstaller `--onedir` | 复用 Node 工具链，拉起本地后端最省事（ADR-0001） |
+| Agent 框架 | **未决策**（MCP Python SDK 先 client，OpenAI Agents SDK 先 PoC） | 需求未定，先走最小可验证路径 |
 
-1. **T-03** 前端零单测（lint 与 CI 覆盖已于 11-07 解决，Vitest 属阶段 5）。
-2. **T-04** 后端测试不连库，SQL 路径无自动化覆盖。
-3. **T-05 遗留** CI 不校验迁移一致性（需 MySQL service）。
-4. **T-02 遗留** 前端 ESLint 为轻量档，未启用 type-aware 规则（AD-0002 已接受该取舍）。
-5. **T-12** 本机 Python 3.15 / CI 3.12，无 `.python-version`。
+## 5. 已知问题
 
-## 7. 下一步计划
+按优先级见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)（T-01…T-25）。当前最该处理的五条：
 
-阶段 1 已完成。owner 已确认顺序（2026-11-06 定，2026-11-07 第 1 项交付）：
+1. **T-04 部分解决** — 后端测试用内存 SQLite，MySQL 专有行为（唯一键 1062、外键、排序）无自动化覆盖
+2. **T-05 遗留** — CI 不校验迁移一致性（`alembic check` 需要 MySQL service）
+3. **T-02 遗留** — 前端 ESLint 未启 type-aware（ADR-0002 已接受该取舍）
+4. **T-12** — 本机 Python 3.15 / CI 3.12，无 `.python-version`
+5. **L-05/L-06** — 404 文案不统一、分类改名不 strip 空白（见 [delivery.md](delivery.md) §7）
 
-1. ✅ **Alembic 接管 schema**（已完成，见 §3）——CI 校验迁移一致性和「加 MySQL service」仍待办。
-2. ✅ **前端轻量门禁**（已完成，见 §3）——ESLint 10 flat（recommended 档）+ Prettier + CI 前端 job（`pnpm build` + `pnpm lint`），口径见 [ADR-0002](adr/0002-frontend-quality-gate-lite.md)。
-3. ✅ **uv 统一依赖源**（已完成）——`pyproject.toml` 是唯一来源 + `uv.lock`，CI 用 `uv sync --frozen`。
-4. ✅ **容器化与一键部署**（已完成）——多阶段 Dockerfile（uv 后端 / node+nginx 前端）+ Compose（db/backend/frontend/可选 caddy）+ `/healthz` `/readyz`，见 [ADR-0004](adr/0004-deployment-docker-compose.md) 与 [部署指南](deploy/README.md)。
-5. ✅ **测试基线**（已完成）——后端 50 个用例（接口层 + 内存 SQLite 服务层）+ 覆盖率门槛 80%（实测 85%）；前端 Vitest 17 个用例（只测 `src/api`）；CI 前后端各加一步，口径见 [ADR-0005](adr/0005-testing-baseline.md)。
+## 6. 阻塞与环境限制
 
-后续：阶段 2 架构与 Agent 能力设计（MCP client 先行）、桌面端 Electron 骨架（按 ADR-0001）、项目级 Skill 从 GitHub 按需引入（见 AUDIT §2）。
+无硬阻塞。以下是环境级限制，会在特定任务变成阻塞：
 
-## 8. 工作区状态
+- **Docker**：本机 CLI 无 compose 插件、daemon 默认未运行；本轮用 colima（`HOME=/tmp/home`）验证过容器化，日常部署需自行启动 Docker Desktop/colima
+- **gh 凭据**：`~/.gitconfig` 已配 `gh auth git-credential`，但 token 缺 `workflow` scope 时需要设备授权（见 T-13）
 
-干净。`main` 与 `origin/main` 同步于 `105f5c5`。
+## 7. 仓库状态
 
-本轮提交（均已推送）：
-
-```
-105f5c5 docs: 记录测试基线 ADR 与覆盖率约定
-5e46ffe chore: 修正 pre-commit 对 pnpm lockfile 与 alembic README 的误报
-b667d4e ci: 前后端流水线各自增加测试步骤
-e6d1897 test: 前端补 api 层单元测试
-7880528 test: 后端补服务层测试并接入覆盖率门槛
-```
-
-CI：run `42358433933` 两个 job 全绿（backend 13s、frontend 26s），新增步骤「运行测试与覆盖率」「单元测试」均已执行。
-
-测试基线（2026-11-07）：
-- 后端 50 passed / 覆盖率 85.12%（门槛 80%，`pyproject.toml` → `[tool.coverage.report] fail_under`）
-- 前端 17 passed（Vitest，`src/api` 三个 test 文件）
-- `pnpm lint` / `pnpm format:check` / `pnpm build` / `make check` / `pre-commit run --all-files` 全绿
-- 反证：把 500 文案改错 → 前端测试红；把「商品分类不存在」改错 → 后端测试红；`--cov-fail-under=99` → 覆盖率门禁红
-
-近期提交（均已推送）：
-
-```
-40728d5 docs: 补充部署指南与容器化 ADR
-9583996 feat: 新增 Docker 化部署编排
-81e07e8 feat: 后端新增存活与就绪探针
-cf3f483 ci: 前端质量门禁 job 与后端 job 改用 uv
-a09763d build: 依赖改由 uv 统一声明与锁定
-```
-
-CI：`42265794616` 两个 job 全绿（backend 12s、frontend 22s）。
-
-容器化验证记录：用 colima（`HOME=/tmp/home`）起 Docker 后 `docker compose up -d --build` 三容器全部 healthy；`/api/products`、`/healthz`、`/readyz`、SPA 首页经 `http://localhost:8080` 全部 200；`docker compose down && up -d` 后数据仍在（12 商品 / 3 分类）。
+- 最近提交：文档体系重构（三层结构 + 架构图/工具链图/契约精简），详见 `git log --oneline -8`
+- CI：最近一次（测试基线）run `42358433933` 双 job 绿（backend 13s / frontend 26s）；本轮只改文档，不触发后端/前端 job
+- 文档：人读 1350 行 / AI 向 1670 行 / 归档 670 行；全仓相对链接 0 失效（`/tmp/linkcheck.py` 口径）
+- 测试基线：后端 50 passed / 85.12%；前端 17 passed
+- 容器验证：三容器 healthy，`http://localhost:8080` 首页、`/api/products`、`/healthz`、`/readyz` 均 200；`down && up -d` 后数据仍在
