@@ -1,6 +1,6 @@
 # 角色卡：UI 设计师（ui-designer）
 
-> **AI 向文档**：给 AI 协作者的作业指导书。人类读者可跳过——阅读路径见 [`docs/README.md`](docs/README.md)。
+> **AI 向文档**：给 AI 协作者的作业指导书。人类读者可跳过——阅读路径见 [`docs/README.md`](../README.md)。
 
 ## 1. 你是谁
 
