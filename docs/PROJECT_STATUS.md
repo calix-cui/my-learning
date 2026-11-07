@@ -5,7 +5,7 @@
 
 ## 1. 现在在哪
 
-**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–3 已完成，阶段 4「LLM 接入与基础对话」待开工。**
+**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–3 已完成，阶段 4「LLM 接入与基础对话」进行中（T1–T3 已落地，剩 T4/T4b/T5/T6）。**
 
 阶段口径只以该文件为准。此前本文件里出现的「阶段 2 = MCP client / Agent PoC / Electron 骨架」是我自行归纳的临时说法（源自 `archive/REUSE_CANDIDATES.md` 的「MCP 建议尽早」与 ADR-0001 的 Electron 结论），**与 11 阶段计划无对应关系，已废弃**，勿再引用。
 
@@ -38,7 +38,7 @@
 | 1 | AI 开发基建 | ✅ | `AGENTS.md`、`agents/`、`.agents/skills/`、`adr/`、`playbooks/` |
 | 2 | 前后端项目骨架 | ✅ | `python/fastapi-demo/`、`fullstack/product-admin/` |
 | 3 | 基础 API 和数据库 | ✅ | 11 个业务接口、Alembic 迁移、MySQL |
-| 4 | **LLM 接入与基础对话** | ⏳ 下一阶段 | 见 §3.2 |
+| 4 | **LLM 接入与基础对话** | ⏳ 进行中 | 设计 [chat.md](chat.md)；T1 表结构 ✅ / T2 模型抽象 ✅ / T3 会话 CRUD ✅，剩 T4 发消息、T4b SSE、T5 前端、T6 文档 |
 | 5 | Agent 基础执行循环 | ⬜ | 依赖 4 |
 | 6 | Tool Calling | ⬜ | 依赖 5 |
 | 7 | Skill 和 MCP | ⬜ | 依赖 6；MCP client 在此阶段做（不自造协议，用官方 SDK） |
@@ -49,7 +49,7 @@
 
 ### 3.2 阶段 4 的接入方式（已定，设计见 [`chat.md`](chat.md)）
 
-**执行进度**：T1 数据模型 + 迁移 ✅（revision `b1b54e93e0ca`，`conversations` / `messages` 两表已建，`alembic check` 无漂移）；T2 模型抽象层 ✅（`FakeLLM` 默认 + `OpenAICompatibleClient`，`httpx.MockTransport` 覆盖 4 类错误映射，后端 66 例 / 覆盖率 87.08%）
+**执行进度**：T1 数据模型 + 迁移 ✅（revision `b1b54e93e0ca`，`conversations` / `messages` 两表已建，`alembic check` 无漂移）；T2 模型抽象层 ✅（`FakeLLM` 默认 + `OpenAICompatibleClient`，`httpx.MockTransport` 覆盖 4 类错误映射）；T3 会话 CRUD ✅（5 个端点：`POST/GET /api/conversations`、`GET/PATCH/DELETE /{id}`，接口文档见 [api.md](api.md) §4，后端 88 例 / 覆盖率 87.32%）
 
 1. **先 C 打底**：定义 `LLMClient` 协议 + 一个返回固定文本的 `FakeLLM`，在没有 API key 的情况下把「请求 → 流式输出 → 错误处理 → 测试」整条链路立起来，可独立验证。
 2. **随后接 A**：用 OpenAI 兼容 API（`base_url` + `api_key`，走 `.env`），把 `FakeLLM` 换成真实现，其余代码不动。
@@ -62,7 +62,7 @@
 |---|---|---|
 | 文档可信 | `docs/` 无已知过期事实 | ✅ 2026-11-07（见 [DOCUMENTATION_FINAL_REPORT.md](DOCUMENTATION_FINAL_REPORT.md) §3） |
 | 基线可跑 | `make check` 55 passed / ≥80%、`pnpm lint && pnpm test && pnpm build` 全过 | ✅ 2026-11-07 |
-| 存储明确 | 对话数据存哪（新表 or 不落库）、是否需要会话 ID | 待定，阶段 4 设计阶段一并决定 |
+| 存储明确 | 对话数据存哪（新表 or 不落库）、是否需要会话 ID | ✅ 已定：`conversations` / `messages` 两表落库（[ADR-0006](adr/0006-llm-client-and-chat-storage.md)） |
 
 剩余技术债见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)：P0/P1 已清空，剩下以 P2 为主（日志规范 T-23、Element Plus 体积 T-21）。
 
