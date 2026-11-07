@@ -153,3 +153,125 @@ def test_delete_conversation_missing_raises_404(db_session):
         chat_service.delete_conversation(db_session, 9999)
 
     assert exc_info.value.code == 404
+
+
+class RecordingLLM:
+    """记录收到的上下文，便于断言截断与排序；可注入异常验证回滚。"""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.received: list[list[dict[str, str]]] = []
+
+    def chat(self, messages):
+        self.received.append([dict(m) for m in messages])
+        if self.error is not None:
+            raise self.error
+        return {"content": "好的", "model": "recording"}
+
+
+def test_send_message_stores_both_messages(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+
+    user_message, assistant_message = chat_service.send_message(
+        db_session, conversation.id, "  你好  ", RecordingLLM()
+    )
+
+    assert user_message.content == "你好"
+    assert user_message.role == "user"
+    assert user_message.model is None
+    assert assistant_message.content == "好的"
+    assert assistant_message.role == "assistant"
+    assert assistant_message.model == "recording"
+
+
+def test_send_message_auto_titles_on_first_message(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+
+    chat_service.send_message(db_session, conversation.id, "帮我给可乐定价", RecordingLLM())
+
+    assert db_session.get(Conversation, conversation.id).title == "帮我给可乐定价"
+
+
+def test_send_message_title_truncated_to_30_chars(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+
+    chat_service.send_message(db_session, conversation.id, "很长的第一句话" * 10, RecordingLLM())
+
+    title = db_session.get(Conversation, conversation.id).title
+    assert len(title) == 30
+    assert title == ("很长的第一句话" * 10)[:30]
+
+
+def test_send_message_keeps_custom_title(db_session):
+    conversation = chat_service.create_conversation(
+        db_session, ConversationCreateRequest(title="我自己起的")
+    )
+
+    chat_service.send_message(db_session, conversation.id, "新消息", RecordingLLM())
+
+    assert db_session.get(Conversation, conversation.id).title == "我自己起的"
+
+
+def test_send_message_blank_content_raises_400(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+
+    with pytest.raises(BusinessError) as exc_info:
+        chat_service.send_message(db_session, conversation.id, "   ", RecordingLLM())
+
+    assert exc_info.value.code == 400
+    assert str(exc_info.value) == "消息内容不能只包含空白"
+    assert db_session.query(Message).count() == 0
+
+
+def test_send_message_missing_conversation_returns_404_before_blank_check(db_session):
+    with pytest.raises(BusinessError) as exc_info:
+        chat_service.send_message(db_session, 9999, "   ", RecordingLLM())
+
+    assert exc_info.value.code == 404
+
+
+def test_send_message_context_keeps_last_20_and_system(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+    db_session.add(Message(conversation_id=conversation.id, role="system", content="你是助手"))
+    for index in range(25):
+        db_session.add(
+            Message(conversation_id=conversation.id, role="user", content=f"历史{index}")
+        )
+    db_session.commit()
+    llm = RecordingLLM()
+
+    chat_service.send_message(db_session, conversation.id, "最新一句", llm)
+
+    context = llm.received[0]
+    assert context[0] == {"role": "system", "content": "你是助手"}
+    # 1 条 system + 最近 20 条（含本次提问）
+    assert len(context) == 21
+    assert context[-1] == {"role": "user", "content": "最新一句"}
+    assert context[1]["content"] == "历史6"
+
+
+def test_send_message_rolls_back_when_model_fails(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+
+    with pytest.raises(BusinessError) as exc_info:
+        chat_service.send_message(
+            db_session,
+            conversation.id,
+            "你好",
+            RecordingLLM(error=BusinessError("模型挂了", code=502)),
+        )
+
+    assert exc_info.value.code == 502
+    assert db_session.query(Message).count() == 0
+    assert db_session.get(Conversation, conversation.id).title == "新会话"
+
+
+def test_send_message_bumps_update_time(db_session):
+    conversation = chat_service.create_conversation(
+        db_session, ConversationCreateRequest(title="旧")
+    )
+    before = conversation.update_time
+
+    chat_service.send_message(db_session, conversation.id, "你好", RecordingLLM())
+
+    assert db_session.get(Conversation, conversation.id).update_time >= before

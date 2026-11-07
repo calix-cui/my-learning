@@ -5,12 +5,15 @@ from sqlalchemy.orm import Session
 
 from app.common.response import Response
 from app.dependencies import get_db
+from app.llm import LLMClient, get_llm
 from app.schemas.chat import (
     ConversationCreateRequest,
     ConversationDetailResponse,
     ConversationPageResponse,
     ConversationResponse,
     ConversationUpdateRequest,
+    MessageCreateRequest,
+    MessageExchangeResponse,
     MessageResponse,
 )
 from app.services import chat_service
@@ -93,3 +96,26 @@ def delete_conversation(
 ):
     chat_service.delete_conversation(db, conversation_id)
     return Response.success()
+
+
+@router.post(
+    "/{conversation_id}/messages",
+    response_model=Response,
+    summary="发送消息",
+    description="写入用户消息并用最近 20 条上下文调用模型，同步返回用户消息与助手回复。",
+)
+def send_message(
+    conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
+    payload: MessageCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(get_llm)],
+):
+    user_message, assistant_message = chat_service.send_message(
+        db, conversation_id, payload.content, llm
+    )
+    return Response.success(
+        data=MessageExchangeResponse(
+            user_message=MessageResponse.model_validate(user_message),
+            assistant_message=MessageResponse.model_validate(assistant_message),
+        )
+    )

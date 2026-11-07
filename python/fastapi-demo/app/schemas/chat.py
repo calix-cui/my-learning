@@ -59,3 +59,16 @@ class ConversationPageResponse(BaseModel):
     total: int = Field(description="会话总数")
     page: int = Field(description="当前页码")
     page_size: int = Field(description="每页条数")
+
+
+class MessageCreateRequest(BaseModel):
+    """发一条用户消息。空串走 422，纯空白由 service 判 400。"""
+
+    content: str = Field(min_length=1, max_length=4000, description="消息正文")
+
+
+class MessageExchangeResponse(BaseModel):
+    """一问一答：用户消息与助手回复一起返回，前端不用再查一次详情。"""
+
+    user_message: MessageResponse = Field(description="刚落库的用户消息")
+    assistant_message: MessageResponse = Field(description="模型回复")

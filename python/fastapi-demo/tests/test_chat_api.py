@@ -112,3 +112,98 @@ def test_delete_conversation_then_404(client):
     assert deleted.json() == {"code": 200, "message": "请求成功", "data": None}
 
     assert client.get(f"/api/conversations/{created['id']}").status_code == 404
+
+
+def test_send_message_returns_both_messages(client):
+    created = client.post("/api/conversations", json={}).json()["data"]
+
+    response = client.post(
+        f"/api/conversations/{created['id']}/messages", json={"content": "  你好  "}
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["user_message"]["content"] == "你好"
+    assert data["user_message"]["role"] == "user"
+    assert data["user_message"]["model"] is None
+    assert data["assistant_message"]["role"] == "assistant"
+    assert data["assistant_message"]["content"] == "[fake] 收到：你好"
+    assert data["assistant_message"]["model"] == "fake"
+
+
+def test_send_message_auto_titles_conversation(client):
+    created = client.post("/api/conversations", json={}).json()["data"]
+
+    client.post(f"/api/conversations/{created['id']}/messages", json={"content": "帮我写周报"})
+
+    detail = client.get(f"/api/conversations/{created['id']}").json()["data"]
+    assert detail["title"] == "帮我写周报"
+    assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
+
+
+def test_send_message_to_missing_conversation_returns_404(client):
+    response = client.post("/api/conversations/9999/messages", json={"content": "你好"})
+
+    assert response.status_code == 404
+    assert response.json()["message"] == "会话不存在"
+
+
+def test_send_message_blank_returns_400(client):
+    created = client.post("/api/conversations", json={}).json()["data"]
+
+    response = client.post(f"/api/conversations/{created['id']}/messages", json={"content": "   "})
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "消息内容不能只包含空白"
+
+
+def test_send_message_empty_returns_422(client):
+    created = client.post("/api/conversations", json={}).json()["data"]
+
+    response = client.post(f"/api/conversations/{created['id']}/messages", json={"content": ""})
+
+    assert response.status_code == 422
+
+
+def test_send_message_model_failure_returns_502(client, db_session):
+    from app.llm import LLMError, get_llm
+
+    created = client.post("/api/conversations", json={}).json()["data"]
+    app.dependency_overrides[get_llm] = lambda: _FailingLLM(LLMError())
+
+    try:
+        response = client.post(
+            f"/api/conversations/{created['id']}/messages", json={"content": "你好"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+    assert response.status_code == 502
+    assert response.json() == {"code": 502, "message": "模型服务不可用", "data": None}
+    assert db_session.query(Message).count() == 0
+
+
+def test_send_message_model_timeout_returns_504(client, db_session):
+    assert db_session.query(Message).count() == 0  # 前置：库里本来没有消息
+    from app.llm import LLMTimeoutError, get_llm
+
+    created = client.post("/api/conversations", json={}).json()["data"]
+    app.dependency_overrides[get_llm] = lambda: _FailingLLM(LLMTimeoutError())
+
+    try:
+        response = client.post(
+            f"/api/conversations/{created['id']}/messages", json={"content": "你好"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+    assert response.status_code == 504
+    assert response.json()["message"] == "模型服务超时"
+
+
+class _FailingLLM:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def chat(self, _messages):
+        raise self.error
