@@ -23,6 +23,7 @@
 在上述基础上，按需查阅：
 
 - 要改接口 → [`../docs/api.md`](api.md)（唯一契约）
+- 要改对话 / 接模型 → [`chat.md`](chat.md)、[ADR-0006](adr/0006-llm-client-and-chat-storage.md)
 - 要改需求 → [`product/prd.md`](product/prd.md)
 - 要改样式 → [`design/design.md`](design/design.md)
 - 要改部署 → [`deploy.md`](deploy.md)
@@ -38,6 +39,7 @@
 | [`toolchain.md`](toolchain.md) | 开发 | **工具怎么用**：uv / pnpm / ruff / Alembic / CI 各自解决什么 | 跑不起来、不知道敲什么命令 |
 | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | 所有人 | 现在完成到哪、下一步做什么、有哪些已知问题 | 每次开工前 |
 | [`api.md`](api.md) | 前后端 | 接口契约：11 个业务接口 + 3 个运维路径（参数/响应/错误文案） | 调接口、改接口 |
+| [`chat.md`](chat.md) | 前后端 | **对话功能设计（阶段 4）**：表结构、接口、模型抽象、任务拆分 | 开工阶段 4、要接模型时 |
 | [`product/prd.md`](product/prd.md) | 产品 / 开发 | 需求与验收标准（P0 十六条 + AC 十五条） | 确认「要做什么」 |
 | [`design/design.md`](design/design.md) | 前端 / 设计 | 视觉规范与组件规格（token、行高、状态色） | 动界面之前 |
 | [`delivery.md`](delivery.md) | 所有人 | 交付清单：验收结果、已知限制 | 想知道「做到了没有」 |

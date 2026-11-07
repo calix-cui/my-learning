@@ -47,7 +47,7 @@
 | 10 | 桌面端集成 | ⬜ | 按 [ADR-0001](adr/0001-desktop-shell-electron.md)（Electron + PyInstaller onedir） |
 | 11 | 部署、测试和发布 | ⚠️ 部分 | 容器化 ✅、测试基线 ✅、CI ✅；**发布流程（版本号/镜像归档/回滚）未做** |
 
-### 3.2 阶段 4 的接入方式（已定）
+### 3.2 阶段 4 的接入方式（已定，设计见 [`chat.md`](chat.md)）
 
 1. **先 C 打底**：定义 `LLMClient` 协议 + 一个返回固定文本的 `FakeLLM`，在没有 API key 的情况下把「请求 → 流式输出 → 错误处理 → 测试」整条链路立起来，可独立验证。
 2. **随后接 A**：用 OpenAI 兼容 API（`base_url` + `api_key`，走 `.env`），把 `FakeLLM` 换成真实现，其余代码不动。
