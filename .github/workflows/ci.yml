@@ -41,10 +41,11 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
-      # 测试用占位 DATABASE_URL，不连接 MySQL，因此不需要 service 容器；
+      # 测试用占位 DATABASE_URL + 内存 SQLite，不连接 MySQL，因此不需要 service 容器；
+      # 覆盖率门槛写在 pyproject 的 [tool.coverage.report] fail_under，低于即失败。
       # 迁移一致性（alembic check）需要数据库，故不在此步骤内，见 T-05 遗留项。
-      - name: 运行测试
-        run: uv run pytest -q
+      - name: 运行测试与覆盖率
+        run: uv run pytest
 
   frontend:
     runs-on: ubuntu-latest
@@ -67,10 +68,13 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
-      # 质量门禁按 ADR-0002「轻量档」：只有 build 与 lint 两条。
-      # Prettier 只提供 pnpm format 供本地使用，不进 CI 阻断。
+      # 质量门禁按 ADR-0002「轻量档」：build、lint、api 层单测三条。
+      # Prettier 只提供 pnpm format 供本地使用，不进 CI 阻断；不设覆盖率门槛。
       - name: 类型检查与构建
         run: pnpm build
 
       - name: 静态检查
         run: pnpm lint
+
+      - name: 单元测试
+        run: pnpm test
