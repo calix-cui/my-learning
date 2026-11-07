@@ -11,7 +11,7 @@
 | T-01 | 协作 | `AGENTS.md`、`docs/prompts/` 未提交，规则资产只在工作区 | P0 | S |
 | T-02 | 前端 | ~~零静态检查（无 ESLint / Prettier）~~ ✅ 轻量档门禁已落地 | P0 | S |
 | T-03 | 前端 | 零单测、CI 不覆盖前端，按轻量档补 | P0 | S |
-| T-04 | 后端 | 测试完全不连库，SQL/约束/事务路径没有任何自动化覆盖 | P1 | M |
+| T-04 | 后端 | 测试完全不连库……⚠️ 部分解决：服务层已用内存 SQLite 覆盖，MySQL 方言仍未测 | P1 | M |
 | T-05 | 数据库 | ~~无迁移工具，靠 `create_all` 建表~~ ✅ 已由 Alembic 接管 | P1 | M |
 | T-06 | 后端 | `Response.data: Any`，OpenAPI 看不到真实结构 | P1 | M |
 | T-07 | 后端 | 用 MySQL 私有错误码 1062 判重名，换库即失效 | P1 | S |
@@ -56,10 +56,11 @@
 
 ## 3. 后端
 
-### T-04 测试不连库（P1 · M）
-- **证据**：`python/fastapi-demo/tests/conftest.py` 注入的是占位 DSN（`test:test@127.0.0.1:3306`），用例只覆盖 422/400/404 这类「产生 SQL 之前」的路径；23 个用例 0.38s 跑完。
+### T-04 测试不连库（P1 · M）—— ⚠️ 部分解决（2026-11-07）
+- **证据（当时）**：`python/fastapi-demo/tests/conftest.py` 注入的是占位 DSN（`test:test@127.0.0.1:3306`），用例只覆盖 422/400/404 这类「产生 SQL 之前」的路径；23 个用例 0.38s 跑完。
 - **影响**：分页 500 那类 bug（`scalars` vs `scalar`）之所以能上线，正是因为这条路径没测试。唯一键冲突、事务回滚、联表统计、PATCH 语义全无覆盖。
-- **建议**：二选一——(a) `dependency_overrides` 把 `get_db` 换成 SQLite 内存库（快，但 MySQL 方言差异会失真）；(b) testcontainers/本地 MySQL + 每用例事务回滚（准，慢）。推荐 (b) 作为「仓储层集成测试」小集合，(a) 作为日常快速回归。
+- **已做**（[ADR-0005](../adr/0005-testing-baseline.md)）：`db_session` 夹具给内存 SQLite（`StaticPool`），新增 `tests/test_category_service.py`、`tests/test_product_service.py`，覆盖增删改查、分页、关键词与分类筛选、删除保护、PATCH 语义；用例数 23 → 50，覆盖率门槛 80%（实测 85%）。
+- **遗留**：MySQL 专有行为仍未测——唯一键 `1062` 分支、外键约束、`utf8mb4` 排序；内存建表走 `Base.metadata` 而非迁移脚本，模型与迁移不一致时测试仍会绿。彻底解决需要 testcontainers 或 CI 里加 MySQL service。
 
 ### T-05 无迁移工具（P1 · M）—— ✅ 已于 2026-11-07 解决
 - **证据（当时）**：`app/init_db.py:14` `Base.metadata.create_all(bind=engine)`；仓库无 `alembic.ini` / `migrations/`。

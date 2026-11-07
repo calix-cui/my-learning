@@ -70,13 +70,19 @@
 2. ✅ **前端轻量门禁**（已完成，见 §3）——ESLint 10 flat（recommended 档）+ Prettier + CI 前端 job（`pnpm build` + `pnpm lint`），口径见 [ADR-0002](adr/0002-frontend-quality-gate-lite.md)。
 3. ✅ **uv 统一依赖源**（已完成）——`pyproject.toml` 是唯一来源 + `uv.lock`，CI 用 `uv sync --frozen`。
 4. ✅ **容器化与一键部署**（已完成）——多阶段 Dockerfile（uv 后端 / node+nginx 前端）+ Compose（db/backend/frontend/可选 caddy）+ `/healthz` `/readyz`，见 [ADR-0004](adr/0004-deployment-docker-compose.md) 与 [部署指南](deploy/README.md)。
-5. **测试基线**（P1，半天）——后端 pytest-cov 门槛、前端 Vitest 仅纯逻辑。
+5. ✅ **测试基线**（已完成）——后端 50 个用例（接口层 + 内存 SQLite 服务层）+ 覆盖率门槛 80%（实测 85%）；前端 Vitest 17 个用例（只测 `src/api`）；CI 前后端各加一步，口径见 [ADR-0005](adr/0005-testing-baseline.md)。
 
 后续：阶段 2 架构与 Agent 能力设计（MCP client 先行）、桌面端 Electron 骨架（按 ADR-0001）、项目级 Skill 从 GitHub 按需引入（见 AUDIT §2）。
 
 ## 8. 工作区状态
 
-干净。`main` 与 `origin/main` 同步于 `40728d5`。
+干净。`main` 与 `origin/main` 同步于 `40728d5`（测试基线的改动已提交，见下）。
+
+测试基线（2026-11-07）：
+- 后端 50 passed / 覆盖率 85.12%（门槛 80%，`pyproject.toml` → `[tool.coverage.report] fail_under`）
+- 前端 17 passed（Vitest，`src/api` 三个 test 文件）
+- `pnpm lint` / `pnpm format:check` / `pnpm build` / `make check` / `pre-commit run --all-files` 全绿
+- 反证：把 500 文案改错 → 前端测试红；把「商品分类不存在」改错 → 后端测试红；`--cov-fail-under=99` → 覆盖率门禁红
 
 近期提交（均已推送）：
 

@@ -46,6 +46,7 @@ cd fullstack/product-admin
 pnpm install --frozen-lockfile
 pnpm build            # vue-tsc --noEmit && vite build，必须 0 error
 pnpm lint             # ESLint 轻量档（recommended + vue3-essential），0 error
+pnpm test             # Vitest：src/api 的请求封装与错误映射，改了这块必须补/改用例
 pnpm dev              # 5173，代理 /api → 8000
 pnpm acceptance       # 18 项 E2E（需后端在 8000）
 ```

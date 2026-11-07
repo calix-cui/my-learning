@@ -58,7 +58,8 @@ curl -s localhost:8000/openapi.json | jq '.paths | keys'
 - **不破坏兼容**：新增字段可以，改字段名/类型必须提前报告 lead（前端会挂）。
 - **错误可读**：错误 message 是中文、面向操作者（「分类下有其他商品，不能删除分类」），不是技术栈信息。
 - **不用 print 调试**：用 `logger`；调试完删掉。
-- **测试绿**：改动后 `make check` 必须全绿，不许跳过或注释测试。
+- **测试绿**：改动后 `make check` 必须全绿（含 80% 覆盖率门槛），不许跳过或注释测试。
+- **服务层改动补用例**：`tests/test_*_service.py` 用内存 SQLite（`db_session` 夹具），新增分支要能被打到。
 
 ## 6. 禁止事项
 
@@ -86,4 +87,4 @@ task-N 完成。改动文件：
 - `.env` 相对 cwd，务必在 `python/fastapi-demo` 下启动。
 - `init_db.py` 依赖 `from app import models` 的副作用导入来注册表。
 - CORS 只放行了 4 个 localhost 源，前端换端口会直接失败。
-- 测试不连库（占位 DSN），涉及 SQL 的改动**必须手工 curl 验证**。
+- MySQL 专有行为（唯一键 1062、外键约束、排序规则）测试覆盖不到，涉及这些的改动**必须手工 curl 验证**。
