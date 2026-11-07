@@ -2,6 +2,16 @@
 
 > **AI 向文档**：给 AI 协作者的作业指导书。人类读者可跳过——阅读路径见 [`docs/README.md`](docs/README.md)。
 
+## 0. 当前阶段与交付物（先读这一节）
+
+本仓库的**长期目标**是 AI Agent 应用（见 §1），但**当前实际交付**是「商品管理后台」：
+
+- 后端 `python/fastapi-demo/`：FastAPI + SQLAlchemy 2.0 + MySQL + Alembic，11 个业务接口 + 3 个运维探针。
+- 前端 `fullstack/product-admin/`：Vue 3 + TS + Vite + Element Plus，3 个页面。
+- 阶段 1（工程基建）已完成；阶段 2（MCP client / Agent PoC / Electron 骨架）尚未开始，见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) §3。
+
+**据此行动**：除非任务明确要求做 Agent 能力，否则不要按「Agent 项目」预设立场写代码；不要删除或架空现有商品管理业务。
+
 ## 1. 项目定位
 
 这是一个以学习和实践 AI Agent 应用开发为目的的长期迭代项目。
@@ -212,7 +222,23 @@ Skill采用分层管理：全局、项目级、专项、外部工具
 
 如果遇到不确定的技术决策，先提出问题或给出方案供确认，不要自行编造前提。
 
-## 8. 最重要的约束
+## 8. 任务 → 文档路由
+
+**不要每次把 `docs/` 全读一遍**。按任务类型读下面这几份，其余用时再查：
+
+| 任务类型 | 必读 | 需要时再查 |
+|---|---|---|
+| 改后端接口 / 校验 / 业务规则 | [`python/fastapi-demo/docs/api.md`](python/fastapi-demo/docs/api.md)、[`docs/how-it-works.md`](docs/how-it-works.md) §3–§4 | `docs/product/prd.md` 对应 F/AC |
+| 改前端页面 / 样式 / 交互 | [`docs/design/design.md`](docs/design/design.md)、[`fullstack/product-admin/README.md`](fullstack/product-admin/README.md) | `python/fastapi-demo/docs/api.md`、PRD 对应功能项 |
+| 改表结构 / 写迁移 | [`python/fastapi-demo/README.md`](python/fastapi-demo/README.md)「数据库迁移」、[ADR-0003](docs/adr/0003-database-migrations-alembic.md) | `docs/how-it-works.md` §5 数据模型 |
+| 改工程化 / 门禁 / CI | [ADR-0002](docs/adr/0002-frontend-quality-gate-lite.md)、[ADR-0005](docs/adr/0005-testing-baseline.md)、[`docs/toolchain.md`](docs/toolchain.md) | `docs/agents/` 对应角色卡 |
+| 部署 / 容器 / 排障 | [`docs/deploy.md`](docs/deploy.md)、[ADR-0004](docs/adr/0004-deployment-docker-compose.md) | 根 `README.md` 快速开始 |
+| 新功能（需求到实现） | [`docs/product/prd.md`](docs/product/prd.md)、[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) §3 | 相关 ADR、`docs/how-it-works.md` §7 |
+| 技术债 / 排期 | [`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md)、[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) | — |
+
+文档分层与「事实只有一个来源」的规则见 [`docs/README.md`](docs/README.md) §3–§5；新增文档前先确认能否并入已有文件。
+
+## 9. 最重要的约束
 
 始终坚持：
 

@@ -13,7 +13,7 @@
 | 范围 | 前端 `fullstack/product-admin/` + 后端 `python/fastapi-demo/` |
 | 需求 | P0 十六条（F-01…F-16）全部实现 |
 | 自动化 UI 验收 | **18/18 通过**（`pnpm acceptance`，真实浏览器 + 真实后端） |
-| 后端自检 | `make check` 绿：ruff 全过 + 50 passed + 覆盖率 85.12% |
+| 后端自检 | `make check` 绿：ruff 全过 + 55 passed + 覆盖率 85.38% |
 | 前端自检 | `pnpm lint` / `pnpm test`（17 passed）/ `pnpm build` 全过 |
 | CI | GitHub Actions 两个 job 全绿（backend 13s、frontend 26s） |
 
@@ -101,7 +101,7 @@ cd fullstack/product-admin && pnpm acceptance
 | L-01 | 无登录与权限 | 谁打开都能改数据 | v1.1 登录后叠加 |
 | L-02 | 概览的上下架/库存预警取前 100 条商品前端聚合 | 商品 > 100 条时数字偏小 | 待后端加聚合接口 |
 | L-03 | 分类接口不分页 | 分类极多时下拉很长（已开 `filterable`） | 分类 > 50 时再加 |
-| L-04 | PATCH 提交整表单而非仅改动字段 | 并发编辑可能覆盖非改动字段 | 改 diff 提交或乐观锁 |
+| L-04 | 编辑提交整表单（名称/分类/价格/库存/状态全部带上），非仅改动字段 | 并发编辑同一商品时，后提交者会覆盖前者未改动的字段 | 后续改 diff 提交或加乐观锁；PRD AC-08 已对齐当前实现 |
 | L-05 | 404 文案不统一（详情/删除「商品不存在」、PATCH「未找到商品」） | 前端透传，用户看到两种说法 | 待统一后端文案 |
 | L-06 | ——（原「分类改名不 strip 空白」） | —— | ✅ 已修复：PATCH 分类与商品均先 strip 再判空，纯空白 400 |
 | L-07 | ——（原「建表用 create_all」） | —— | ✅ 已由 Alembic 解决 |

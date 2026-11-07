@@ -23,7 +23,7 @@
 ## 依赖管理
 
 - Python 项目优先使用项目级虚拟环境。
-- 前端项目提交对应锁文件，例如 `package-lock.json`。
+- 前端项目提交对应锁文件（本项目用 `pnpm-lock.yaml`）。
 - 不提交 `node_modules`、`.venv`、构建目录或缓存。
 - 不要在根目录维护一个包含所有项目依赖的大型 requirements 文件。
 
@@ -34,24 +34,10 @@
 - 不提交真实密钥、令牌、账号密码或个人数据。
 - 提交前检查 `git status` 和 `git diff`。
 
-## 文档约定（重要）
+## 文档约定
 
-文档分三层，不要混着写：
+文档怎么分层、每类信息放在哪个文件、事实的权威来源在哪，统一由 [`docs/README.md`](docs/README.md) §3–§5 定义，**不在这里重复维护**。动手改文档前只需记住三条：
 
-| 层 | 放什么 | 位置 | 规则 |
-|---|---|---|---|
-| 人读的 | 架构、工具链、需求、设计、验收、部署、接口契约 | `README.md`、`docs/*.md` | 当前约 1350 行，一个事实只出现一次；新增前先想能否并入已有文件 |
-| AI 向的 | 协作规范、角色卡、决策记录、分阶段提示词 | `AGENTS.md`、`docs/adr/`、`docs/agents/`、`docs/prompts/` | 文件开头必须带「AI 向文档」标注 |
-| 归档的 | 一次性调研报告、被合并的旧文档 | `docs/archive/` | 不再更新，结论已并入正式文档 |
-
-**事实单一来源**：同一条信息只允许写在一个地方，其他地方用链接指过去。改的时候改源头：
-
-- 接口路径/参数/错误文案 → `python/fastapi-demo/docs/api.md`
-- 命令（`make` / `pnpm`）→ 各自的 `Makefile` / `package.json`，文档里只做速查表
-- 验收标准 → `docs/product/prd.md` 第 8 节；验收结果 → `docs/delivery.md`
-- 视觉规范 → `docs/design/design.md`；技术选型理由 → `docs/adr/`
-- 当前进度 → `docs/PROJECT_STATUS.md`
-
-**新增文档前先回答两个问题**：能不能写进上表已有的文件？不能的话，它属于哪一层？答不上来就不要新建——孤儿文档比没有文档更难维护。
-
-新增文档后必须在 [`docs/README.md`](docs/README.md) §2 的文档地图里登记，否则视为孤儿文件。
+1. **一个事实只写一处**：接口在 `docs/api.md`、命令在 `toolchain.md`、进度在 `PROJECT_STATUS.md`，其他文件用链接指过来。
+2. **先想能否并入已有文件**，写不进再考虑新建；新建后必须登记到 `docs/README.md` §2 的文档地图，否则视为孤儿。
+3. 人读文档不带标注，AI 向文档（`AGENTS.md`、`docs/adr/`、`docs/agents/`）开头必须有「AI 向文档」标注。

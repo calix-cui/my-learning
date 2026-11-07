@@ -1,6 +1,6 @@
 # TECHNICAL_DEBT — 当前问题、风险与优化建议
 
-> 调研时间：2026-11-06 · 基线：`4be025b`
+> 首次调研：2026-11-06（基线 `4be025b`）· 最近校准：2026-11-07（基线 `8a3e806`）
 > 评级：**P0** = 阻塞后续开发 / 会反复咬人，**P1** = 应尽快处理，**P2** = 可延后。成本：**S**（<半天）/ **M**（1–2 天）/ **L**（>2 天）。
 > 每条都给出证据位置；**未验证的推断会标注「待验证」**。
 
@@ -8,9 +8,9 @@
 
 | ID | 类别 | 问题 | 优先级 | 成本 |
 |---|---|---|---|---|
-| T-01 | 协作 | `AGENTS.md`、`docs/prompts/` 未提交，规则资产只在工作区 | P0 | S |
+| ~~T-01~~ | 协作 | ~~`AGENTS.md`、`docs/prompts/` 未提交~~ ✅ 2026-11-07 已入库 | P0 | S |
 | T-02 | 前端 | ~~零静态检查（无 ESLint / Prettier）~~ ✅ 轻量档门禁已落地 | P0 | S |
-| T-03 | 前端 | 零单测、CI 不覆盖前端，按轻量档补 | P0 | S |
+| ~~T-03~~ | 前端 | ~~零单测、CI 不覆盖前端~~ ✅ 2026-11-07 已补 Vitest 17 例并入 CI | P0 | S |
 | T-04 | 后端 | 测试完全不连库……⚠️ 部分解决：服务层已用内存 SQLite 覆盖，MySQL 方言仍未测 | P1 | M |
 | T-05 | 数据库 | ~~无迁移工具，靠 `create_all` 建表~~ ✅ 已由 Alembic 接管 | P1 | M |
 | T-06 | 后端 | `Response.data: Any`，OpenAPI 看不到真实结构 | P1 | M |
@@ -19,8 +19,8 @@
 | ~~T-09~~ | 部署 | ~~完全没有容器化 / 反代 / 健康检查 / 发布脚本~~ ✅ 2026-11-07 已解决 | P1 | L |
 | T-10 | 前端 | API 基址硬编码 `/api`，生产环境只能靠同域反代 | P1 | S |
 | T-11 | 验收 | E2E 脚本依赖本地起服务、且会写真实库（曾误删商品） | P1 | M |
-| T-12 | 环境 | 本机 Python 3.15 / CI 3.12，无 `.python-version` | P1 | S |
-| T-13 | 环境 | `gh` 凭据未接到 git，push 每次要临时绕过 | P1 | S |
+| ~~T-12~~ | 环境 | ~~本机 Python 3.15 / CI 3.12，无 `.python-version`~~ ⚠️ 已声明 `requires-python>=3.11`，仍缺小版本对齐 | P1 | S |
+| ~~T-13~~ | 环境 | ~~`gh` 凭据未接到 git~~ ✅ 2026-11-07 已解决（改 CI workflow 时仍需 `workflow` scope） | P1 | S |
 | T-14 | 后端 | 错误文案三套（"商品不存在"/"未找到商品"）、错误通道两条 | P2 | S |
 | T-15 | 后端 | 分页 total 与 items 两次独立查询，并发下可能不一致 | P2 | S |
 | T-16 | 后端 | 关键字搜索 `LIKE '%kw%'` 无法走索引 | P2 | M |
@@ -36,10 +36,10 @@
 
 ## 1. 协作与规则资产
 
-### T-01 `AGENTS.md` / `docs/prompts/` 未入库（P0 · S）
-- **证据**：`git status` → `?? AGENTS.md`、`?? docs/prompts/`、`?? docs/PROJECT_STATUS.md`。
-- **影响**：这是整个项目的「AI 协作契约」。一旦换机器或协助者接手，规范与 7 阶段提示词全部消失。
-- **建议**：单独一个 `docs: 补充 AI 协作规范与分阶段提示词` 提交，并把 `docs/PROJECT_STATUS.md` 一起纳入。
+### T-01 `AGENTS.md` / `docs/prompts/` 未入库（P0 · S）—— ✅ 已于 2026-11-07 解决
+- **原证据**：`git status` → `?? AGENTS.md`、`?? docs/prompts/`、`?? docs/PROJECT_STATUS.md`。
+- **影响**：这是整个项目的「AI 协作契约」，不入库则换机器即丢。
+- **解决**：已随 `c83c4fb`、`62e8b41` 入库，`git ls-files AGENTS.md docs/playbooks` 可验证。
 
 ## 2. 前端质量（最大空白）
 
@@ -49,15 +49,15 @@
 - **解决**（按 [ADR-0002](adr/0002-frontend-quality-gate-lite.md)「轻量档」）：`eslint@10.14.0` flat config（`@eslint/js` recommended + `typescript-eslint` recommended + `eslint-plugin-vue` flat/essential，**不开 type-aware**）+ Prettier 3（不进 CI 阻断）；CI 新增 `frontend` job（`pnpm build` + `pnpm lint`）。存量代码只报 2 个 error，已修。
 - **遗留**：未启用 type-aware 规则，`any` 泛滥一类问题仍靠 review 兜底。
 
-### T-03 零单元测试（P0 · S）—— CI 覆盖已补，单测未做
-- **证据**：`fullstack/product-admin` 下无 `tests/`、无 `vitest.config.*`（CI 覆盖已于 2026-11-07 补上，见 T-02）。
-- **影响**：前端唯一的质量网是 18 项 E2E，跑一次要装 Chrome、起两个服务、改动真实数据库；改一个组件无法快速验证。
-- **建议**（轻量档）：Vitest 只覆盖 `src/api`（错误映射）、`src/utils`（格式化）两类纯逻辑，**不写组件快照、不设覆盖率门槛**；CI 增加前端 job（`pnpm install --frozen-lockfile && pnpm build && pnpm lint`）。组件层继续由 18 项 E2E + 人工验收兜底。
+### T-03 零单元测试（P0 · S）—— ✅ 已于 2026-11-07 解决
+- **原证据**：`fullstack/product-admin` 下无 `tests/`、无 `vitest.config.*`。
+- **影响**：前端唯一质量网是 18 项 E2E（装 Chrome、起两服务、动真实库），改一个 api 封装无法快速验证。
+- **解决**（轻量档，见 [ADR-0005](adr/0005-testing-baseline.md)）：`vitest@3.2.7` + `src/api/{client,products,categories}.test.ts` 共 17 例，CI 增加「单元测试」步骤；**组件层仍无单测**，靠 E2E 兜底。
 
 ## 3. 后端
 
 ### T-04 测试不连库（P1 · M）—— ⚠️ 部分解决（2026-11-07）
-- **证据（当时）**：`python/fastapi-demo/tests/conftest.py` 注入的是占位 DSN（`test:test@127.0.0.1:3306`），用例只覆盖 422/400/404 这类「产生 SQL 之前」的路径；23 个用例 0.38s 跑完。
+- **证据（当时）**：`tests/conftest.py` 注入占位 DSN（`test:test@127.0.0.1:3306`），用例只覆盖 422/400/404 这类「产生 SQL 之前」的路径；当时 23 个用例 0.38s 跑完。**现已增至 55 例**，服务层用内存 SQLite 覆盖了 CRUD 与 1062 之外的大部分规则，但 MySQL 方言仍未覆盖。
 - **影响**：分页 500 那类 bug（`scalars` vs `scalar`）之所以能上线，正是因为这条路径没测试。唯一键冲突、事务回滚、联表统计、PATCH 语义全无覆盖。
 - **已做**（[ADR-0005](adr/0005-testing-baseline.md)）：`db_session` 夹具给内存 SQLite（`StaticPool`），新增 `tests/test_category_service.py`、`tests/test_product_service.py`，覆盖增删改查、分页、关键词与分类筛选、删除保护、PATCH 语义；用例数 23 → 50，覆盖率门槛 80%（实测 85%）。
 - **遗留**：MySQL 专有行为仍未测——唯一键 `1062` 分支、外键约束、`utf8mb4` 排序；内存建表走 `Base.metadata` 而非迁移脚本，模型与迁移不一致时测试仍会绿。彻底解决需要 testcontainers 或 CI 里加 MySQL service。
@@ -147,15 +147,15 @@
 
 ## 6. 环境与工具链
 
-### T-12 Python 版本漂移（P1 · S）
-- **证据**：本机 `python3 -V` = 3.15.0；`.github/workflows/ci.yml` 用 `3.12`；仓库无 `.python-version`、`pyproject.toml` 也只配工具不声明 `requires-python`。
-- **影响**：本机能过、CI 挂（或反之）的经典来源；尤其 pydantic/SQLAlchemy 这种对解释器版本敏感的组合。
-- **建议**：加 `.python-version`（写 3.12 或 3.13，别追 3.15），`pyproject.toml` 补 `requires-python = ">=3.12"`，CI 与本机统一。
+### T-12 Python 版本漂移（P1 · S）—— ⚠️ 部分解决（2026-11-07）
+- **原证据**：本机 `python3 -V` = 3.15.0；CI 用 `3.12`；仓库无 `.python-version`，`pyproject.toml` 也未声明 `requires-python`。
+- **已解决部分**：`pyproject.toml:10` 声明 `requires-python = ">=3.11"`，`uv.lock` 锁定解析结果，CI 用 `uv sync --frozen`。
+- **仍遗留**：无 `.python-version`，本机 3.15 与 CI 3.12 的**小版本**仍不一致；遇到解释器敏感行为（pydantic 预编译、SQLAlchemy 方言）时需显式指定。（`requires-python` 取 3.11 的原因：`pre-commit==4.7.0` 要求 ≥3.11。）
 
-### T-13 gh 凭据未接到 git（P1 · S）
-- **证据**：`git config --get-all credential.helper` 只有 `osxkeychain`；上次 push 需 `-c credential.helper='!gh auth git-credential'` 才成功。
-- **影响**：每次 push 都要手工绕过，容易误以为网络故障。
-- **建议**：`gh auth setup-git`（改 `~/.gitconfig`，属于全局配置，需你确认后执行）。
+### T-13 gh 凭据未接到 git（P1 · S）—— ✅ 已于 2026-11-07 解决
+- **原证据**：`git config --get-all credential.helper` 只有 `osxkeychain`，push 需临时 `-c credential.helper='!gh auth git-credential'`。
+- **解决**：`~/.gitconfig` 已含 `credential.https://github.com.helper = !gh auth git-credential`，`git ls-remote` 与 `push --dry-run` 无需额外参数即可通过。
+- **仍注意**：改 `.github/workflows/*` 需要 token 带 `workflow` scope；否则 push 会被 `refusing to allow an OAuth App to create or update workflow` 拒绝，需 `gh auth refresh -s workflow`。
 
 ## 7. 文档与仓库卫生
 
@@ -181,11 +181,10 @@
 | 单机依赖 MySQL 8.4 | 迁移到 CI/容器后版本差异（8.0 vs 8.4）会带来行为差异 | 上 CI 集成测试时 |
 | `pnpm` 12 的 build script 白名单 | 新装依赖（如 esbuild）可能被静默跳过安装脚本 | 新增依赖时 |
 | Element Plus 体积 | 943KB 单 chunk，弱网首屏慢 | 真正上线时 |
-| 没有 ADR | 技术决策散落在 `docs/*.md` 与对话里，事后难以追溯 | 决策增多后 |
 
 ## 9. 建议的处理顺序
 
-1. **本周（P0）**：T-02 ✅ 前端 lint + CI（已完成）→ T-03 前端单测 → T-12 统一 Python 版本。
+1. **已完成（2026-11-07）**：T-02 前端 lint + CI、T-03 前端单测、T-05 Alembic、T-09 容器化、T-12 部分（requires-python）、T-13 gh 凭据、T-22 空白校验、T-24 Docker 环境。
 2. **阶段 3（架构/基建）**：T-06 泛型响应、T-08 配置分层、T-04 集成测试小集合（T-05 Alembic 已完成）。
 3. **阶段 4（部署）**：T-09 容器化与反代、T-10 API 基址、T-17 最小鉴权、T-24 装 Docker。
 4. **持续**：T-11 验收脚本隔离、T-15/T-16 查询优化、T-19/T-20 文档整理。

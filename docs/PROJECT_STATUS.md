@@ -9,7 +9,7 @@
 
 已经有一个能跑、能测、能部署的最小闭环：
 
-- 后端 FastAPI（12 个业务接口 + 3 个运维路径，商品 + 分类 CRUD + 统计）
+- 后端 FastAPI（11 个业务接口 + 3 个运维路径，商品 + 分类 CRUD + 统计）
 - 前端 Vue 3 管理后台（3 个页面 + 3 个弹窗，18 项端到端验收全过）
 - 数据库迁移（Alembic）、依赖锁定（uv / pnpm）、质量门禁（ruff / ESLint / pytest / Vitest / CI）、容器化（Docker Compose）
 
@@ -19,7 +19,7 @@
 |---|---|---|
 | 11-07 | **名称空白校验统一**：分类改名、商品改名与新增同规则（先 strip 再判空，纯空白 400），补 5 个用例 | T-22 已解决、[api.md](../python/fastapi-demo/docs/api.md) §2.5/§3.3 |
 | 11-07 | **文档体系重构**：三层结构 + 架构图/工具链图，人读部分从 2900 行降到 1350 行，重复事实收敛到单一来源 | [docs/README.md](README.md)、[CONTRIBUTING.md](../CONTRIBUTING.md) |
-| 11-07 | **测试基线**：后端 50 例 + 覆盖率门槛 80%（实测 85.12%），前端 Vitest 17 例 | [ADR-0005](adr/0005-testing-baseline.md) |
+| 11-07 | **测试基线**：后端 55 例 + 覆盖率门槛 80%（实测 85.38%），前端 Vitest 17 例 | [ADR-0005](adr/0005-testing-baseline.md) |
 | 11-07 | **容器化**：多阶段镜像 + Compose（db/backend/frontend/可选 Caddy）+ `/healthz` `/readyz` | [ADR-0004](adr/0004-deployment-docker-compose.md)、[deploy.md](deploy.md) |
 | 11-07 | **uv 统一依赖**：`pyproject.toml` 唯一来源 + `uv.lock`，CI 用 `uv sync --frozen` | `a09763d` |
 | 11-07 | **前端轻量门禁**：ESLint 10 + Prettier + CI 前端 job | [ADR-0002](adr/0002-frontend-quality-gate-lite.md) |
@@ -29,14 +29,22 @@
 
 ## 3. 下一步
 
-阶段 2 建议顺序（**尚未开工，需要确认**）：
+**阶段 2「架构与 Agent 能力」尚未开工**。进入前先满足 3 个门槛（缺哪个先补哪个，不并行铺开）：
 
-1. **MCP client 最小闭环** —— 先做一个能连一个 MCP server、调一个 tool 的 Python 客户端
-2. **Agent 骨架 PoC** —— 选 OpenAI Agents SDK 或 LangGraph 做单 Agent + 工具调用
+| 门槛 | 判定标准 | 现状 |
+|---|---|---|
+| 文档可信 | `docs/` 无已知过期事实 | 本轮治理后达成（见 `DOCUMENTATION_FINAL_REPORT.md`） |
+| 基线可跑 | `make check` 55 passed / ≥80%、`pnpm lint && pnpm test && pnpm build` 全过、容器三容器 healthy | ✅ 2026-11-07 |
+| 范围明确 | 阶段 2 只做「MCP client + 单 Agent PoC + Electron 骨架」，不做 RAG / 多 Agent | 待确认 |
+
+阶段 2 建议顺序（每步一个可独立验证的交付，先出 ADR 再动代码）：
+
+1. **MCP client 最小闭环** —— 能连一个 MCP server、调一个 tool、打印结果；独立于现有 API，不侵入业务代码
+2. **Agent 骨架 PoC** —— OpenAI Agents SDK 与 LangGraph 二选一（先写选型 ADR），单 Agent + 1 个工具 + 1 轮对话
 3. **Electron 桌面壳** —— 按 [ADR-0001](adr/0001-desktop-shell-electron.md) 起骨架，主进程 spawn 后端
-4. **文档与测试跟随** —— 每步补 ADR + 用例
+4. **文档与测试跟随** —— 每步补 ADR + 用例，并把结论写回本页
 
-后续待办（来自技术债 T-01…T-25）：CI 校验迁移一致性（T-05 遗留）、前端 type-aware（T-02 遗留）、`.python-version` 对齐本地与 CI（T-12）。
+剩余技术债见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)：P0/P1 已清空，剩下以 P2 为主（日志规范 T-23、Element Plus 体积 T-21）。
 
 ## 4. 关键决策
 
@@ -62,7 +70,7 @@
 1. **T-04 部分解决** — 后端测试用内存 SQLite，MySQL 专有行为（唯一键 1062、外键、排序）无自动化覆盖
 2. **T-05 遗留** — CI 不校验迁移一致性（`alembic check` 需要 MySQL service）
 3. **T-02 遗留** — 前端 ESLint 未启 type-aware（ADR-0002 已接受该取舍）
-4. **T-12** — 本机 Python 3.15 / CI 3.12，无 `.python-version`
+4. **T-23** — 后端日志无统一配置、无 request id，排障只能靠 uvicorn 默认输出
 5. **L-05** — 404 文案不统一（详情/删除「商品不存在」、改商品「未找到商品」），见 [delivery.md](delivery.md) §7
 
 ## 6. 阻塞与环境限制
@@ -75,7 +83,7 @@
 ## 7. 仓库状态
 
 - 最近提交：文档体系重构（三层结构 + 架构图/工具链图/契约精简），详见 `git log --oneline -8`
-- CI：最近一次（测试基线）run `42358433933` 双 job 绿（backend 13s / frontend 26s）；本轮只改文档，不触发后端/前端 job
+- CI：最近一次 run `42372731737`（`8a3e806`）双 job 绿；只改 `docs/` 的提交不会触发 CI（`ci.yml` 的 `paths` 只含 `python/fastapi-demo/**`、`fullstack/product-admin/**`、自身）
 - 文档：人读 1350 行 / AI 向 1670 行 / 归档 670 行；全仓相对链接 0 失效（`/tmp/linkcheck.py` 口径）
 - 测试基线：后端 55 passed / 85.38%；前端 17 passed
 - 容器验证：三容器 healthy，`http://localhost:8080` 首页、`/api/products`、`/healthz`、`/readyz` 均 200；`down && up -d` 后数据仍在

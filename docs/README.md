@@ -37,7 +37,7 @@
 | [`how-it-works.md`](how-it-works.md) | 开发 | **系统怎么跑起来**：架构、请求时序、数据模型 | 想看懂代码 |
 | [`toolchain.md`](toolchain.md) | 开发 | **工具怎么用**：uv / pnpm / ruff / Alembic / CI 各自解决什么 | 跑不起来、不知道敲什么命令 |
 | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | 所有人 | 现在完成到哪、下一步做什么、有哪些已知问题 | 每次开工前 |
-| [`../python/fastapi-demo/docs/api.md`](../python/fastapi-demo/docs/api.md) | 前后端 | 接口契约：12 个业务接口 + 3 个运维路径（参数/响应/错误文案） | 调接口、改接口 |
+| [`../python/fastapi-demo/docs/api.md`](../python/fastapi-demo/docs/api.md) | 前后端 | 接口契约：11 个业务接口 + 3 个运维路径（参数/响应/错误文案） | 调接口、改接口 |
 | [`product/prd.md`](product/prd.md) | 产品 / 开发 | 需求与验收标准（P0 十六条 + AC 十五条） | 确认「要做什么」 |
 | [`design/design.md`](design/design.md) | 前端 / 设计 | 视觉规范与组件规格（token、行高、状态色） | 动界面之前 |
 | [`delivery.md`](delivery.md) | 所有人 | 交付清单：验收结果、已知限制 | 想知道「做到了没有」 |
@@ -66,11 +66,12 @@ AI 读的（约 1670 行）      AGENTS.md、agents/、adr/、prompts/ —— �
 | 接口路径 / 参数 / 错误文案 | `python/fastapi-demo/docs/api.md` | 引用 |
 | 后端命令（make xxx） | `python/fastapi-demo/Makefile` + [`toolchain.md`](toolchain.md) 速查表 | 引用 |
 | 前端命令（pnpm xxx） | `fullstack/product-admin/package.json` + [`toolchain.md`](toolchain.md) | 引用 |
-| 验收标准 | [`product/prd.md`](product/prd.md) 第 8 节 | 引用 |
+| 验收标准 | [`product/prd.md`](product/prd.md) 第 7 节 | 引用 |
 | 验收结果 | [`delivery.md`](delivery.md) | 引用 |
 | 视觉规范 | [`design/design.md`](design/design.md) | 引用 |
 | 技术选型理由 | [`adr/`](adr/README.md) | 引用 |
-| 当前进度 | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | 引用 |
+| 当前进度 / 单测数量与覆盖率 | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | 引用 |
+| 端口 / 环境变量 | [`deploy.md`](deploy.md) §3–§3.1 | 只写自己那一个端口 |
 
 ## 5. 维护规则
 

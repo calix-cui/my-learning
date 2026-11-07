@@ -6,7 +6,7 @@ Vue 3 管理后台 + FastAPI 接口 + MySQL，既能本地开发，也能一条�
 | 项 | 状态 |
 |---|---|
 | 功能 | P0 十六条需求全部实现（商品增删改查、搜索筛选、分类管理、概览） |
-| 验收 | 端到端 18/18 通过；后端 50 个单测 + 覆盖率 85.12%；前端 17 个单测 |
+| 验收 | 端到端 18/18 通过；后端 55 个单测 + 覆盖率 85.38%；前端 17 个单测 |
 | CI | GitHub Actions 双 job 全绿（ruff / pytest / ESLint / Vitest / build） |
 | 部署 | Docker Compose 三容器 healthy，`/healthz` `/readyz` 探针可用 |
 
