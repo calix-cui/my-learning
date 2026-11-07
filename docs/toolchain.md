@@ -37,7 +37,7 @@ flowchart TB
     E2 -.-> F
 ```
 
-（图片版：[`images/diagram-toolchain.png`](images/diagram-toolchain.png)）
+（图片版：[`images/diagram-toolchain.png`](images/diagram-toolchain.png)，由本节 mermaid 导出；改图请改上面的代码块，图片只是快照）
 
 ## 1. 后端工具链
 
@@ -103,7 +103,7 @@ flowchart LR
 
 细节与运维命令见 `docs/deploy.md`。
 
-（图片版：[`images/diagram-deploy.png`](images/diagram-deploy.png)）
+（图片版：[`images/diagram-deploy.png`](images/diagram-deploy.png)，由本节 mermaid 导出；改图请改上面的代码块，图片只是快照）
 
 ## 5. 测试全景（哪里有什么测试）
 

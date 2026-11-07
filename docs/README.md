@@ -47,7 +47,7 @@
 | [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md) | 开发 / 决策 | 技术债清单：每条带证据、优先级、成本、是否已解决 | 排期、评估「该不该现在修」 |
 | [`playbooks/`](playbooks/README.md) | AI 协作者 | 7 份阶段任务手册（认识项目 → AI 基建 → 架构 → 部署 → 计划 → 单任务 → 审查） | 开新一轮系统性工作时 |
 | [`design/mockups/`](design/mockups/) | 前端 / 设计 | 5 张可交互 HTML 设计稿（1440×900，无 CDN 依赖） | 对像素、确认交互细节 |
-| [`images/`](images/) | 所有人 | 实机截图 5 张（`shot-*`）+ 架构/时序/数据/工具链/部署图（`diagram-*`） | 写文档、贴 PR |
+| [`images/`](images/) | 所有人 | 实机截图 5 张（`shot-*`）+ 5 张图（`diagram-*`，由 how-it-works / toolchain 的 mermaid 导出；**权威版本是 md 里的代码块**） | 写文档、贴 PR |
 
 ## 3. 文档分三层，不要混着读
 

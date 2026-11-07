@@ -37,7 +37,7 @@ flowchart LR
     ORM -->|"SQLAlchemy"| DB
 ```
 
-（图片版：[`images/diagram-architecture.png`](images/diagram-architecture.png)）
+（图片版：[`images/diagram-architecture.png`](images/diagram-architecture.png)，由本节 mermaid 导出；改图请改上面的代码块，图片只是快照）
 
 **看图记住两件事**：
 
@@ -71,7 +71,7 @@ sequenceDiagram
     V-->>B: 渲染表格 + 分页
 ```
 
-（图片版：[`images/diagram-request.png`](images/diagram-request.png)）
+（图片版：[`images/diagram-request.png`](images/diagram-request.png)，由本节 mermaid 导出；改图请改上面的代码块，图片只是快照）
 
 出错了会怎样？`services` 层抛 `BusinessError("商品分类不存在", code=400)`，由 `app/main.py` 注册的 5 个异常处理器统一翻译成 `{"code":400,"message":"商品分类不存在","data":null}`；参数不合法则由 FastAPI 自己抛 422，也被同一个处理器改写。**前端永远只需要认 `code/message/data` 三个字段。**
 
@@ -110,7 +110,7 @@ erDiagram
     }
 ```
 
-（图片版：[`images/diagram-data-model.png`](images/diagram-data-model.png)）
+（图片版：[`images/diagram-data-model.png`](images/diagram-data-model.png)，由本节 mermaid 导出；改图请改上面的代码块，图片只是快照）
 
 两条真实约束，验收时会碰到：
 
