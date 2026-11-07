@@ -1,4 +1,7 @@
 # 读取连接信息
+from typing import Literal
+
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,9 +11,36 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        # 校验失败时不回显输入值，避免把 LLM_API_KEY 之类的密钥打进日志
+        hide_input_in_errors=True,
     )
 
     database_url: str
+
+    # 模型接入（阶段 4）。默认 fake：CI 与没有 key 的本地环境都能跑通整条链路。
+    llm_provider: Literal["fake", "openai"] = "fake"
+    llm_base_url: str = ""
+    llm_api_key: SecretStr = SecretStr("")  # SecretStr 让日志/报错里显示为 **********
+    llm_model: str = ""
+    llm_timeout_seconds: float = 30.0
+
+    @model_validator(mode="after")
+    def _check_openai_settings(self) -> "Settings":
+        """选 openai 时，缺 base_url / key / model 直接在启动阶段失败，而不是等第一次请求。"""
+        if self.llm_provider != "openai":
+            return self
+        missing = [
+            name
+            for name, value in (
+                ("LLM_BASE_URL", self.llm_base_url),
+                ("LLM_API_KEY", self.llm_api_key.get_secret_value()),
+                ("LLM_MODEL", self.llm_model),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(f"LLM_PROVIDER=openai 时必须配置：{', '.join(missing)}")
+        return self
 
 
 # database_url: str 声明需要一个字符串类型的配置字段。
