@@ -37,6 +37,8 @@ flowchart TB
     E2 -.-> F
 ```
 
+（图片版：[`images/diagram-toolchain.png`](images/diagram-toolchain.png)）
+
 ## 1. 后端工具链
 
 | 工具 | 解决什么问题 | 命令 | 配置在哪 |
@@ -100,6 +102,8 @@ flowchart LR
 ```
 
 细节与运维命令见 `docs/deploy.md`。
+
+（图片版：[`images/diagram-deploy.png`](images/diagram-deploy.png)）
 
 ## 5. 常用命令速查
 
