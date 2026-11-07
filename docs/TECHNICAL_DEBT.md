@@ -8,7 +8,7 @@
 
 | ID | 类别 | 问题 | 优先级 | 成本 |
 |---|---|---|---|---|
-| ~~T-01~~ | 协作 | ~~`AGENTS.md`、`docs/prompts/` 未提交~~ ✅ 2026-11-07 已入库 | P0 | S |
+| ~~T-01~~ | 协作 | ~~`AGENTS.md`、`docs/playbooks/` 未提交~~ ✅ 2026-11-07 已入库 | P0 | S |
 | T-02 | 前端 | ~~零静态检查（无 ESLint / Prettier）~~ ✅ 轻量档门禁已落地 | P0 | S |
 | ~~T-03~~ | 前端 | ~~零单测、CI 不覆盖前端~~ ✅ 2026-11-07 已补 Vitest 17 例并入 CI | P0 | S |
 | T-04 | 后端 | 测试完全不连库……⚠️ 部分解决：服务层已用内存 SQLite 覆盖，MySQL 方言仍未测 | P1 | M |
@@ -27,7 +27,7 @@
 | T-17 | 后端 | 无鉴权、CORS 写死 localhost、`allow_methods=["*"]` | P2 | L |
 | T-18 | 数据 | `create_time` 用 naive `datetime.now`，无时区语义 | P2 | S |
 | T-19 | 文档 | `docs/README.md` 定位过期；`app/README.md` 与项目 README 重复 | P2 | S |
-| T-20 | 文档 | `docs/design/images/` 与 `docs/images/` 同名不同源，易混 | P2 | S |
+| ~~T-20~~ | 文档 | ~~两套同名截图~~ ✅ 2026-11-07 改名 `design-*` / `shot-*` | P2 | S |
 | T-21 | 前端 | Element Plus 打成 943KB 单 chunk，首屏成本偏高 | P2 | M |
 | ~~T-22~~ | 后端 | ~~分类改名不 `strip()` 空白，可存入全空格名称~~ ✅ 2026-11-07 已修复 | P2 | S |
 | T-23 | 后端 | 日志无统一配置、无 request id，排障靠 print 级信息 | P2 | M |
@@ -36,8 +36,8 @@
 
 ## 1. 协作与规则资产
 
-### T-01 `AGENTS.md` / `docs/prompts/` 未入库（P0 · S）—— ✅ 已于 2026-11-07 解决
-- **原证据**：`git status` → `?? AGENTS.md`、`?? docs/prompts/`、`?? docs/PROJECT_STATUS.md`。
+### T-01 `AGENTS.md` / `docs/playbooks/` 未入库（P0 · S）—— ✅ 已于 2026-11-07 解决
+- **原证据**：`git status` → `?? AGENTS.md`、`?? docs/playbooks/`、`?? docs/PROJECT_STATUS.md`。
 - **影响**：这是整个项目的「AI 协作契约」，不入库则换机器即丢。
 - **解决**：已随 `c83c4fb`、`62e8b41` 入库，`git ls-files AGENTS.md docs/playbooks` 可验证。
 
@@ -159,11 +159,11 @@
 
 ## 7. 文档与仓库卫生
 
-### T-19 文档定位重复/过期（P2 · S）
-- **证据**：`docs/README.md` 仍自称「存放跨项目学习资料」，但 `docs/` 下实际放的是 product/design/product-admin 三套**项目交付文档**；`python/fastapi-demo/app/README.md`（9 行目录说明）与项目级 README 的「目录结构」章节内容重叠。
-- **建议**：`docs/README.md` 改成文档索引（学习笔记 / 项目文档 / 流程规范 三个分区）；删掉 `app/README.md` 或把它改成「本目录只讲分层职责，细节见 ../README.md」。
+### T-19 文档定位重复/过期（P2 · S）—— ✅ 已于 2026-11-07 解决
+- **原证据**：`docs/README.md` 曾只有 10 行且内容是「学习笔记」占位；`python/fastapi-demo/app/README.md`（9 行目录说明）与项目级 README 的「目录结构」章节重叠。
+- **解决**：`docs/README.md` 重写为阅读路径 + 文档地图 + 单一事实来源 + 维护规则；`app/README.md` 已删除，有效信息并入 `docs/how-it-works.md` §3。
 
-### T-20 两套同名设计图（P2 · S）
+### T-20 两套同名设计图（P2 · S）—— ✅ 已于 2026-11-07 解决
 - **证据**：`docs/design/images/01-product-list.png`（设计稿导出）与 `docs/images/01-product-list.png`（实机截图）同名；`docs/design/mockups/*.html` 又是第三份。
 - **影响**：review 时极易贴错图；也让人分不清「哪张是设计、哪张是实现」。
 - **建议**：文件名加前缀（`design-01-*.png` / `shot-01-*.png`），或在各自 README 顶部放一张对照说明。
@@ -187,4 +187,4 @@
 1. **已完成（2026-11-07）**：T-02 前端 lint + CI、T-03 前端单测、T-05 Alembic、T-09 容器化、T-12 部分（requires-python）、T-13 gh 凭据、T-22 空白校验、T-24 Docker 环境。
 2. **阶段 3（架构/基建）**：T-06 泛型响应、T-08 配置分层、T-04 集成测试小集合（T-05 Alembic 已完成）。
 3. **阶段 4（部署）**：T-09 容器化与反代、T-10 API 基址、T-17 最小鉴权、T-24 装 Docker。
-4. **持续**：T-11 验收脚本隔离、T-15/T-16 查询优化、T-19/T-20 文档整理。
+4. **持续**：T-11 验收脚本隔离、T-15/T-16 查询优化。

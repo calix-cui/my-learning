@@ -11,7 +11,7 @@
 
 - 任务单（lead 给的 EPIC 描述 + P0 范围 + 交付物路径）
 - 已有的 `AGENTS.md`（项目规范）、根 `README.md`（项目索引）
-- 后端实际能力：`python/fastapi-demo/docs/api.md`、`GET /openapi.json`（**以实际接口为准，不要凭想象写**）
+- 后端实际能力：`docs/api.md`、`GET /openapi.json`（**以实际接口为准，不要凭想象写**）
 
 ## 3. 输出（必须全部落地到文件）
 

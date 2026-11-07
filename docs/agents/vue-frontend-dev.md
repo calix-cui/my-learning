@@ -11,7 +11,7 @@
 
 - `docs/design/<项目>-design.md`（tokens、组件规范、每页尺寸）
 - `docs/product/<项目>-prd.md`（功能与验收标准）
-- `python/fastapi-demo/docs/api.md`（接口契约）
+- `docs/api.md`（接口契约）
 
 ## 3. 技术栈（固定，不要私自换）
 

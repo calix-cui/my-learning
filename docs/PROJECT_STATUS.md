@@ -17,7 +17,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
-| 11-07 | **名称空白校验统一**：分类改名、商品改名与新增同规则（先 strip 再判空，纯空白 400），补 5 个用例 | T-22 已解决、[api.md](../python/fastapi-demo/docs/api.md) §2.5/§3.3 |
+| 11-07 | **名称空白校验统一**：分类改名、商品改名与新增同规则（先 strip 再判空，纯空白 400），补 5 个用例 | T-22 已解决、[api.md](api.md) §2.5/§3.3 |
 | 11-07 | **文档体系重构**：三层结构 + 架构图/工具链图，人读部分从 2900 行降到 1350 行，重复事实收敛到单一来源 | [docs/README.md](README.md)、[CONTRIBUTING.md](../CONTRIBUTING.md) |
 | 11-07 | **测试基线**：后端 55 例 + 覆盖率门槛 80%（实测 85.38%），前端 Vitest 17 例 | [ADR-0005](adr/0005-testing-baseline.md) |
 | 11-07 | **容器化**：多阶段镜像 + Compose（db/backend/frontend/可选 Caddy）+ `/healthz` `/readyz` | [ADR-0004](adr/0004-deployment-docker-compose.md)、[deploy.md](deploy.md) |

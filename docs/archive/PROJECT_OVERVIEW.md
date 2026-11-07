@@ -15,7 +15,7 @@
 |---|---|
 | 仓库性质 | 个人学习与实践仓库，**公开仓库**（`gh repo view`：`visibility: PUBLIC`） |
 | 组织方式 | Monorepo，按技术域分目录（`python/`、`frontend/`、`agent/`、`fullstack/`） |
-| 当前阶段 | 阶段 0：规范先行。`AGENTS.md`（开发规范）与 `docs/prompts/1..7`（7 阶段提示词流水线）刚落地，尚未有对应产出 |
+| 当前阶段 | 阶段 0：规范先行。`AGENTS.md`（开发规范）与 `docs/playbooks/1..7`（7 阶段提示词流水线）刚落地，尚未有对应产出 |
 | 长期目标 | 应用层全栈 AI Agent：前后端分离、本地可跑、一键上云、可打包 macOS/Windows/Linux |
 | 与本阶段的关系 | 现有 `fullstack/product-admin` 是「全栈底座验证」样本，不是最终产品 |
 
@@ -73,7 +73,7 @@ my-learning/
 |---|---|---|
 | `docs/product/prd.md` | 16 条 P0 + 15 条验收标准 + 7 条待确认 | 399 行 |
 | `docs/design/design.md` | 设计 token、组件规格、状态色语义 | 234 行 |
-| `python/fastapi-demo/docs/api.md` | 接口契约（请求/响应/错误码） | 919 行 |
+| `docs/api.md` | 接口契约（请求/响应/错误码） | 919 行 |
 | `docs/delivery.md` | 18 项用例逐条结果 + 5 处缺陷复盘 | — |
 | `python/fastapi-demo/README.md` | 后端技术栈/结构/命令/限制 | 148 行 |
 | `fullstack/product-admin/README.md` | 前端安装、脚本、目录 | — |

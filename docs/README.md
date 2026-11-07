@@ -22,7 +22,7 @@
 
 在上述基础上，按需查阅：
 
-- 要改接口 → [`../python/fastapi-demo/docs/api.md`](../python/fastapi-demo/docs/api.md)（唯一契约）
+- 要改接口 → [`../docs/api.md`](api.md)（唯一契约）
 - 要改需求 → [`product/prd.md`](product/prd.md)
 - 要改样式 → [`design/design.md`](design/design.md)
 - 要改部署 → [`deploy.md`](deploy.md)
@@ -37,22 +37,25 @@
 | [`how-it-works.md`](how-it-works.md) | 开发 | **系统怎么跑起来**：架构、请求时序、数据模型 | 想看懂代码 |
 | [`toolchain.md`](toolchain.md) | 开发 | **工具怎么用**：uv / pnpm / ruff / Alembic / CI 各自解决什么 | 跑不起来、不知道敲什么命令 |
 | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | 所有人 | 现在完成到哪、下一步做什么、有哪些已知问题 | 每次开工前 |
-| [`../python/fastapi-demo/docs/api.md`](../python/fastapi-demo/docs/api.md) | 前后端 | 接口契约：11 个业务接口 + 3 个运维路径（参数/响应/错误文案） | 调接口、改接口 |
+| [`api.md`](api.md) | 前后端 | 接口契约：11 个业务接口 + 3 个运维路径（参数/响应/错误文案） | 调接口、改接口 |
 | [`product/prd.md`](product/prd.md) | 产品 / 开发 | 需求与验收标准（P0 十六条 + AC 十五条） | 确认「要做什么」 |
 | [`design/design.md`](design/design.md) | 前端 / 设计 | 视觉规范与组件规格（token、行高、状态色） | 动界面之前 |
 | [`delivery.md`](delivery.md) | 所有人 | 交付清单：验收结果、已知限制 | 想知道「做到了没有」 |
 | [`deploy.md`](deploy.md) | 运维 / 部署 | 容器化部署、健康检查、备份、排障 | 要上服务器 |
 | [`adr/`](adr/README.md) | 所有人 | 5 条架构决策记录：为什么用 Electron / Alembic / Docker / 轻量前端门禁 | 想质疑或推翻某个选择 |
 | [`agents/README.md`](agents/README.md) | AI 协作者 | 子智能体角色卡与协作协议 | 派活给 AI 时 |
-| [`archive/`](archive/README.md) | 按需 | 2026-11-07 之前的一次性调研报告 | 考古 |
+| [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md) | 开发 / 决策 | 技术债清单：每条带证据、优先级、成本、是否已解决 | 排期、评估「该不该现在修」 |
+| [`playbooks/`](playbooks/README.md) | AI 协作者 | 7 份阶段任务手册（认识项目 → AI 基建 → 架构 → 部署 → 计划 → 单任务 → 审查） | 开新一轮系统性工作时 |
+| [`design/mockups/`](design/mockups/) | 前端 / 设计 | 5 张可交互 HTML 设计稿（1440×900，无 CDN 依赖） | 对像素、确认交互细节 |
+| [`images/`](images/) | 所有人 | 实机截图 5 张（`shot-*`）+ 架构/时序/数据/工具链/部署图（`diagram-*`） | 写文档、贴 PR |
 
 ## 3. 文档分三层，不要混着读
 
 ```
-人读的（约 1350 行）      你现在该看的：README、how-it-works、toolchain、PROJECT_STATUS、
+人读的（约 1348 行）      你现在该看的：README、how-it-works、toolchain、PROJECT_STATUS、
                           prd、design、delivery、deploy、api
-AI 读的（约 1670 行）      AGENTS.md、agents/、adr/、prompts/ —— 给 AI 的作业指导书
-归档的（约 670 行）        archive/ 与技术债清单 —— 结论已经写进 ADR 与 STATUS
+AI 读的（约 1739 行）      AGENTS.md、agents/、adr/、playbooks/ —— 给 AI 的作业指导书
+归档的（约 672 行）        archive/ 与技术债清单 —— 结论已经写进 ADR 与 STATUS
 ```
 
 **如果你只想知道「这项目现在怎么样」，读 `PROJECT_STATUS.md` 一页就够。**
@@ -63,8 +66,8 @@ AI 读的（约 1670 行）      AGENTS.md、agents/、adr/、prompts/ —— �
 
 | 事实 | 唯一来源 | 别处只能 |
 |---|---|---|
-| 接口路径 / 参数 / 错误文案 | `python/fastapi-demo/docs/api.md` | 引用 |
-| 后端命令（make xxx） | `python/fastapi-demo/Makefile` + [`toolchain.md`](toolchain.md) 速查表 | 引用 |
+| 接口路径 / 参数 / 错误文案 | `docs/api.md` | 引用 |
+| 后端命令（make xxx） | `python/fastapi-demo/Makefile` + [`toolchain.md`](toolchain.md) §6 速查表 | 引用 |
 | 前端命令（pnpm xxx） | `fullstack/product-admin/package.json` + [`toolchain.md`](toolchain.md) | 引用 |
 | 验收标准 | [`product/prd.md`](product/prd.md) 第 7 节 | 引用 |
 | 验收结果 | [`delivery.md`](delivery.md) | 引用 |

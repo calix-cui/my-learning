@@ -29,6 +29,27 @@ open http://localhost:8080
 
 `backend`、`db` 不对宿主机开放端口：外部流量只能经 `frontend` 或 `caddy` 进来。两个探针在边缘层也一并暴露：`http://localhost:8080/healthz`、`http://localhost:8080/readyz`。
 
+### 3.1 环境变量总表
+
+两个 `.env.example` 分管两件事，互不覆盖：
+
+- 仓库根 `.env.example` → 给 **docker compose** 用（复制成根 `.env`）
+- `python/fastapi-demo/.env.example` → 给 **本地直接跑后端** 用（复制成该目录 `.env`）
+
+| 变量 | 谁读 | 必填 | 默认 | 说明 |
+|---|---|---|---|---|
+| `MYSQL_ROOT_PASSWORD` | compose → `db` | ✅ | — | MySQL root 密码；未设时 compose 直接报错退出 |
+| `MYSQL_DATABASE` | compose → `db`、`backend` | | `fastapi_demo` | 库名，后端连接串里的数据库 |
+| `MYSQL_USER` | compose → `db`、`backend` | | `fastapi` | 应用账号（非 root） |
+| `MYSQL_PASSWORD` | compose → `db`、`backend` | ✅ | — | 应用账号密码；未设时 compose 直接报错退出 |
+| `DATABASE_URL` | `backend`（`app/config.py`） | ✅ | — | 本地跑必填；compose 里由上面四个变量拼出来，不用手写 |
+| `FRONTEND_PORT` | compose → `frontend` | | `8080` | 宿主机端口，冲突时改成 8081 等 |
+| `HTTP_PORT` / `HTTPS_PORT` | compose → `caddy` | | `80` / `443` | 仅 `--profile https` 时生效 |
+| `SITE_ADDRESS` | `caddy` | | `localhost` | 域名；填真实域名由 Caddy 自动签证书 |
+
+安全约定：`.env` 都在 `.gitignore` 里，仓库只提交 `.env.example` 且不含真实密码。换环境时改的是 `.env`，不是这里的表。
+
+
 ## 4. 两种访问方式
 
 **开发/内网联调（默认）**：只起三个服务，直接访问 `http://localhost:8080`。
@@ -97,3 +118,4 @@ docker compose down -v                  # 连数据一起清掉（谨慎）
 - 镜像未在 CI 里构建，构建失败只能在本地暴露；后续可加 `docker build` 的 CI job。
 - 前端静态资源走 nginx，未做 CDN；后端未配 Gunicorn 多 worker，默认单进程。
 - 没有集中式日志与指标，排障依赖 `docker compose logs`。
+- **Caddy / HTTPS 未实测**：验证只覆盖了 HTTP（`http://localhost:8080`）。`--profile https` 的证书申请、`SITE_ADDRESS` 真实域名签发、HTTP→HTTPS 跳转均未在真实环境跑过。

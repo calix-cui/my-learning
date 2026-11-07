@@ -11,7 +11,7 @@
 - 任务单（要加/改哪些接口，写作用域）
 - `docs/product/<项目>-prd.md`（业务规则）
 - 现有代码：`app/api/`、`app/services/`、`app/schemas/`、`app/models/`
-- 现有契约：`python/fastapi-demo/docs/api.md`
+- 现有契约：`docs/api.md`
 
 ## 3. 项目结构约定（不许打破）
 
@@ -76,9 +76,9 @@ curl -s localhost:8000/openapi.json | jq '.paths | keys'
 ```
 task-N 完成。改动文件：
 - app/api/xxx.py（新增 N 行）…
-- docs/api.md（新增 N 节）
+- docs/api.md（新增 N 节，接口契约唯一来源）
 验证：
-- make check → ruff 通过、pytest 23 passed
+- make check → ruff 通过、pytest 55 passed（覆盖率 ≥ 80%）
 - curl POST /api/xxx → 200 {"code":200,...}
 - curl GET /api/xxx/999 → 404 {"code":404,"message":"…"}
 契约变化（前端需同步）：…

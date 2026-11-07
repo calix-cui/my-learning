@@ -74,23 +74,25 @@ pnpm test:watch    # 监听模式，开发时用
 启动后端（在 `python/fastapi-demo/` 目录）：
 
 ```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 ## 页面说明
 
-| 路由 | 页面 | 功能 |
+| 路由 | 页面 | 组件 |
 | --- | --- | --- |
-| `/` | 重定向到 `/products` | — |
-| `/products` | 商品列表 | 统计条（商品总数 / 分类数 / 当前筛选结果）、关键词回车查询、分类筛选、10/20/50 分页、新增、编辑、删除（二次确认，删空当前页自动回上一页）、两种空态（搜索无结果 / 还没有商品） |
-| `/categories` | 分类管理 | 统计条（分类总数 / 已归类商品 / 空分类）、分类列表与商品数占比条、新增、改名、删除（分类下有商品时后端返回 409 并提示） |
-| `/dashboard` | 概览 | 商品总数、分类数、上架商品、下架商品、各分类商品数分布（含暂无商品的分类）、上架状态环形图、库存预警（库存 ≤ 20）、最近新增的 4 件商品 |
+| `/` | 重定向到 `/products` | `src/router/index.ts` |
+| `/products` | 商品列表 | `views/ProductList.vue` + `components/ProductFormDialog.vue` |
+| `/categories` | 分类管理 | `views/CategoryManage.vue` + `components/CategoryFormDialog.vue` |
+| `/dashboard` | 概览 | `views/Dashboard.vue` |
+
+**每个页面的字段、状态、空态与交互细节在 [`docs/design/design.md`](../../docs/design/design.md) 与 [`docs/product/prd.md`](../../docs/product/prd.md)** —— 那里是设计与需求的唯一来源，本文件只列路由归属。
 
 ### 表单校验（与后端字段对齐）
 
 - 商品名称：必填，1–50 个字符；
 - 所属分类：必填，选项来自 `GET /api/categories`；
-- 商品价格：必填，非负，最多两位小数（校验正则 `^\d+(\.\d{1,2})?$`，错误文案「价格最多 2 位小数，且不能小于 0」），提交时按字符串发送，由后端按 `decimal(10,2)` 落库；
+- 商品价格：必填，非负，最多两位小数（校验正则 `^\d+(\.\d{1,2})?$`，错误文案「价格最多 2 位小数，且不能小于 0」），提交时按字符串发送，由后端按 `decimal(8,2)` 落库；
 - 库存数量：必填，≥ 0 的整数；
 - 上架状态：`el-switch`，对应后端 `shelf_status` 布尔字段；
 - 提交中按钮 loading 且禁止关闭弹窗，成功后刷新列表；失败保留弹窗并展示后端 message。
@@ -130,7 +132,7 @@ product-admin/
 
 ## 设计说明
 
-配色与布局对齐 `docs/design/` 下的设计稿与 mockups：中性蓝主色 `#2563EB`、页面底色 `#F5F7FA`、卡片白底 + `#E5E7EB` 描边、8px 圆角，状态标签用绿/灰区分上下架，全部颜色以 CSS 变量定义在 `src/styles/index.css` 的 `:root` 中。页面为 1440px 宽度设计的自适应布局：统计条 3 列、表格按容器宽度伸缩、窄屏（≤960px）统计条自动变 2 列。
+配色与布局对齐 `docs/design/` 下的设计稿与 mockups：中性蓝主色 `#2563EB`、页面底色 `#F5F7FA`、卡片白底 + `#E5E7EB` 描边、8px 圆角，状态标签用绿/灰区分上下架，全部颜色以 CSS 变量定义在 `src/styles/index.css` 的 `:root` 中。设计基准宽度 1440px；表格与容器随窗口伸缩，**不承诺 ≤1280px 的移动端布局**（见 `docs/design/design.md`「响应式与可访问性」）。
 
 ## 已知限制
 

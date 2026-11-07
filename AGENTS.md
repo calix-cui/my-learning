@@ -228,8 +228,8 @@ Skill采用分层管理：全局、项目级、专项、外部工具
 
 | 任务类型 | 必读 | 需要时再查 |
 |---|---|---|
-| 改后端接口 / 校验 / 业务规则 | [`python/fastapi-demo/docs/api.md`](python/fastapi-demo/docs/api.md)、[`docs/how-it-works.md`](docs/how-it-works.md) §3–§4 | `docs/product/prd.md` 对应 F/AC |
-| 改前端页面 / 样式 / 交互 | [`docs/design/design.md`](docs/design/design.md)、[`fullstack/product-admin/README.md`](fullstack/product-admin/README.md) | `python/fastapi-demo/docs/api.md`、PRD 对应功能项 |
+| 改后端接口 / 校验 / 业务规则 | [`docs/api.md`](docs/api.md)、[`docs/how-it-works.md`](docs/how-it-works.md) §3–§4 | `docs/product/prd.md` 对应 F/AC |
+| 改前端页面 / 样式 / 交互 | [`docs/design/design.md`](docs/design/design.md)、[`fullstack/product-admin/README.md`](fullstack/product-admin/README.md) | `docs/api.md`、PRD 对应功能项 |
 | 改表结构 / 写迁移 | [`python/fastapi-demo/README.md`](python/fastapi-demo/README.md)「数据库迁移」、[ADR-0003](docs/adr/0003-database-migrations-alembic.md) | `docs/how-it-works.md` §5 数据模型 |
 | 改工程化 / 门禁 / CI | [ADR-0002](docs/adr/0002-frontend-quality-gate-lite.md)、[ADR-0005](docs/adr/0005-testing-baseline.md)、[`docs/toolchain.md`](docs/toolchain.md) | `docs/agents/` 对应角色卡 |
 | 部署 / 容器 / 排障 | [`docs/deploy.md`](docs/deploy.md)、[ADR-0004](docs/adr/0004-deployment-docker-compose.md) | 根 `README.md` 快速开始 |

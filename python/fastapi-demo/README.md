@@ -115,27 +115,16 @@ make check-migration
 
 ## 接口一览
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/` | 健康检查 |
-| POST | `/api/categories` | 新增分类，重名返回 409 |
-| GET | `/api/categories` | 分类列表（ID 倒序） |
-| PATCH | `/api/categories/{category_id}` | 修改分类名称 |
-| DELETE | `/api/categories/{category_id}` | 删除分类，分类下有商品时返回 409 |
-| GET | `/api/categories/statistics` | 各分类商品数量（含 0 的分类） |
-| POST | `/api/products` | 新增商品，分类不存在时返回 400 |
-| GET | `/api/products` | 分页 + 关键词 + 分类筛选 |
-| PATCH | `/api/products/{product_id}` | 局部修改商品 |
-| DELETE | `/api/products/{product_id}` | 删除商品 |
-| GET | `/api/products/count` | 商品总数 |
-| GET | `/api/products/{product_id}` | 商品详情，不存在返回 404 |
+11 个业务操作 + 3 个运维/根路径：分类 5（增/列表/改名/删除/统计）、商品 6（增/分页列表/局部改/删除/总数/详情）、运维 3（`GET /`、`GET /healthz`、`GET /readyz`）。
+
+**完整契约（参数、响应字段、错误文案、示例）在 [`docs/api.md`](../../docs/api.md)** —— 那是唯一来源，本文件不再重复维护。
 
 统一响应格式：`{"code": 200, "message": "请求成功", "data": ...}`；业务异常由全局处理器转成同样的外壳，`code` 与 HTTP 状态码一致。
 
 ## 测试
 
 ```bash
-make test        # 50 个用例 + 覆盖率门槛（80%），全程不连 MySQL
+make test        # 55 个用例 + 覆盖率门槛（80%），全程不连 MySQL
 make check       # lint + 测试，提交前跑这个
 ```
 
@@ -147,7 +136,7 @@ make check       # lint + 测试，提交前跑这个
   真跑 insert/select/update/delete、分页、关键词与分类筛选、删除保护，验证的是 SQL 与业务分支
 
 覆盖率门槛写在 `pyproject.toml` 的 `[tool.coverage.report] fail_under = 80`，
-`app/init_db.py` 与 `app/seed.py` 是手工执行的脚本，已 `omit` 掉。当前实测 85%。
+`app/init_db.py` 与 `app/seed.py` 是手工执行的脚本，已 `omit` 掉。当前实测 85.38%。
 
 **没有覆盖到的**：MySQL 专有行为——唯一键冲突的 `1062` 分支、外键约束、`utf8mb4` 排序规则。
 这类用例需要真实 MySQL（或 testcontainers），属于后续工作。
@@ -169,9 +158,11 @@ make check       # lint + 测试，提交前跑这个
 - 迁移写库需要真实 MySQL：`make check-migration` 只在本机跑，CI 目前不校验迁移一致性。
 - `Response.data` 是 `Any`，OpenAPI 里看不到具体结构；可为每个接口声明具体 `response_model`。
 - 列表接口的 `total` 与 `items` 是两次查询，极端并发下可能不一致。
-- 没有 Docker / 部署脚本，目前面向本地学习。
+- 容器化部署见根目录 [`docs/deploy.md`](../../docs/deploy.md)；镜像未进 CI，构建失败只能在本地暴露。
 - 仓库里存在两个虚拟环境（`python/.venv` 与 `python/fastapi-demo/.venv`），建议只保留项目内的 `.venv`。
 
 ## 相关文档
 
-- [目录职责速查](app/README.md)
+- [接口契约](../../docs/api.md)：参数、响应字段、错误文案、真实示例
+- [系统怎么跑起来](../../docs/how-it-works.md)：分层理由、请求时序、数据模型、新增资源的步骤
+- [工具链](../../docs/toolchain.md)：uv / ruff / pytest / Alembic 各自解决什么问题

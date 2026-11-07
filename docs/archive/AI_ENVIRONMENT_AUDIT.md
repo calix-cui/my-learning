@@ -9,7 +9,7 @@
 
 | 层 | 现状 | 缺口 |
 |---|---|---|
-| 规则文件 | 已有仓库级 `AGENTS.md`（规范）+ `docs/prompts/1..7`（分阶段提示词），但**都未提交** | 缺项目级细则、缺 ADR 机制 |
+| 规则文件 | 已有仓库级 `AGENTS.md`（规范）+ `docs/playbooks/1..7`（分阶段提示词），但**都未提交** | 缺项目级细则、缺 ADR 机制 |
 | Skills | 会话内可用 8 个（Office 7 个 + 插件商店 1 个），全部是**通用办公/商店**类 | 与「AI Agent 开发」直接相关的 Skill 为 0；无项目级 Skill |
 | MCP | DSH profile 配了 3 个（QQ 桥接 + 联网搜索），Codex 另配 2 个 | 本会话工具面**看不到** `mcp__*` 工具；无数据库/浏览器/文件系统类 MCP |
 | CLI | git / gh / node / pnpm / uv / jq / make / mysql 齐全 | Docker 守护进程未运行且无 compose；ruff / pytest / pre-commit 只在项目 venv 内 |
@@ -22,7 +22,7 @@
 | 文件 | 位置 | 谁在读 | 内容 | 状态 |
 |---|---|---|---|---|
 | `AGENTS.md` | 仓库根 | DSH（本次会话已注入为 workspace instructions） | 8 节：项目定位、AI 开发原则（复用优先/小步交付/先设计）、技术选型、部署、桌面端、代码质量、AI 工作行为、最重要的约束 | **未提交**（`git status`: `?? AGENTS.md`） |
-| `docs/prompts/1..7` | 仓库 docs | 人工按阶段喂给 AI | 1 认识项目 → 2 AI 基建 → 3 工程架构 → 4 部署与跨端 → 5 开发计划与 MVP 任务 → 6 单任务 → 7 code review | **未提交**（`?? docs/prompts/`） |
+| `docs/playbooks/1..7` | 仓库 docs | 人工按阶段喂给 AI | 1 认识项目 → 2 AI 基建 → 3 工程架构 → 4 部署与跨端 → 5 开发计划与 MVP 任务 → 6 单任务 → 7 code review | **未提交**（`?? docs/playbooks/`） |
 | `CONTRIBUTING.md` | 仓库根 | 人（也是 AI 的隐含约束） | 新建项目流程、README 最低要求、依赖管理、提交规范 | 已提交 |
 | `.vscode/settings.example.json` | 仓库 `.vscode` | VS Code | 解释器路径、pytest 配置、ruff 保存即格式化 | 已提交（示例） |
 | `~/.codex/AGENTS.md` | 用户主目录 | Codex CLI | **空文件（0 行）** | 存在但无内容 |
@@ -131,7 +131,7 @@ DSH 会话目录共 8 个，来源是 profile bundles（`@deepseek-ai/dsh-base` 
 
 | 资产 | 位置 | 类型 | 可复用性 |
 |---|---|---|---|
-| 7 阶段提示词流水线 | `docs/prompts/1..7` | Prompt | ★★★ 已定义「调研 → 基建 → 架构 → 部署 → 计划 → 单任务 → 评审」的完整链路，是当前最有价值的 AI 资产 |
+| 7 阶段提示词流水线 | `docs/playbooks/1..7` | Prompt | ★★★ 已定义「调研 → 基建 → 架构 → 部署 → 计划 → 单任务 → 评审」的完整链路，是当前最有价值的 AI 资产 |
 | 开发全局规范 | `AGENTS.md` | Rule | ★★★ 但未提交 |
 | 提交前检查链 | `.pre-commit-config.yaml` | Workflow | ★★ 仅后端 |
 | CI 流水线 | `.github/workflows/ci.yml` | Workflow | ★★ 仅后端 |
@@ -144,7 +144,7 @@ DSH 会话目录共 8 个，来源是 profile bundles（`@deepseek-ai/dsh-base` 
 
 ## 6. 可复用的 AI 开发工作流（现在就能用）
 
-1. **分阶段提示词**：`docs/prompts/N` 直接作为每次任务的输入，产出物按提示词末尾"交付文档"落盘。
+1. **分阶段提示词**：`docs/playbooks/N` 直接作为每次任务的输入，产出物按提示词末尾"交付文档"落盘。
 2. **子智能体并行**：调研/审计类任务用 `subagent`（fresh context，不污染主会话）；需要继承上下文的评审用 `subagent_fork`。
 3. **多角色协作**：需要 3 人以上并行且互相等结果时，用任务板 + `spawn_teammate`（上一轮已验证可行）。
 4. **验收脚本当回归**：`pnpm acceptance` 已是可执行规格，改前端后先跑它。

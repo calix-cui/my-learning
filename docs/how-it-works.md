@@ -87,6 +87,8 @@ sequenceDiagram
 
 一句话记忆：**api 管门面，schemas 管形状，services 管规矩，models 管表，common 管统一。**
 
+另有三个装配文件不在上表里：`app/main.py`（创建应用、挂路由、注册 5 个异常处理器）、`app/database.py`（Engine、公共 `Base`、`SessionLocal`）、`app/dependencies.py`（`get_db` 为每个请求提供一个 Session）。它们不含业务逻辑，改动风险低但影响面大。
+
 ## 4. 数据长什么样
 
 ```mermaid
@@ -135,3 +137,23 @@ erDiagram
 5. 回到本页第 2 节，把时序图与真实代码对一遍
 
 看完还看不懂的地方，就是文档该补的地方——直接开 issue 或告诉 AI 助手。
+
+## 7. 新增一个资源要动哪些文件
+
+以「新增订单 orders」为例，按顺序做完即可端到端可用（每步都可单独验证）。**顺序不能颠倒**：模型先于迁移，迁移先于服务。
+
+| 步 | 改什么 | 具体动作 | 怎么验证 |
+|---|---|---|---|
+| 1 | `app/models/order.py` | 继承 `Base`，写字段与 `__table_args__`；在 `app/models/__init__.py` 的 `__all__` 里导出 | `python -c "from app.models import Order"` |
+| 2 | 迁移 | `make revision m="add orders"` → **人工检查**生成的 `migrations/versions/*.py` → `make migrate`（Alembic 对表/列改名会误判为「删+建」，必须看） | `make check-migration` 无漂移；`alembic current` 是 head |
+| 3 | `app/schemas/order.py` | `Create/Update/Response` 三个模型，`Response` 要 `ConfigDict(from_attributes=True)` 与需要的 `field_serializer` | `pytest tests/test_schemas.py` 风格补用例 |
+| 4 | `app/services/order_service.py` | 业务规则、`db.commit()` + `db.refresh()`、失败 `db.rollback()`、抛 `BusinessError` | `tests/test_order_service.py` 用内存 SQLite 夹具 `db_session` |
+| 5 | `app/api/orders.py` | `APIRouter(prefix="/orders")` + 处理函数；在 `app/api/__init__.py` 里 `include_router` | Swagger `/docs` 能看到新路径 |
+| 6 | 测试 | 服务层用例 + 参数校验用例（422/400 各一条） | `make check`（ruff + 覆盖率门槛 80%） |
+| 7 | 文档 | `docs/api.md` 补契约、`docs/product/prd.md` 补 F/AC、`docs/how-it-works.md` §5 代码地图若新增目录要改 | 检查 `docs/README.md` §4 单一来源有没有被绕过 |
+| 8 | 前端（可选） | `src/api/orders.ts` → `src/views/OrderList.vue` → `src/router/index.ts` 加路由 | `pnpm lint && pnpm test && pnpm build` |
+
+两个常见坑：
+
+- 只改模型不生成迁移 → 本机能跑、容器里 `alembic upgrade head` 后表不存在。
+- 只加接口不写 `include_router` → 404，但 `/docs` 里也看不到，容易误判为「路径写错」。

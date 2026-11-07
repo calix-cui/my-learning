@@ -1,6 +1,6 @@
 # 「简易商品管理网站」产品需求文档（PRD v1.1）
 
-> 本文给人读。接口细节以 python/fastapi-demo/docs/api.md 为准，视觉规范见 docs/design/design.md。
+> 本文给人读。接口细节以 docs/api.md 为准，视觉规范见 docs/design/design.md。
 
 ## 1. 目标与范围
 
