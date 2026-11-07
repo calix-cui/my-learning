@@ -1,7 +1,7 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-07 · 工作区干净 · `main` 与 `origin/main` 同步
+> 最近更新：2026-11-07 · 工作区干净 · 本地领先 `origin/main` 4 个提交（文档治理，未 push）
 
 ## 1. 现在在哪
 
@@ -18,7 +18,7 @@
 | 日期 | 交付 | 证据 |
 |---|---|---|
 | 11-07 | **名称空白校验统一**：分类改名、商品改名与新增同规则（先 strip 再判空，纯空白 400），补 5 个用例 | T-22 已解决、[api.md](api.md) §2.5/§3.3 |
-| 11-07 | **文档体系重构**：三层结构 + 架构图/工具链图，人读部分从 2900 行降到 1350 行，重复事实收敛到单一来源 | [docs/README.md](README.md)、[CONTRIBUTING.md](../CONTRIBUTING.md) |
+| 11-07 | **文档治理四批 + 终检**：39 份文档全量审查（22 条事实陈旧、11 处职责重叠、6 处缺失），四批重构 + [终检报告](DOCUMENTATION_FINAL_REPORT.md)；人读 1348 行 / AI 向 1739 行 / 归档 672 行，0 孤儿 0 失效链接 | [审查报告](DOCUMENTATION_AUDIT.md)、[重构方案](DOCUMENTATION_REFACTOR_PLAN.md) |
 | 11-07 | **测试基线**：后端 55 例 + 覆盖率门槛 80%（实测 85.38%），前端 Vitest 17 例 | [ADR-0005](adr/0005-testing-baseline.md) |
 | 11-07 | **容器化**：多阶段镜像 + Compose（db/backend/frontend/可选 Caddy）+ `/healthz` `/readyz` | [ADR-0004](adr/0004-deployment-docker-compose.md)、[deploy.md](deploy.md) |
 | 11-07 | **uv 统一依赖**：`pyproject.toml` 唯一来源 + `uv.lock`，CI 用 `uv sync --frozen` | `a09763d` |
@@ -33,7 +33,7 @@
 
 | 门槛 | 判定标准 | 现状 |
 |---|---|---|
-| 文档可信 | `docs/` 无已知过期事实 | 本轮治理后达成（见 `DOCUMENTATION_FINAL_REPORT.md`） |
+| 文档可信 | `docs/` 无已知过期事实 | ✅ 2026-11-07（见 [DOCUMENTATION_FINAL_REPORT.md](DOCUMENTATION_FINAL_REPORT.md) §3） |
 | 基线可跑 | `make check` 55 passed / ≥80%、`pnpm lint && pnpm test && pnpm build` 全过、容器三容器 healthy | ✅ 2026-11-07 |
 | 范围明确 | 阶段 2 只做「MCP client + 单 Agent PoC + Electron 骨架」，不做 RAG / 多 Agent | 待确认 |
 
