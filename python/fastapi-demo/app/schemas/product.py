@@ -52,8 +52,9 @@ class ProductPageResponse(BaseModel):
 class ProductUpdateRequest(BaseModel):
     """修改商品，客户端可以提交的字段，局部修改"""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
-    # ConfigDict(str_strip_whitespace=True) 会在模型校验时去掉字符串首尾空白
+    # 这里不做 str_strip_whitespace：商品名的去空格与「纯空白」校验统一放在
+    # services/product_service.update_product 里，与新增商品保持同一套规则。
+    # 若在这里 strip，纯空白名会被 min_length 拦成 422，而新增走的是业务层 400。
 
     category_id: int | None = Field(default=None, gt=0, description="商品分类的ID，必须是正整数")
     name: str | None = Field(

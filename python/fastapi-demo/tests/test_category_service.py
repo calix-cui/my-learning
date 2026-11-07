@@ -47,12 +47,43 @@ def test_update_category_renames_category(db_session: Session):
     assert updated.name == "酒水"
 
 
+def test_update_category_trims_surrounding_spaces(db_session: Session):
+    category = _create(db_session, "饮料")
+
+    updated = category_service.update_category(
+        db_session, CategoryCreateRequest(name="  酒水  "), category.id
+    )
+
+    assert updated.name == "酒水"
+
+
+def test_update_category_rejects_blank_name(db_session: Session):
+    category = _create(db_session, "饮料")
+
+    with pytest.raises(BusinessError) as exc_info:
+        category_service.update_category(db_session, CategoryCreateRequest(name="   "), category.id)
+
+    assert exc_info.value.code == 400
+    assert str(exc_info.value) == "分类名称不能只包含空"
+    # 失败后库里仍是原名，没有被写成空白
+    db_session.refresh(category)
+    assert category.name == "饮料"
+
+
 def test_update_missing_category_raises_404(db_session: Session):
     with pytest.raises(BusinessError) as exc_info:
         category_service.update_category(db_session, CategoryCreateRequest(name="酒水"), 999)
 
     assert exc_info.value.code == 404
     assert str(exc_info.value) == "分类不存在"
+
+
+def test_update_missing_category_prefers_404_over_blank_name(db_session: Session):
+    # 资源不存在时先回 404，不能被入参校验抢在前面变成 400
+    with pytest.raises(BusinessError) as exc_info:
+        category_service.update_category(db_session, CategoryCreateRequest(name="   "), 999)
+
+    assert exc_info.value.code == 404
 
 
 def test_delete_category_with_products_is_blocked(db_session: Session):

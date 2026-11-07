@@ -141,6 +141,12 @@ def update_product(
             # 显式提交的 null 表示要把字段清空，本项目的业务字段都不允许为空。
             if value is None:
                 raise BusinessError(f"字段 {field} 的值不允许为 null")
+        if "name" in changes:
+            # 与新增商品保持一致：先去掉首尾空白，再拒绝纯空白名。
+            name = changes["name"].strip()
+            if not name:
+                raise BusinessError("商品名称不能只包含空白")
+            changes["name"] = name
         if "category_id" in changes:
             # 分类必须真实存在才能写入外键，先确认再保存，提示更明确。
             if db.get(Category, changes["category_id"]) is None:

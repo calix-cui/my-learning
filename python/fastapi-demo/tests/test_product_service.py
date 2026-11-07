@@ -109,6 +109,29 @@ def test_update_product_applies_partial_changes(db_session: Session, category):
     assert updated.name == "可乐"
 
 
+def test_update_product_trims_name(db_session: Session, category):
+    product = _create(db_session, category.id, name="可乐")
+
+    updated = product_service.update_product(
+        db_session, ProductUpdateRequest(name="  雪碧  "), product.id
+    )
+
+    assert updated.name == "雪碧"
+
+
+def test_update_product_rejects_blank_name(db_session: Session, category):
+    product = _create(db_session, category.id, name="可乐")
+
+    with pytest.raises(BusinessError) as exc_info:
+        product_service.update_product(db_session, ProductUpdateRequest(name="   "), product.id)
+
+    # 与新增商品同一个业务错误，而不是 Pydantic 的 422
+    assert exc_info.value.code == 400
+    assert str(exc_info.value) == "商品名称不能只包含空白"
+    db_session.refresh(product)
+    assert product.name == "可乐"
+
+
 def test_update_product_without_fields_raises_400(db_session: Session, category):
     product = _create(db_session, category.id, name="可乐")
 

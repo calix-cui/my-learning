@@ -55,9 +55,17 @@ def get_categories(db: Session):
 
 def update_category(db: Session, payload: CategoryCreateRequest, category_id: int) -> Category:
     category = db.get(Category, category_id)
+    # 先确认资源存在，再校验入参：不存在的分类无论传什么都应回 404。
     if not category:
         raise BusinessError(message="分类不存在", code=404)
-    category.name = payload.name
+
+    # 改名和新增走同一套规则：先去掉首尾空白，再拒绝没有实际内容的名称。
+    # 否则 PATCH 能把「   」原样存进库，与 POST 的行为不一致。
+    name = payload.name.strip()
+    if not name:
+        raise BusinessError("分类名称不能只包含空")
+
+    category.name = name
     try:
         db.commit()
         db.refresh(category)
