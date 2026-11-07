@@ -14,6 +14,7 @@
 - 开发 baseURL：`http://127.0.0.1:8000`；业务接口统一前缀 `/api`；请求/响应为 JSON、UTF-8。
 - 商品 6 个操作（`/api/products`）：`POST ""`、`GET ""`、`GET /count`、`GET /{id}`、`PATCH /{id}`、`DELETE /{id}`。
 - 分类 5 个操作（`/api/categories`）：`POST ""`、`GET ""`、`PATCH /{id}`、`DELETE /{id}`、`GET /statistics`。
+- 对话 5 个操作（`/api/conversations`）：`POST ""`、`GET ""`、`GET /{id}`、`PATCH /{id}`、`DELETE /{id}`（发消息由阶段 4 的 T4 补上）。
 - 交互式文档：`/docs`（Swagger UI）、`/redoc`、机器可读 `/openapi.json`。
 - 示例中的 ID/数值仅为演示，实际调用请替换为库中真实值。
 
@@ -39,10 +40,12 @@
 
 | HTTP/code | 含义 | 真实文案 | data |
 | --- | --- | --- | --- |
-| 400 | 业务规则不满足 | `商品分类不存在`、`商品名称不能只包含空白`、`分类名称不能只包含空`、`至少提交一个需要修改的字段`、`字段 price 的值不允许为 null` | null |
-| 404 | 资源不存在 | `商品不存在`（详情/删除）、`未找到商品`（改商品）、`分类不存在`、`Not Found`（未定义路径） | null |
+| 400 | 业务规则不满足 | `商品分类不存在`、`商品名称不能只包含空白`、`分类名称不能只包含空`、`会话标题不能只包含空白`、`至少提交一个需要修改的字段`、`字段 price 的值不允许为 null` | null |
+| 404 | 资源不存在 | `商品不存在`（详情/删除）、`未找到商品`（改商品）、`分类不存在`、`会话不存在`、`Not Found`（未定义路径） | null |
 | 409 | 冲突 / 存在依赖 | `分类名称已存在`、`分类下有其他商品，不能删除分类` | null |
 | 422 | 参数校验失败 | `请求参数校验失败`（缺字段、类型错、价格超 2 位小数、`page<1`、`page_size>100`、路径 ID 非整数） | 明细数组 |
+| 502 | 上游模型出错 | `模型服务鉴权失败，请检查 LLM_API_KEY`、`模型服务限流，请稍后重试`、`模型服务不可用`、`模型返回格式无法解析`、`模型返回内容为空`（发消息端点由 T4 补上） | null |
+| 504 | 上游超时 | `模型服务响应超时`（默认 30s，见 `LLM_TIMEOUT_SECONDS`） | null |
 | 500 | 服务端错误 | `数据库操作失败，请检查记录后重试`、`服务器内部错误`；服务层包装：`查询商品列表失败，请稍后重试`、`统计商品数量失败，请稍后重试`、`查询商品失败，请稍后重试`、`查询分类失败，请稍后重试` | null |
 | 503 | 依赖不可用 | 仅 `/readyz`：数据库连不上时返回裸 JSON `{"status":"unavailable","database":"down"}` | 裸 JSON |
 
@@ -225,7 +228,65 @@ curl -s -X DELETE http://127.0.0.1:8000/api/categories/26
 
 > 分类商品数只有本接口提供；`GET /api/categories` 不含 `product_count`，前端需按 `id` 合并两份数据。
 
-## 4 前端接入注意事项
+## 4 对话接口（`/api/conversations`）
+
+阶段 4 新增：会话与消息都落库，刷新后仍在；首版同步返回模型回复（流式见 T4b）。
+本节只有会话 CRUD，发消息端点 `POST /api/conversations/{id}/messages` 由 T4 补上。
+
+### 4.1 新建会话 `POST /api/conversations`
+
+请求体（`title` 可省略）：
+
+| 字段 | 类型 | 必填 | 约束 | 说明 |
+| --- | --- | --- | --- | --- |
+| `title` | string | 否 | ≤100 | 省略或纯空白 → `新会话`；首尾空白会被去掉 |
+
+```json
+{"title":"  定价讨论  "}
+```
+
+响应 `data`：`id`、`title`（已 `strip`）、`agent_key`（固定 `default`）、`update_time`、`create_time`。
+
+```json
+{"id":1,"title":"定价讨论","agent_key":"default","update_time":"2026-11-07 23:25:40","create_time":"2026-11-07 23:25:40"}
+```
+
+### 4.2 会话列表 `GET /api/conversations`
+
+查询参数：`page`（默认 1，≥1）、`page_size`（默认 10，1–100）。
+排序：`update_time` 倒序，同秒内按 `id` 倒序（新建的会话一定在最前）。
+
+`data` 是分页结构，多一个 `message_count`（该会话消息条数，用一次聚合查询算出，不产生 N+1）：
+
+```json
+{"items":[{"id":2,"title":"新会话","agent_key":"default","update_time":"2026-11-07 23:25:40","create_time":"2026-11-07 23:25:40","message_count":0}],"total":1,"page":1,"page_size":10}
+```
+
+### 4.3 会话详情 `GET /api/conversations/{id}`
+
+`data` 在会话字段外多一个 `messages`，按发送顺序（`id` 升序）排列；用户消息的 `model` 为 `null`。
+
+```json
+{"id":1,"title":"改名后","agent_key":"default","update_time":"2026-11-07 23:25:40","create_time":"2026-11-07 23:25:40","messages":[{"id":1,"conversation_id":1,"role":"user","content":"你好","model":null,"create_time":"2026-11-07 23:25:41"}]}
+```
+
+空会话返回 `"messages": []`；不存在返回 404 `会话不存在`。
+
+### 4.4 重命名会话 `PATCH /api/conversations/{id}`
+
+| 字段 | 类型 | 必填 | 约束 |
+| --- | --- | --- | --- |
+| `title` | string | 是 | 1–100；去首尾空白后不能为空 |
+
+- `""` → 422（schema 的 `min_length=1`）
+- `"   "` → 400 `会话标题不能只包含空白`（service 层判断）
+- id 不存在时**优先**返回 404，不再看标题是否合法
+
+### 4.5 删除会话 `DELETE /api/conversations/{id}`
+
+删除会话及其全部消息（数据库外键 `ON DELETE CASCADE` + ORM `cascade="all, delete-orphan"`）。成功返回 `data: null`；不存在返回 404。
+
+## 5 前端接入注意事项
 
 1. **统一解包**：所有业务响应都是 `{code,message,data}`；axios 拦截器里 `code !== 200` 时抛错并展示 `message`，业务层只拿 `data`。
 2. **422 的 `data` 是数组**：不是 `null`，也不是字符串；表单页可读 `data[0].loc` 定位字段，列表页只 toast `message` 即可。
@@ -242,7 +303,7 @@ curl -s -X DELETE http://127.0.0.1:8000/api/categories/26
 13. **名称统一去首尾空白**：商品与分类、新增与改名都先 `strip()` 再判空——纯空白 → 400，空串 → 422。前端仍建议 `trim()` 后再提交，省一次往返。
 14. **CORS / 代理**：开发期推荐 Vite proxy（`/api` → `http://127.0.0.1:8000`）；直连时后端已放行 5173/4173（见 1.6）。
 
-## 5 启动、测试与工具链（不在此展开）
+## 6 启动、测试与工具链（不在此展开）
 
 - 后端依赖安装、建库、迁移、启动、seed、测试命令：`python/fastapi-demo/README.md`（「快速开始」「常用命令」）。
 - 本地自检、pre-commit、CI 三条链路与各工具职责：`docs/toolchain.md`。
@@ -268,6 +329,27 @@ curl -s -X DELETE http://127.0.0.1:8000/api/categories/26
 | `price` | decimal(8,2) | NOT NULL | 单价（元） |
 | `stock` | int | NOT NULL，默认 0 | 库存 |
 | `shelf_status` | bool | NOT NULL，默认 1 | 是否上架 |
+| `create_time` | datetime | NOT NULL，默认当前时间 | 创建时间 |
+
+`conversations`（对话会话表，阶段 4 新增）
+
+| 列 | 类型 | 约束 | 说明 |
+| --- | --- | --- | --- |
+| `id` | int | 主键，自增 | 会话 ID |
+| `title` | varchar(100) | NOT NULL，默认 `新会话` | 会话标题 |
+| `agent_key` | varchar(50) | NOT NULL，默认 `default` | 所属代理标识（为多 Agent 预留） |
+| `update_time` | datetime | NOT NULL，默认当前时间，ON UPDATE | 最后活动时间（列表排序用，建索引） |
+| `create_time` | datetime | NOT NULL，默认当前时间 | 创建时间 |
+
+`messages`（消息表）
+
+| 列 | 类型 | 约束 | 说明 |
+| --- | --- | --- | --- |
+| `id` | int | 主键，自增 | 消息 ID |
+| `conversation_id` | int | NOT NULL，外键 → `conversations.id`，ON DELETE CASCADE | 所属会话（建索引） |
+| `role` | varchar(16) | NOT NULL | `user` / `assistant` / `system` |
+| `content` | text | NOT NULL | 消息正文 |
+| `model` | varchar(64) | 可空 | 生成该回复的模型；用户消息为空 |
 | `create_time` | datetime | NOT NULL，默认当前时间 | 创建时间 |
 
 ## 附录 B：演示数据（`python -m app.seed`）
