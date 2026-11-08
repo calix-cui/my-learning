@@ -150,6 +150,8 @@ class LLMClient(Protocol):
 - 发送中：输入框与按钮禁用，消息区尾部显示「正在回复…」
 - 失败：`ElMessage.error` 显示后端 `message`，用户消息保留、不写入假回复
 - 复用现有样式 token 与统计卡之外的表格体系，不新增视觉规范
+- **助手消息按 Markdown 渲染**（`utils/markdown.ts`：`markdown-it` 渲染 + `DOMPurify` 消毒，`html: false` 让原文里的 HTML 只当文本、外链自动 `target=_blank` + `rel=noopener`）；用户消息保持纯文本并保留换行
+- 这两个依赖约 57KB gzip，`/chat` 改成路由级懒加载（`() => import('@/views/ChatView.vue')`），商品/分类/概览页首屏不受影响
 
 ## 7. 测试口径
 

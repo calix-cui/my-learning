@@ -12,26 +12,31 @@ Vue 3 管理后台 + FastAPI 接口 + MySQL，既能本地开发，也能一条�
 
 ## 快速开始
 
-### 方式一：本地开发（推荐先跑这个）
+### 方式一：本地开发（日常开发用这个）
 
 前置：Python 3.11+、[uv](https://docs.astral.sh/uv/)、Node 22+、[pnpm](https://pnpm.io/)、MySQL 8。
 
-```bash
-# 1) 后端
-cd backend
-cp .env.example .env                # 填数据库密码（.env 不进版本库）
-uv sync                             # 按 uv.lock 装依赖
-make migrate                        # 建表（Alembic）
-uv run python -m app.seed           # 可选：写入演示数据
-make run                            # http://127.0.0.1:8000/docs
+最简单的方式是一条命令起前后端（两边都带热更新）：
 
-# 2) 前端（另开一个终端）
-cd frontend
-pnpm install
-pnpm dev                            # http://127.0.0.1:5173（/api 代理到 8000）
+```bash
+cp backend/.env.example backend/.env   # 填数据库密码（.env 不进版本库）
+cd backend && uv sync && make migrate  # 装依赖 + 建表（首次）
+cd .. && ./scripts/dev.sh              # 前端 :5173、后端 :8000，Ctrl-C 一起停
 ```
 
-### 方式二：容器一键起
+想分开起也可以：
+
+```bash
+# 终端 A：后端
+cd backend && make run                 # uvicorn --reload，http://127.0.0.1:8000/docs
+
+# 终端 B：前端
+cd frontend && pnpm dev                # Vite HMR，http://127.0.0.1:5173（/api 代理到 8000）
+```
+
+演示数据（12 件商品 / 3 个分类）：`cd backend && uv run python -m app.seed`。
+
+### 方式二：容器一键起（交付验证用，不是开发用）
 
 前置：[Docker Desktop](https://www.docker.com/products/docker-desktop/)（或 colima + docker compose 插件）。
 
@@ -42,6 +47,10 @@ open http://localhost:8080
 ```
 
 细节见 [部署文档](docs/deploy.md)。
+
+> **什么时候用哪个**：改代码就用方式一——Vite HMR 与 `uvicorn --reload` 都是秒级生效，容器每改一次都要重打镜像、重装依赖（几分钟到十几分钟，还依赖网络）。
+> 方式二只在**交付前验证**、给别人演示或验收「一键部署」时用；它跑的是镜像里的代码，改了源码不重建就不会生效。
+> 两者都用同一个 MySQL 结构（Alembic 迁移），但数据是分开的：本地库和容器卷里的数据互不影响。
 
 ## 目录结构
 

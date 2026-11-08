@@ -1,9 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import CategoryManage from '@/views/CategoryManage.vue'
-import ChatView from '@/views/ChatView.vue'
 import Dashboard from '@/views/Dashboard.vue'
 import ProductList from '@/views/ProductList.vue'
+
+// 对话页带着 markdown-it + DOMPurify（约 60KB gzip），按需加载，别拖慢商品页首屏
+const ChatView = () => import('@/views/ChatView.vue')
 
 const router = createRouter({
   history: createWebHistory(),

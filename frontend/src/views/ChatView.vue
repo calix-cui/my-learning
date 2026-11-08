@@ -12,6 +12,7 @@ import {
   sendMessageStream,
 } from '@/api/chat'
 import type { ChatConversationListItem, ChatMessage } from '@/types/api'
+import { renderMarkdown } from '@/utils/markdown'
 
 const conversations = ref<ChatConversationListItem[]>([])
 /** 当前打开的会话；null 表示还没选（空态） */
@@ -31,13 +32,24 @@ const canSend = computed(
 )
 const showEmptyState = computed(() => !loadingMessages.value && messages.value.length === 0)
 
-/** 消息区滚到底：新消息、切换会话都要滚 */
+/** 顶部标签显示真正回话的模型（流式与非流式都会写进 assistant 消息） */
+const modelLabel = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+    const model = messages.value[i].model
+    if (model) return model
+  }
+  return ''
+})
+
+/** 消息区滚到底：新消息、切换会话都要滚；Markdown 渲染后高度会变，等一帧再滚 */
 function scrollToBottom() {
   void nextTick(() => {
-    const el = messageBody.value
-    if (el) {
-      el.scrollTop = el.scrollHeight
-    }
+    requestAnimationFrame(() => {
+      const el = messageBody.value
+      if (el) {
+        el.scrollTop = el.scrollHeight
+      }
+    })
   })
 }
 
@@ -253,9 +265,9 @@ onMounted(async () => {
             {{ activeId === null ? '选择或新建一个会话' : `${messages.length} 条消息` }}
           </span>
         </div>
-        <el-tag size="small" type="info" effect="plain"
-          >模型：{{ messages[0]?.model ?? 'fake' }}</el-tag
-        >
+        <el-tag v-if="modelLabel" size="small" type="info" effect="plain">
+          模型：{{ modelLabel }}
+        </el-tag>
       </header>
 
       <div ref="messageBody" v-loading="loadingMessages" class="chat__body">
@@ -277,7 +289,13 @@ onMounted(async () => {
         >
           <div class="chat__avatar">{{ message.role === 'user' ? '我' : 'AI' }}</div>
           <div class="chat__bubble">
-            <p class="chat__content">{{ message.content }}</p>
+            <!-- 模型的回复是 Markdown；用户消息按纯文本显示，保留换行 -->
+            <div
+              v-if="message.role === 'assistant'"
+              class="chat__content chat__content--md"
+              v-html="renderMarkdown(message.content)"
+            />
+            <p v-else class="chat__content">{{ message.content }}</p>
             <span class="chat__time">
               {{ message.create_time.slice(11, 16) }}
               <template v-if="message.model"> · {{ message.model }}</template>
@@ -288,7 +306,7 @@ onMounted(async () => {
         <div v-if="sending" class="chat__row chat__row--assistant">
           <div class="chat__avatar">AI</div>
           <div v-if="streamingText" class="chat__bubble">
-            <p class="chat__content">{{ streamingText }}</p>
+            <div class="chat__content chat__content--md" v-html="renderMarkdown(streamingText)" />
             <span class="chat__time">正在输入…</span>
           </div>
           <div v-else class="chat__bubble chat__bubble--typing">
@@ -559,6 +577,102 @@ onMounted(async () => {
   line-height: 1.75;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.chat__content--md {
+  white-space: normal;
+}
+
+.chat__content--md :deep(p) {
+  margin: 0 0 8px;
+}
+
+.chat__content--md :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.chat__content--md :deep(h1),
+.chat__content--md :deep(h2),
+.chat__content--md :deep(h3),
+.chat__content--md :deep(h4) {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.chat__content--md :deep(h1:first-child),
+.chat__content--md :deep(h2:first-child),
+.chat__content--md :deep(h3:first-child),
+.chat__content--md :deep(h4:first-child) {
+  margin-top: 0;
+}
+
+.chat__content--md :deep(ul),
+.chat__content--md :deep(ol) {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.chat__content--md :deep(li) {
+  margin-bottom: 2px;
+}
+
+.chat__content--md :deep(strong) {
+  font-weight: 600;
+  color: var(--pa-color-text-primary);
+}
+
+.chat__content--md :deep(a) {
+  color: var(--pa-color-primary);
+  text-decoration: underline;
+}
+
+.chat__content--md :deep(code) {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background-color: var(--pa-color-border-light);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.chat__content--md :deep(pre) {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background-color: var(--pa-color-border-light);
+  overflow-x: auto;
+}
+
+.chat__content--md :deep(pre code) {
+  padding: 0;
+  background: none;
+}
+
+.chat__content--md :deep(blockquote) {
+  margin: 0 0 8px;
+  padding-left: 10px;
+  border-left: 3px solid var(--pa-color-border);
+  color: var(--pa-color-text-secondary);
+}
+
+.chat__content--md :deep(hr) {
+  margin: 10px 0;
+  border: none;
+  border-top: 1px solid var(--pa-color-border);
+}
+
+.chat__content--md :deep(table) {
+  margin: 0 0 8px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.chat__content--md :deep(th),
+.chat__content--md :deep(td) {
+  padding: 4px 8px;
+  border: 1px solid var(--pa-color-border);
+  text-align: left;
 }
 
 .chat__time {

@@ -1,7 +1,7 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-07 · 工作区干净 · `main` 与 `origin/main` 同步（`c219c74`，文档治理 5 个提交已推送）
+> 最近更新：2026-11-08 · 工作区干净 · `main` 与 `origin/main` 同步（见 `git log -1`）
 
 ## 1. 现在在哪
 
@@ -19,6 +19,8 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-08 | **接入真实模型**：DeepSeek（OpenAI 兼容）跑通本地与容器；修 `NO_PROXY=[::1]` 导致 `httpx.InvalidURL` 启动崩溃、补 402 余额不足映射、测试强制 fake 隔离 | [backend/README.md](../backend/README.md)「接入真实模型」、[api.md](api.md) §4.6 |
+| 11-08 | **开发体验**：`scripts/dev.sh` 一条命令起前后端（都带热更新）；README 写明「日常开发用本地、容器只做交付验证」；对话页助手消息支持 Markdown 渲染（`markdown-it` + `DOMPurify`，路由级懒加载） | `frontend/src/utils/markdown.ts`、[chat.md](chat.md) §6、[toolchain.md](toolchain.md) |
 | 11-08 | **目录扁平化**：`python/fastapi-demo/` → `backend/`、`fullstack/product-admin/` → `frontend/`（`git mv` 保留历史），同步 CI 路径、Compose 上下文、pre-commit 正则、`.vscode`、全部文档与角色卡；E2E 复跑 18/18 + 10/10 | 提交见 `git log` |
 | 11-08 | **阶段 4 对话功能**：会话/消息落库 + 模型抽象（fake/openai）+ 会话 CRUD + 同步与 SSE 两种发消息 + `/chat` 页面；后端 120 例 / 87.87%，前端 26 例，E2E 10 项 | [chat.md](chat.md)、[api.md](api.md) §4、[ADR-0006](adr/0006-llm-client-and-chat-storage.md) |
 | 11-07 | **名称空白校验统一**：分类改名、商品改名与新增同规则（先 strip 再判空，纯空白 400），补 5 个用例 | T-22 已解决、[api.md](api.md) §2.5/§3.3 |

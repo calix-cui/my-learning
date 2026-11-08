@@ -2,6 +2,8 @@
 
 > 你不需要记住所有命令，只需要记住**三条链路**：本地跑起来、提交前自检、推送后 CI。
 > 全部命令都在项目根执行，或按标注切换目录。
+>
+> 日常开发可以直接 `./scripts/dev.sh`：一条命令起后端（`uvicorn --reload`）+ 前端（Vite HMR），两个都带热更新，Ctrl-C 一起停。容器只在交付验证时构建，见根 `README.md`「什么时候用哪个」。
 
 ## 0. 一张图看全
 
@@ -62,6 +64,7 @@ flowchart TB
 | **ESLint** | 抓未使用变量、Vue 模板错误。按 ADR-0002 只开轻量档 | `pnpm lint`、`pnpm lint:fix` | `eslint.config.js` |
 | **Prettier** | 格式统一，避免 diff 里全是空白变化 | `pnpm format`、`pnpm format:check` | `.prettierrc.json` |
 | **Vitest** | 单元测试，只测 `src/api`（纯逻辑，不碰 DOM） | `pnpm test`、`pnpm test:watch` | `vitest.config.ts` |
+| **markdown-it + DOMPurify** | 把模型回复的 Markdown 渲染成 HTML；原文 HTML 当文本、渲染结果再消毒，外链强制 `_blank` | 页面内自动生效（`/chat`） | `frontend/src/utils/markdown.ts` |
 | **puppeteer-core** | 真浏览器跑端到端验收：商品 18 项、对话 10 项（可选，需先起前后端） | `pnpm acceptance` / `pnpm acceptance:chat` | `scripts/acceptance.mjs`、`scripts/chat-acceptance.mjs` |
 
 ## 3. 提交与 CI
@@ -115,6 +118,7 @@ flowchart LR
 | 后端模型抽象 | `tests/test_llm.py` | 15 | `make test` | 否（`httpx.MockTransport`） | `FakeLLM` 回显与分片、401/403/429/超时/畸形帧的错误映射、上游文案不外泄 |
 | 后端对话服务 | `tests/test_chat_service.py` | 30 | `make test` | 否（内存 SQLite） | 会话 CRUD、上下文截断与顺序、事务回滚、SSE 事件序列、断开即回滚 |
 | 后端对话接口 | `tests/test_chat_api.py` | 20 | `make test` | 否（`dependency_overrides`） | 会话与消息端点、`text/event-stream`、400/404/502/504 |
+| 前端工具函数 | `frontend/src/utils/markdown.test.ts` | 6 | `pnpm test` | 否（纯字符串） | 加粗/列表/代码块/自动换行、原文 HTML 不当标签、外链 rel；拦不住真实 DOM 消毒 |
 | 前端 api 层 | `frontend/src/api/*.test.ts` | 26 | `pnpm test` | 否（假 adapter） | 错误码到提示语的映射、请求封装、SSE 分帧解析；拦不住组件渲染与交互 |
 | 端到端 | `frontend/scripts/acceptance.mjs` | 18 项 | `pnpm acceptance` | **是**（真实后端 + 真实库） | 增删改查全链路、弹窗与 toast、空态；会改数据，只在本地跑 |
 | 端到端 | `frontend/scripts/chat-acceptance.mjs` | 10 项 | `pnpm acceptance:chat` | **是**（真实后端 + 真实库） | 对话页：空态、新建、流式逐字、自动命名、刷新保留、排序、删除；跑前跑后清空会话 |

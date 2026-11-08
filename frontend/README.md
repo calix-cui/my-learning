@@ -12,6 +12,7 @@
 | UI | Element Plus 2.x + @element-plus/icons-vue（中文语言包 zh-cn） |
 | 请求 | axios（统一响应拦截器） |
 | 路由 | vue-router 4（HTML5 history 模式） |
+| Markdown | markdown-it 15 + DOMPurify 3（只用于对话页，路由级懒加载） |
 
 ## 启动方式
 
@@ -87,7 +88,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 | `/products` | 商品列表 | `views/ProductList.vue` + `components/ProductFormDialog.vue` |
 | `/categories` | 分类管理 | `views/CategoryManage.vue` + `components/CategoryFormDialog.vue` |
 | `/dashboard` | 概览 | `views/Dashboard.vue` |
-| `/chat` | 对话（会话列表 + 消息区，SSE 逐字渲染，阶段 4） | `views/ChatView.vue`、`api/chat.ts` |
+| `/chat` | 对话（会话列表 + 消息区，SSE 逐字渲染，助手消息按 Markdown 渲染） | `views/ChatView.vue`、`api/chat.ts`、`utils/markdown.ts` |
 
 **每个页面的字段、状态、空态与交互细节在 [`docs/design/design.md`](../docs/design/design.md) 与 [`docs/product/prd.md`](../docs/product/prd.md)** —— 那里是设计与需求的唯一来源，本文件只列路由归属。
 
