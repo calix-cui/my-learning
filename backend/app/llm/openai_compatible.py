@@ -4,11 +4,27 @@
 """
 
 import json
+import logging
 from collections.abc import Iterator
 
 import httpx
 
 from app.llm.base import ChatMessage, LLMError, LLMReply, LLMTimeoutError
+
+logger = logging.getLogger(__name__)
+
+
+def _default_client(timeout_seconds: float) -> httpx.Client:
+    """构造 httpx.Client；环境变量里的代理配置有问题时退化为不读环境代理。
+
+    实测：某些 shell / 工具链会把 NO_PROXY 写成 `localhost,::1,[::1]`，
+    httpx 解析 `[::1]` 会抛 InvalidURL，导致服务一启动就崩。这里兜住它。
+    """
+    try:
+        return httpx.Client(timeout=timeout_seconds)
+    except (httpx.InvalidURL, ValueError) as exc:
+        logger.warning("环境代理配置无法解析，改为忽略环境代理：%s", exc)
+        return httpx.Client(timeout=timeout_seconds, trust_env=False)
 
 
 class OpenAICompatibleClient:
@@ -25,7 +41,7 @@ class OpenAICompatibleClient:
         self.model = model
         self.timeout_seconds = timeout_seconds
         # 允许注入 client，测试里用 MockTransport 拦截所有请求，不碰真实网络。
-        self._client = client or httpx.Client(timeout=timeout_seconds)
+        self._client = client or _default_client(timeout_seconds)
 
     def _payload(self, messages: list[ChatMessage], *, stream: bool) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -43,6 +59,9 @@ class OpenAICompatibleClient:
     def _raise_for_status(self, status_code: int) -> None:
         if status_code in (401, 403):
             raise LLMError("模型服务鉴权失败，请检查 LLM_API_KEY")
+        if status_code == 402:
+            # DeepSeek 等厂商余额不足时返回 402，和鉴权失败区分开，便于排查
+            raise LLMError("模型服务余额不足，请检查账户余额")
         if status_code == 429:
             raise LLMError("模型服务限流，请稍后重试")
         if status_code >= 400:

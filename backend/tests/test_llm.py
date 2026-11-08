@@ -167,3 +167,28 @@ def test_openai_compatible_rejects_empty_content():
         _client(handler).chat([{"role": "user", "content": "你好"}])
 
     assert "为空" in str(exc_info.value)
+
+
+def test_client_falls_back_when_env_proxy_unparsable(monkeypatch):
+    """NO_PROXY 里带 `[::1]` 时 httpx 会抛 InvalidURL；客户端应退化为忽略环境代理。"""
+    from app.llm import openai_compatible as mod
+
+    real_client_cls = httpx.Client
+    calls: list[dict[str, object]] = []
+
+    def fake_client(*args: object, **kwargs: object) -> httpx.Client:  # noqa: ARG001
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise httpx.InvalidURL("Invalid port: ':1]'")
+
+        def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+            return httpx.Response(200, json={})
+
+        return real_client_cls(transport=httpx.MockTransport(handler), trust_env=False)
+
+    monkeypatch.setattr(mod.httpx, "Client", fake_client)
+    client = mod.OpenAICompatibleClient(base_url="https://example.com/v1", api_key="k", model="m")
+
+    assert len(calls) == 2
+    assert calls[1]["trust_env"] is False
+    assert client._client is not None

@@ -15,6 +15,13 @@ os.environ.setdefault(
     "mysql+pymysql://test:test@127.0.0.1:3306/fastapi_demo_test?charset=utf8mb4",
 )
 
+# 本地 .env 可能配了真实模型（LLM_PROVIDER=openai + 真 key）。测试固定走 fake：
+# 既保证不联网、不花额度，也避免用例依赖开发者本机的 .env。
+os.environ["LLM_PROVIDER"] = "fake"
+os.environ["LLM_BASE_URL"] = ""
+os.environ["LLM_API_KEY"] = ""
+os.environ["LLM_MODEL"] = ""
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker

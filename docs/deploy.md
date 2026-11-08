@@ -52,6 +52,11 @@ docker compose exec backend python -m app.seed
 | `FRONTEND_PORT` | compose → `frontend` | | `8080` | 宿主机端口，冲突时改成 8081 等 |
 | `HTTP_PORT` / `HTTPS_PORT` | compose → `caddy` | | `80` / `443` | 仅 `--profile https` 时生效 |
 | `SITE_ADDRESS` | `caddy` | | `localhost` | 域名；填真实域名由 Caddy 自动签证书 |
+| `LLM_PROVIDER` | `backend`（`app/config.py`） | | `fake` | `fake` 不联网；接真实模型改 `openai` |
+| `LLM_BASE_URL` | `backend` | `openai` 时必填 | — | 如 `https://api.deepseek.com/v1` |
+| `LLM_API_KEY` | `backend` | `openai` 时必填 | — | 模型服务的 key，只写 `.env` |
+| `LLM_MODEL` | `backend` | `openai` 时必填 | — | 如 `deepseek-chat` / `deepseek-reasoner` |
+| `LLM_TIMEOUT_SECONDS` | `backend` | | `60` | 单次请求超时；流式按整条回复计 |
 
 安全约定：`.env` 都在 `.gitignore` 里，仓库只提交 `.env.example` 且不含真实密码。换环境时改的是 `.env`，不是这里的表。
 

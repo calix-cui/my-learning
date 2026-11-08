@@ -74,6 +74,30 @@ uv run python -m uvicorn app.main:app --reload
 
 > 没装 uv？`brew install uv` 或 `curl -LsSf https://astral.sh/uv/install.sh | sh`。不打算用 uv 时，`uv export --format requirements-txt --no-hashes > /tmp/req.txt` 可以导出成 pip 能用的依赖清单（属临时方案，版本以 uv.lock 为准）。
 
+## 接入真实模型
+
+默认 `LLM_PROVIDER=fake`：不联网、不需要 key，回复形如 `[fake] 收到：<你的话>`，方便本地开发与 CI。
+
+要用真实模型（下面以 DeepSeek 为例），在 `backend/.env` 里改这四行，然后重启服务：
+
+```bash
+LLM_PROVIDER=openai
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_API_KEY=sk-你的key
+LLM_MODEL=deepseek-chat
+LLM_TIMEOUT_SECONDS=60      # 流式按整条回复计时，30s 对长回答偏紧
+```
+
+容器部署时把这四行写到**仓库根**的 `.env`（`docker-compose.yml` 会把它们传给 `backend`），然后 `docker compose up -d backend`。
+
+几点说明：
+
+- 任何 OpenAI 兼容服务都能用，换 `LLM_BASE_URL` 与 `LLM_MODEL` 即可（OpenAI、硅基流动、vLLM 等）。
+- key 只放 `.env`（`.gitignore` 已忽略），不要写进代码、提交或打进镜像；`Settings` 用 `SecretStr` 并在校验错误里隐藏输入值。
+- `LLM_PROVIDER=openai` 时缺任一项配置，服务**启动阶段**就会报 `LLM_PROVIDER=openai 时必须配置：...`，不会拖到第一次请求。
+- 上游故障会被翻译成固定文案（402 余额不足、401/403 鉴权失败、429 限流、超时 504），原始报错不透传给前端，详见 [`docs/api.md`](../docs/api.md) §4.6。
+- 若 shell 里的 `NO_PROXY` 写成 `[::1]` 这类 httpx 解析不了的形式，客户端会自动退化为忽略环境代理，只在日志里留一条 warning。
+
 ## 常用命令
 
 ```bash
