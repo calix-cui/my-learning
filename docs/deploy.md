@@ -18,6 +18,12 @@ open http://localhost:8080
 
 首次启动后端会自动执行 `alembic upgrade head`，把表结构建好；之后再启动是幂等的，不会重复建表。
 
+容器里的库是空的（数据在 `db-data` 卷里）。要演示数据的话，跑一次种子脚本（幂等，按名字跳过已存在的分类与商品）：
+
+```bash
+docker compose exec backend python -m app.seed
+```
+
 ## 3. 服务与端口
 
 | 服务 | 镜像/构建 | 对外端口 | 说明 |
