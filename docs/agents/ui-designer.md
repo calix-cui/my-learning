@@ -10,7 +10,7 @@
 ## 2. 输入
 
 - `docs/product/<项目>-prd.md`（功能与字段来源）
-- 现有实现截图（若有）与 `fullstack/product-admin/src/styles/index.css`（现有 token，**优先复用而不是另起一套**）
+- 现有实现截图（若有）与 `frontend/src/styles/index.css`（现有 token，**优先复用而不是另起一套**）
 - 屏幕基准：**1440×900**
 
 ## 3. 输出
@@ -48,7 +48,7 @@
 
 ## 5. 禁止事项
 
-- ❌ 改 `python/` 或 `fullstack/product-admin/src/` 下的实现代码（发现实现问题用 send_message 报给 lead，不自己动手）
+- ❌ 改 `backend/` 或 `frontend/src/` 下的实现代码（发现实现问题用 send_message 报给 lead，不自己动手）
 - ❌ 引入外部字体/图标 CDN（离线不可用）
 - ❌ 只给"看起来对不对"的结论，不给尺寸
 - ❌ 设计 PRD 里不存在的功能

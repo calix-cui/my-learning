@@ -50,7 +50,7 @@
 - **遗留**：未启用 type-aware 规则，`any` 泛滥一类问题仍靠 review 兜底。
 
 ### T-03 零单元测试（P0 · S）—— ✅ 已于 2026-11-07 解决
-- **原证据**：`fullstack/product-admin` 下无 `tests/`、无 `vitest.config.*`。
+- **原证据**：`frontend` 下无 `tests/`、无 `vitest.config.*`。
 - **影响**：前端唯一质量网是 18 项 E2E（装 Chrome、起两服务、动真实库），改一个 api 封装无法快速验证。
 - **解决**（轻量档，见 [ADR-0005](adr/0005-testing-baseline.md)）：`vitest@3.2.7` + `src/api/{client,products,categories}.test.ts` 共 17 例，CI 增加「单元测试」步骤；**组件层仍无单测**，靠 E2E 兜底。
 
@@ -104,7 +104,7 @@
 - **建议**：部署前必须加最小鉴权（哪怕是单一 API Key / HTTP Basic），CORS 来源改为配置项，且 `allow_methods` 收敛。
 
 ### T-22 分类改名不 strip（P2 · S）✅ 已于 2026-11-07 解决
-- **已修复**：`update_category` 改为先查资源（404 优先）再 `strip()` 判空（400），与创建路径同一套规则；`update_product` 同名处理，并把 `ProductUpdateRequest` 的 `str_strip_whitespace` 移除，避免纯空白被 Pydantic 拦成 422；补 5 个用例（55 passed）。
+- **已修复**：`update_category` 改为先查资源（404 优先）再 `strip()` 判空（400），与创建路径同一套规则；`update_product` 同名处理，并把 `ProductUpdateRequest` 的 `str_strip_whitespace` 移除，避免纯空白被 Pydantic 拦成 422；补 5 个用例（当时 55 passed，现 120 passed）。
 - **证据（修复前）**：`app/services/category_service.py` 的 `update_category` 直接使用入参，无 `strip()`；创建路径有全空白校验。
 - **影响**：可以把分类改成 `"   "`，前端显示为空白行。
 - **建议**：与创建路径共用同一个 `normalize_name()` 校验。
@@ -127,7 +127,7 @@
 
 ### T-09 零部署能力 ✅ 已解决（2026-11-07）
 - **原证据**：仓库无 `Dockerfile`、`docker-compose.yml`、反代配置、部署脚本。
-- **已补**：`python/fastapi-demo/Dockerfile`（uv 多阶段）、`fullstack/product-admin/Dockerfile`（node→nginx）、`docker-compose.yml`（db/backend/frontend/caddy）、`deploy/Caddyfile`、`.env.example`、`/healthz` `/readyz`、`docs/deploy.md`、ADR-0004。
+- **已补**：`backend/Dockerfile`（uv 多阶段）、`frontend/Dockerfile`（node→nginx）、`docker-compose.yml`（db/backend/frontend/caddy）、`deploy/Caddyfile`、`.env.example`、`/healthz` `/readyz`、`docs/deploy.md`、ADR-0004。
 - **遗留**：镜像构建未进 CI；无发布脚本与回滚流程；`readyz` 未纳入 compose 的 backend healthcheck（用的是 `/healthz`）。
 
 ### T-10 前端 API 基址硬编码（P1 · S）
@@ -160,7 +160,7 @@
 ## 7. 文档与仓库卫生
 
 ### T-19 文档定位重复/过期（P2 · S）—— ✅ 已于 2026-11-07 解决
-- **原证据**：`docs/README.md` 曾只有 10 行且内容是「学习笔记」占位；`python/fastapi-demo/app/README.md`（9 行目录说明）与项目级 README 的「目录结构」章节重叠。
+- **原证据**：`docs/README.md` 曾只有 10 行且内容是「学习笔记」占位；`backend/app/README.md`（9 行目录说明）与项目级 README 的「目录结构」章节重叠。
 - **解决**：`docs/README.md` 重写为阅读路径 + 文档地图 + 单一事实来源 + 维护规则；`app/README.md` 已删除，有效信息并入 `docs/how-it-works.md` §3。
 
 ### T-20 两套同名设计图（P2 · S）—— ✅ 已于 2026-11-07 解决
@@ -169,7 +169,7 @@
 - **建议**：文件名加前缀（`design-01-*.png` / `shot-01-*.png`），或在各自 README 顶部放一张对照说明。
 
 ### T-25 工作区残留（P2 · S）
-- **证据**：`./.DS_Store`、`python/.DS_Store`、多处 `__pycache__`、`fullstack/product-admin/dist/`、`.ruff_cache/`（均已被 `.gitignore` 忽略，不会入库）。
+- **证据**：`./.DS_Store`、`backend/.DS_Store`、多处 `__pycache__`、`frontend/dist/`、`.ruff_cache/`（均已被 `.gitignore` 忽略，不会入库）。
 - **影响**：无功能影响，但 `find`/搜索噪音大，且 `dist/` 存在会让人误以为构建产物需要提交。
 - **建议**：`make clean` 或在 README 注明；不必特意清理。
 

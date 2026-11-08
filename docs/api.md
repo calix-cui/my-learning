@@ -371,7 +371,7 @@ data: {"type": "done", "conversation_id": 3, "conversation_title": "流式测试
 
 ## 6 启动、测试与工具链（不在此展开）
 
-- 后端依赖安装、建库、迁移、启动、seed、测试命令：`python/fastapi-demo/README.md`（「快速开始」「常用命令」）。
+- 后端依赖安装、建库、迁移、启动、seed、测试命令：`backend/README.md`（「快速开始」「常用命令」）。
 - 本地自检、pre-commit、CI 三条链路与各工具职责：`docs/toolchain.md`。
 - 本文件变更历史：`git log -- docs/api.md`。
 
@@ -423,4 +423,4 @@ data: {"type": "done", "conversation_id": 3, "conversation_title": "流式测试
 - 幂等：按名称判断，已存在的分类/商品直接跳过（不修改、不重复插入），可反复执行；结束打印「新增分类/商品、跳过、库内总量」。
 - 3 个分类：饮料、零食、乳品；12 个商品，每个分类 4 个，其中 2 个下架（奥利奥饼干、光明酸奶），用于演示分页与状态标签。
 - 商品：饮料=可口可乐/雪碧/农夫山泉/东方树叶；零食=乐事薯片/奥利奥饼干/旺旺雪饼/三只松鼠坚果；乳品=蒙牛纯牛奶/光明酸奶/伊利安慕希/特仑苏。
-- 运行：`cd python/fastapi-demo && uv run python -m app.seed`；在已有同名数据时按名称跳过（例如库里已有「雪碧」则只新增其余 11 条）。
+- 运行：`cd backend && uv run python -m app.seed`；在已有同名数据时按名称跳过（例如库里已有「雪碧」则只新增其余 11 条）。

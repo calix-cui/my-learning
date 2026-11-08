@@ -30,7 +30,7 @@ services:
 
   backend:
     build:
-      context: ./python/fastapi-demo
+      context: ./backend
     restart: unless-stopped
     environment:
       DATABASE_URL: mysql+pymysql://${MYSQL_USER:-fastapi}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-fastapi_demo}?charset=utf8mb4
@@ -48,7 +48,7 @@ services:
 
   frontend:
     build:
-      context: ./fullstack/product-admin
+      context: ./frontend
     restart: unless-stopped
     ports:
       # 不开 Caddy 时直接用它访问站点

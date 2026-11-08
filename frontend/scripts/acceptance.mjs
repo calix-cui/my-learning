@@ -1,7 +1,7 @@
 // 商品管理后台 · 端到端验收脚本
 //
 // 用法：
-//   1. 先起后端（python/fastapi-demo）与前端（pnpm dev，默认 5173）
+//   1. 先起后端（backend）与前端（pnpm dev，默认 5173）
 //   2. pnpm acceptance               # 默认打 http://127.0.0.1:5173
 //      BASE=http://127.0.0.1:4173 pnpm acceptance   # 也可以打 preview
 //

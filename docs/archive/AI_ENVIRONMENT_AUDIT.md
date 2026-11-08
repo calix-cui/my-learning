@@ -124,7 +124,7 @@ DSH 会话目录共 8 个，来源是 profile bundles（`@deepseek-ai/dsh-base` 
 | jq | 1.7.1 | ✅ | 解析 JSON |
 | make | GNU Make 3.81 | ✅ | 后端 Makefile 依赖它（3.81 较老，不支持 `.ONESHELL` 之外的少数特性） |
 | mysql | 8.4.13 | ✅ | 本机数据库 |
-| ruff / pytest / pre-commit | 未装全局 | ✅ 项目内 | 只能 `python/fastapi-demo/.venv/bin/python -m ruff` 这样调用；根目录直接跑 `ruff` 会 command not found |
+| ruff / pytest / pre-commit | 未装全局 | ✅ 项目内 | 只能 `backend/.venv/bin/python -m ruff` 这样调用；根目录直接跑 `ruff` 会 command not found |
 | pipx | 未安装 | — | 装全局 Python CLI 时可用 `uv tool` 替代 |
 
 ## 5. 项目中已有的 Agent / Prompt / Rules / Workflow 资产
@@ -135,8 +135,8 @@ DSH 会话目录共 8 个，来源是 profile bundles（`@deepseek-ai/dsh-base` 
 | 开发全局规范 | `AGENTS.md` | Rule | ★★★ 但未提交 |
 | 提交前检查链 | `.pre-commit-config.yaml` | Workflow | ★★ 仅后端 |
 | CI 流水线 | `.github/workflows/ci.yml` | Workflow | ★★ 仅后端 |
-| 后端一键命令 | `python/fastapi-demo/Makefile` | Workflow | ★★ |
-| UI 验收脚本 | `fullstack/product-admin/scripts/acceptance.mjs` | Workflow | ★★★ 18 项断言 + 截图，可直接演进为回归基线 |
+| 后端一键命令 | `backend/Makefile` | Workflow | ★★ |
+| UI 验收脚本 | `frontend/scripts/acceptance.mjs` | Workflow | ★★★ 18 项断言 + 截图，可直接演进为回归基线 |
 | 多角色协作实践 | 上一轮任务的 4 个 teammate（产品/设计/后端/前端） | Agent（会话内，已结束） | 经验在，**定义未落盘**（本阶段补 `docs/agents/`） |
 | DSH 插件商店 | `search-dsh-store` Skill + `store_*` 工具 | 能力 | ★★ 装插件/技能时用 |
 

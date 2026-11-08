@@ -10,25 +10,25 @@
 | 项 | 内容 |
 |---|---|
 | 版本 | v1.0（2026-11-06 首次交付，2026-11-07 复核） |
-| 范围 | 前端 `fullstack/product-admin/` + 后端 `python/fastapi-demo/` |
+| 范围 | 前端 `frontend/` + 后端 `backend/` |
 | 需求 | P0 十六条（F-01…F-16）全部实现 |
 | 自动化 UI 验收 | **18/18 通过**（`pnpm acceptance`，真实浏览器 + 真实后端） |
-| 后端自检 | `make check` 绿：ruff 全过 + 55 passed + 覆盖率 85.38% |
-| 前端自检 | `pnpm lint` / `pnpm test`（17 passed）/ `pnpm build` 全过 |
+| 后端自检 | `make check` 绿：ruff 全过 + 120 passed + 覆盖率 87.88% |
+| 前端自检 | `pnpm lint` / `pnpm test`（26 passed）/ `pnpm build` 全过 |
 | CI | GitHub Actions 两个 job 全绿（backend 13s、frontend 26s） |
 
 ## 2. 怎么复跑
 
 ```bash
 # 后端自检（不需要 MySQL）
-cd python/fastapi-demo && make check
+cd backend && make check
 
 # 起服务（验收前提：MySQL 可用、已执行 make migrate 与 python -m app.seed）
-cd python/fastapi-demo && make run            # :8000
-cd fullstack/product-admin && pnpm dev        # :5173，/api 代理到 8000
+cd backend && make run            # :8000
+cd frontend && pnpm dev        # :5173，/api 代理到 8000
 
 # 端到端验收（最后一行应为「汇总：18/18 通过」）
-cd fullstack/product-admin && pnpm acceptance
+cd frontend && pnpm acceptance
 ```
 
 验收脚本产物（过程截图 + `result.json`）落在 `.acceptance/`，已被 `.gitignore` 忽略；脚本会自动清理它创建的商品与分类。
@@ -116,4 +116,4 @@ cd fullstack/product-admin && pnpm acceptance
 - 需求与验收标准：[`product/prd.md`](product/prd.md)
 - 视觉规范：[`design/design.md`](design/design.md)
 - 接口契约：[`../docs/api.md`](api.md)
-- 前端说明：[`../fullstack/product-admin/README.md`](../fullstack/product-admin/README.md)
+- 前端说明：[`../frontend/README.md`](../frontend/README.md)

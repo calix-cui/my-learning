@@ -124,16 +124,16 @@ erDiagram
 | 加一个接口 | `app/api/products.py` | `app/schemas/`、`docs/api.md`（契约） |
 | 改业务规则 | `app/services/` | `tests/test_*_service.py` |
 | 加字段 | `app/models/` → `make revision m="..."` | `app/schemas/`、`docs/api.md` |
-| 改页面 | `fullstack/product-admin/src/views/` | 复用 `components/` 与 `styles/index.css` 的 token |
-| 改样式 | `fullstack/product-admin/src/styles/index.css` | `docs/design/design.md`（规范） |
+| 改页面 | `frontend/src/views/` | 复用 `components/` 与 `styles/index.css` 的 token |
+| 改样式 | `frontend/src/styles/index.css` | `docs/design/design.md`（规范） |
 | 改部署 | `docker-compose.yml`、两个 `Dockerfile`、`nginx.conf` | `docs/deploy.md` |
 
 ## 6. 读代码的顺序（约 40 分钟）
 
-1. `python/fastapi-demo/app/main.py`（40 行）——应用怎么装起来的
+1. `backend/app/main.py`（40 行）——应用怎么装起来的
 2. `app/api/products.py` → `app/services/product_service.py` → `app/models/product.py`——顺着一条链路看穿四层
 3. `app/common/response.py` 与 `app/common/exceptions.py`——统一响应与错误是怎么做到的
-4. `fullstack/product-admin/src/api/client.ts` → `views/ProductList.vue`——前端怎么调接口、怎么渲染
+4. `frontend/src/api/client.ts` → `views/ProductList.vue`——前端怎么调接口、怎么渲染
 5. 回到本页第 2 节，把时序图与真实代码对一遍
 
 看完还看不懂的地方，就是文档该补的地方——直接开 issue 或告诉 AI 助手。

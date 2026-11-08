@@ -1,8 +1,8 @@
 {
-  "python.defaultInterpreterPath": "python/fastapi-demo/.venv/bin/python",
-  "python.analysis.extraPaths": ["python/fastapi-demo"],
+  "python.defaultInterpreterPath": "backend/.venv/bin/python",
+  "python.analysis.extraPaths": ["backend"],
   "python.testing.pytestEnabled": true,
-  "python.testing.pytestArgs": ["python/fastapi-demo/tests"],
+  "python.testing.pytestArgs": ["backend/tests"],
   "[python]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "charliermarsh.ruff",

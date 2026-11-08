@@ -58,7 +58,7 @@
 
 | 组成 | 实际版本 / 位置 |
 | --- | --- |
-| ESLint | `eslint@10.14.0`（flat config，`fullstack/product-admin/eslint.config.js`） |
+| ESLint | `eslint@10.14.0`（flat config，`frontend/eslint.config.js`） |
 | 插件 | `@eslint/js@10.0.1`、`typescript-eslint@8.72.1`、`eslint-plugin-vue@10.12.0`（`flat/essential`）、`eslint-config-prettier@10.1.8`（放最后） |
 | 其余 | `prettier@3.9.10` + `.prettierrc.json` / `.prettierignore`、`globals@17.14.0`（浏览器与 Node 全局） |
 | 脚本 | `pnpm lint` / `lint:fix` / `format` / `format:check` |

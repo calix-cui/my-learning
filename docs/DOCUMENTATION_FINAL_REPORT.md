@@ -1,5 +1,7 @@
 # 文档体系重构 · 终检报告
 
+> **快照说明**：本文记录 2026-11-07 的文档治理过程，其中目录路径为当时的 `python/fastapi-demo/` 与 `fullstack/product-admin/`；2026-11-08 已迁移为 `backend/` 与 `frontend/`，阅读时按新路径理解。
+
 > **归档文档**：本报告是 2026-11-07 文档治理的收尾记录，结论已并入 `docs/README.md` 与 `docs/TECHNICAL_DEBT.md`。后续不必再读。
 
 范围：阶段三（分批重构）与阶段四（终检）的实际执行结果。
@@ -37,7 +39,7 @@ docs/                                  docs/
                                        + DOCUMENTATION_{AUDIT,REFACTOR_PLAN,FINAL_REPORT}.md
 ```
 
-删除：`python/fastapi-demo/app/README.md`（9 行目录说明，并入 `how-it-works.md` §3）。
+删除：`backend/app/README.md`（9 行目录说明，并入 `how-it-works.md` §3）。
 
 ## 3. 四类检查
 
@@ -133,11 +135,11 @@ print('失效链接:', len(bad)); print('\n'.join(bad))
 PY
 
 # 2. 测试与覆盖率（文档里写的 55 / 85.38%）
-cd python/fastapi-demo && make check
+cd backend && make check
 
 # 3. 接口规模（文档写的 11 + 3）
-cd python/fastapi-demo && .venv/bin/python -c "from app.main import app; s=app.openapi(); print(len(s['paths']), [(p,m) for p,v in s['paths'].items() for m in v if m in ('get','post','patch','delete')][:3])"
+cd backend && .venv/bin/python -c "from app.main import app; s=app.openapi(); print(len(s['paths']), [(p,m) for p,v in s['paths'].items() for m in v if m in ('get','post','patch','delete')][:3])"
 
 # 4. 前端门禁
-cd fullstack/product-admin && pnpm lint && pnpm test && pnpm build
+cd frontend && pnpm lint && pnpm test && pnpm build
 ```

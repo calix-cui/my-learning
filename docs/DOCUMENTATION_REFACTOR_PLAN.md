@@ -1,5 +1,7 @@
 # 文档体系重构方案
 
+> **快照说明**：本文记录 2026-11-07 的文档治理过程，其中目录路径为当时的 `python/fastapi-demo/` 与 `fullstack/product-admin/`；2026-11-08 已迁移为 `backend/` 与 `frontend/`，阅读时按新路径理解。
+
 > **阶段二产物，仅方案**：本文不改动任何既有文档。
 > 依据：`docs/DOCUMENTATION_AUDIT.md`（阶段一）· 基线 `main` @ `8a3e806`
 > 需要你确认后才能进入阶段三；确认项集中在 §9。
@@ -34,7 +36,7 @@ my-learning/
     ├── README.md                 80 → 105  导航：三条阅读路径 + 文档地图（+4 行）+ 单一事实来源
     ├── how-it-works.md          137 → 185  架构：架构图/时序图/数据模型/分层职责/+新增资源路径
     ├── toolchain.md             121 → 150  工具链：四张图 + 工具表 + /+测试全景
-    ├── api.md                     0 → 285  ← 从 python/fastapi-demo/docs/api.md 迁入（待确认 Q1）
+    ├── api.md                     0 → 285  ← 从 backend/docs/api.md 迁入（待确认 Q1）
     ├── deploy.md                 99 → 125  部署：+环境变量总表 +Caddy 未实测标注
     ├── delivery.md              119 → 125  验收：数字校准 + 图片引用 + 偏差记录
     ├── PROJECT_STATUS.md         81 → 85   进度：唯一「现在到哪了」
@@ -53,12 +55,12 @@ my-learning/
     ├── prompts/                 679（不动，补入口）  阶段 1–7 提示词
     └── archive/                 480（不动，补 3 行索引）
 
-python/fastapi-demo/
+backend/
 ├── README.md                    177 → 150  后端手册（接口一览改为链接）
 ├── docs/api.md                  278 → 迁出（见 §4）
 └── app/README.md                  9 → 删除（待确认 Q2）
 
-fullstack/product-admin/
+frontend/
 └── README.md                    140 → 125  前端手册（页面说明降级为路由表）
 ```
 
@@ -99,7 +101,7 @@ fullstack/product-admin/
 
 | 从 | 到 | 理由 | 连带工作 |
 |---|---|---|---|
-| `python/fastapi-demo/docs/api.md` | `docs/api.md` | 契约是前后端共用，现在要 `../python/fastapi-demo/docs/api.md` 三段跳；且它在 `docs/README.md` 地图里已被当作 `docs/` 文档登记 | 重写 7 处引用；后端 README 改为链接；`git mv` 保留历史 |
+| `backend/docs/api.md` | `docs/api.md` | 契约是前后端共用，现在要 `../backend/docs/api.md` 三段跳；且它在 `docs/README.md` 地图里已被当作 `docs/` 文档登记 | 重写 7 处引用；后端 README 改为链接；`git mv` 保留历史 |
 | `docs/design/images/01..05-*.png` | `docs/design/images/design-01..05-*.png` | 与 `docs/images/` 同名不同源（T-20），且 04/05 内容互换 | 改 `design.md` 5 行图片路径 |
 | `docs/images/01..05-*.png` | `docs/images/shot-01..05-*.png` | 同上 | 改 `delivery.md` 图片引用 |
 
@@ -107,7 +109,7 @@ fullstack/product-admin/
 
 | 文件 | 内容去向 |
 |---|---|
-| `python/fastapi-demo/app/README.md`（9 行） | 7 行目录职责并入 `how-it-works.md` §3 代码地图表（该表已有相同信息，实际只需补 2 个包注释） |
+| `backend/app/README.md`（9 行） | 7 行目录职责并入 `how-it-works.md` §3 代码地图表（该表已有相同信息，实际只需补 2 个包注释） |
 
 ### 4.3 合并且不丢信息
 
@@ -127,14 +129,14 @@ fullstack/product-admin/
 | `README.md` | A-01（55/85.38）、加一行指向 `docs/api.md` |
 | `docs/delivery.md` | A-02、图片引用改 `shot-*`、补 X-01 偏差（整表单提交）|
 | `docs/PROJECT_STATUS.md` | A-03、A-07（11 接口）、决策表降为 3 行 + 链接 |
-| `python/fastapi-demo/README.md` | A-04、A-05、B-04（接口表→链接）|
+| `backend/README.md` | A-04、A-05、B-04（接口表→链接）|
 | `docs/api.md` | A-06（11 业务操作 / 14 operation）|
 | `docs/README.md` | A-07、A-08（第 7 节）、A-09…A-13 对应行、B-01 |
 | `CONTRIBUTING.md` | A-08、A-21、B-01 |
 | `docs/TECHNICAL_DEBT.md` | A-09…A-13 关闭、T-04/T-19 更新、删「无 ADR」、基线日期 |
 | `docs/product/prd.md` | A-22（AC 用 N）、A-06 关联（A-01…A-11 加「路径见 api.md」）|
 | `docs/design/design.md` | A-14、A-15 |
-| `fullstack/product-admin/README.md` | A-16、A-17、A-18、B-05（页面表降级）|
+| `frontend/README.md` | A-16、A-17、A-18、B-05（页面表降级）|
 | `docs/agents/python-backend-dev.md` | A-19 |
 | `docs/agents/README.md` | A-20（QA/DevOps 触发条件改为「已有 Vitest / 已有容器化」）|
 
@@ -236,11 +238,11 @@ fullstack/product-admin/
 | `docs/toolchain.md` | +§5 测试全景（+25） |
 | `docs/deploy.md` | +§3.1 环境变量表（+20）、Caddy 未实测标注 |
 | `docs/api.md` | 迁入 `docs/` + 11/14 修正；7 处引用重写 |
-| `python/fastapi-demo/README.md` | 接口表降级为链接、删「没有 Docker」、55 |
-| `fullstack/product-admin/README.md` | decimal、启动命令、响应式、页面表降级 |
+| `backend/README.md` | 接口表降级为链接、删「没有 Docker」、55 |
+| `frontend/README.md` | decimal、启动命令、响应式、页面表降级 |
 | `docs/design/design.md` | 图片改名、稿内数据说明 |
 | `docs/agents/README.md`、`python-backend-dev.md` | 触发条件与数字 |
-| `python/fastapi-demo/app/README.md` | 删除；2 条注释并入 `how-it-works` §3 |
+| `backend/app/README.md` | 删除；2 条注释并入 `how-it-works` §3 |
 
 **验收**：`make check`（55/85.38）、`pnpm lint && pnpm test`（17）、mermaid 6 张全部可渲染、`sha256` 无变化的代码文件。
 
@@ -280,8 +282,8 @@ fullstack/product-admin/
 
 | 编号 | 问题 | 我的建议 | 不确认的默认动作 |
 |---|---|---|---|
-| Q1 | `python/fastapi-demo/docs/api.md` 迁到 `docs/api.md`？ | **迁**（导航短、与「前后端契约」定位一致，成本 7 处引用） | 不迁，只在 `docs/README.md` 地图里保留原路径 |
-| Q2 | 删除 9 行的 `python/fastapi-demo/app/README.md`？ | **删**（内容与 how-it-works §3、后端 README 目录树三重重叠） | 保留，但改为 3 行纯链接文件 |
+| Q1 | `backend/docs/api.md` 迁到 `docs/api.md`？ | **迁**（导航短、与「前后端契约」定位一致，成本 7 处引用） | 不迁，只在 `docs/README.md` 地图里保留原路径 |
+| Q2 | 删除 9 行的 `backend/app/README.md`？ | **删**（内容与 how-it-works §3、后端 README 目录树三重重叠） | 保留，但改为 3 行纯链接文件 |
 | Q3 | PRD 的 AC 数字（写死 12 条）改为「以实际 total 为准」？ | **改**（否则换台机器验收就红） | 保留 12 条，另加一句「示例数据」 |
 | Q4 | 两套同名图片命名 `design-*` / `shot-*`？ | **改**（当前 04/05 内容互换，极易看错） | 不改，仅在两处 README 说明区别 |
 | Q5 | `docs/prompts/` 留在 `docs/` 顶层，还是移到 `docs/agents/prompts/`？ | **留顶层**（它是「阶段任务入口」，与角色卡不同类；移动会打断 `docs/prompts/1. Know the project.md` 这类已被引用的路径） | 留顶层并登记进地图 |

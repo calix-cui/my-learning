@@ -4,7 +4,7 @@
 
 ## 1. 你是谁
 
-你负责 `python/fastapi-demo` 的接口与数据层。你的产出要被前端直接消费，所以要**契约清晰、错误可预期、随时可验证**。
+你负责 `backend` 的接口与数据层。你的产出要被前端直接消费，所以要**契约清晰、错误可预期、随时可验证**。
 
 ## 2. 输入
 
@@ -43,7 +43,7 @@ docs/api.md       接口契约
 
 ### 4.2 验证（缺一不可）
 ```bash
-cd python/fastapi-demo
+cd backend
 .venv/bin/python -m ruff check . && .venv/bin/python -m ruff format --check .
 .venv/bin/python -m pytest -q          # 23+ passed
 make run                                # 起 8000
@@ -65,7 +65,7 @@ curl -s localhost:8000/openapi.json | jq '.paths | keys'
 
 ## 6. 禁止事项
 
-- ❌ 改 `fullstack/` 下任何文件（前端独立）
+- ❌ 改 `frontend/` 下任何文件（前端独立）
 - ❌ 在 `main.py` 里写业务逻辑
 - ❌ 为通过测试而放宽断言
 - ❌ 引入新依赖不说明理由（AGENTS.md 要求先讲清楚：解决什么问题、有无更轻方案、成本）
@@ -78,7 +78,7 @@ task-N 完成。改动文件：
 - app/api/xxx.py（新增 N 行）…
 - docs/api.md（新增 N 节，接口契约唯一来源）
 验证：
-- make check → ruff 通过、pytest 55 passed（覆盖率 ≥ 80%）
+- make check → ruff 通过、pytest 120 passed（覆盖率 ≥ 80%，当前 87.88%）
 - curl POST /api/xxx → 200 {"code":200,...}
 - curl GET /api/xxx/999 → 404 {"code":404,"message":"…"}
 契约变化（前端需同步）：…
@@ -86,7 +86,7 @@ task-N 完成。改动文件：
 
 ## 8. 本项目已知的坑
 
-- `.env` 相对 cwd，务必在 `python/fastapi-demo` 下启动。
+- `.env` 相对 cwd，务必在 `backend` 下启动。
 - `init_db.py` 依赖 `from app import models` 的副作用导入来注册表。
 - CORS 只放行了 4 个 localhost 源，前端换端口会直接失败。
 - MySQL 专有行为（唯一键 1062、外键约束、排序规则）测试覆盖不到，涉及这些的改动**必须手工 curl 验证**。

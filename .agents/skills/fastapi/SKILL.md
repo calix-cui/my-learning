@@ -5,7 +5,7 @@ description: FastAPI best practices and conventions. Use when working with FastA
 
 > **本项目适配（本地追加，非上游内容）**
 >
-> 本仓库锁定 `fastapi==0.124.4`（`python/fastapi-demo/pyproject.toml` + `uv.lock`）。下列上游用法**已实测不可用**，不要照抄：
+> 本仓库锁定 `fastapi==0.124.4`（`backend/pyproject.toml` + `uv.lock`）。下列上游用法**已实测不可用**，不要照抄：
 >
 > | 上游建议 | 本项目实测 | 替代做法 |
 > |---|---|---|

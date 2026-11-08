@@ -9,7 +9,7 @@ metadata:
 
 > **本项目适配（本地追加，非上游内容）**
 >
-> 本项目栈：Vue `3.5.13` + TypeScript `5.7` + Vite `6` + Element Plus `2.9`（`fullstack/product-admin/package.json`），无 Pinia、无 `unplugin-auto-import`。
+> 本项目栈：Vue `3.5.13` + TypeScript `5.7` + Vite `6` + Element Plus `2.9`（`frontend/package.json`），无 Pinia、无 `unplugin-auto-import`。
 > 文中 `vue-component-type-helpers`、Pinia store 测试等示例属**可选**方案：引入任何新依赖前先说明理由（AGENTS.md §2.1），不要因为示例里出现就顺手装。
 
 # Vue 3 Best Practices

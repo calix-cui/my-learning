@@ -24,8 +24,8 @@ flowchart TB
     subgraph ci["③ 推送后（GitHub Actions）"]
         direction LR
         D1["push main"] --> D2{"paths 命中？"}
-        D2 -->|"python/fastapi-demo/**"| D3["backend job<br/>uv → ruff → pytest"]
-        D2 -->|"fullstack/product-admin/**"| D4["frontend job<br/>pnpm → lint → test → build"]
+        D2 -->|"backend/**"| D3["backend job<br/>uv → ruff → pytest"]
+        D2 -->|"frontend/**"| D4["frontend job<br/>pnpm → lint → test → build"]
     end
 
     A3 --> C1
@@ -70,7 +70,7 @@ flowchart TB
 写代码 ──> make check / pnpm lint && pnpm test ──> git commit
                                                      │
                                         pre-commit 钩子（8 个）
-                                        ├─ ruff-check / ruff-format      ← 只对 python/fastapi-demo
+                                        ├─ ruff-check / ruff-format      ← 只对 backend
                                         ├─ trailing-whitespace / end-of-file-fixer
                                         ├─ check-yaml（排除 pnpm-lock）/ check-toml
                                         └─ check-added-large-files / detect-private-key
@@ -109,14 +109,17 @@ flowchart LR
 
 | 层 | 在哪 | 数量 | 跑法 | 连库吗 | 拦得住什么 / 拦不住什么 |
 |---|---|---|---|---|---|
-| 后端参数与路由 | `python/fastapi-demo/tests/test_api_validation.py`(6)、`test_health.py`(4)、`test_errors.py`(5) | 15 | `make test` | 否 | 422 参数校验、404 路由、统一响应外壳；拦不住业务规则 |
+| 后端参数与路由 | `backend/tests/test_api_validation.py`(6)、`test_health.py`(4)、`test_errors.py`(5) | 15 | `make test` | 否 | 422 参数校验、404 路由、统一响应外壳；拦不住业务规则 |
 | 后端服务层规则 | `tests/test_category_service.py`(12)、`test_product_service.py`(18) | 30 | `make test` | 否（内存 SQLite） | 去空白、重名 409、分类下有商品不能删、分页与过滤；拦不住 MySQL 专有行为（1062、外键、排序规则） |
 | 后端 Schema 序列化 | `tests/test_schemas.py` | 10（6 个函数，含 parametrize） | `make test` | 否 | `price` 两位小数、时间格式、非法入参 |
-| 前端 api 层 | `fullstack/product-admin/src/api/*.test.ts` | 17 | `pnpm test` | 否（假 adapter） | 错误码到提示语的映射、请求封装；拦不住组件渲染与交互 |
-| 端到端 | `fullstack/product-admin/scripts/acceptance.mjs` | 18 项 | `pnpm acceptance` | **是**（真实后端 + 真实库） | 增删改查全链路、弹窗与 toast、空态；会改数据，只在本地跑 |
-| 端到端 | `fullstack/product-admin/scripts/chat-acceptance.mjs` | 10 项 | `pnpm acceptance:chat` | **是**（真实后端 + 真实库） | 对话页：空态、新建、流式逐字、自动命名、刷新保留、排序、删除；跑前跑后清空会话 |
+| 后端模型抽象 | `tests/test_llm.py` | 15 | `make test` | 否（`httpx.MockTransport`） | `FakeLLM` 回显与分片、401/403/429/超时/畸形帧的错误映射、上游文案不外泄 |
+| 后端对话服务 | `tests/test_chat_service.py` | 30 | `make test` | 否（内存 SQLite） | 会话 CRUD、上下文截断与顺序、事务回滚、SSE 事件序列、断开即回滚 |
+| 后端对话接口 | `tests/test_chat_api.py` | 20 | `make test` | 否（`dependency_overrides`） | 会话与消息端点、`text/event-stream`、400/404/502/504 |
+| 前端 api 层 | `frontend/src/api/*.test.ts` | 26 | `pnpm test` | 否（假 adapter） | 错误码到提示语的映射、请求封装、SSE 分帧解析；拦不住组件渲染与交互 |
+| 端到端 | `frontend/scripts/acceptance.mjs` | 18 项 | `pnpm acceptance` | **是**（真实后端 + 真实库） | 增删改查全链路、弹窗与 toast、空态；会改数据，只在本地跑 |
+| 端到端 | `frontend/scripts/chat-acceptance.mjs` | 10 项 | `pnpm acceptance:chat` | **是**（真实后端 + 真实库） | 对话页：空态、新建、流式逐字、自动命名、刷新保留、排序、删除；跑前跑后清空会话 |
 
-门禁口径：后端 `--cov-fail-under=80`（当前 85.38%，55 passed）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`，验收结果见 `docs/delivery.md`。
+门禁口径：后端 `--cov-fail-under=80`（当前 87.88%，120 passed）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`，验收结果见 `docs/delivery.md`。
 
 怎么加测试：改服务层就在 `tests/test_*_service.py` 里用 `db_session` 夹具（内存 SQLite）写一条；改前端 api 封装就在对应 `*.test.ts` 里用 `client.defaults.adapter` 造假响应。
 
@@ -124,13 +127,13 @@ flowchart LR
 
 | 我要 | 命令 | 目录 |
 |---|---|---|
-| 装后端依赖 | `make install` | `python/fastapi-demo` |
-| 起后端 | `make run` | `python/fastapi-demo` |
-| 建表/升级表 | `make migrate` | `python/fastapi-demo` |
-| 跑后端自检 | `make check` | `python/fastapi-demo` |
-| 装前端依赖 | `pnpm install` | `fullstack/product-admin` |
-| 起前端 | `pnpm dev` | `fullstack/product-admin` |
-| 跑前端自检 | `pnpm lint && pnpm test && pnpm build` | `fullstack/product-admin` |
+| 装后端依赖 | `make install` | `backend` |
+| 起后端 | `make run` | `backend` |
+| 建表/升级表 | `make migrate` | `backend` |
+| 跑后端自检 | `make check` | `backend` |
+| 装前端依赖 | `pnpm install` | `frontend` |
+| 起前端 | `pnpm dev` | `frontend` |
+| 跑前端自检 | `pnpm lint && pnpm test && pnpm build` | `frontend` |
 | 起整套（容器） | `docker compose up -d --build` | 仓库根 |
 
 > 每个工具「为什么选它、放弃什么」都记在 `docs/adr/` 里。想改技术选型，先改 ADR 再改代码。

@@ -1,8 +1,8 @@
 # 商品管理后台｜设计规范
 
-> 本文给人读。需求见 docs/product/prd.md，实现见 fullstack/product-admin/。
+> 本文给人读。需求见 docs/product/prd.md，实现见 frontend/。
 
-画布 1440 × 900（桌面优先，≥1280 可用）；token 落在 `fullstack/product-admin/src/styles/index.css` 的 `--pa-*` 变量，并覆盖 Element Plus 的 `--el-color-*`。5 张设计稿见 §7。
+画布 1440 × 900（桌面优先，≥1280 可用）；token 落在 `frontend/src/styles/index.css` 的 `--pa-*` 变量，并覆盖 Element Plus 的 `--el-color-*`。5 张设计稿见 §7。
 
 ## 1. 设计原则
 

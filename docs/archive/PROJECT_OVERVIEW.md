@@ -17,7 +17,7 @@
 | 组织方式 | Monorepo，按技术域分目录（`python/`、`frontend/`、`agent/`、`fullstack/`） |
 | 当前阶段 | 阶段 0：规范先行。`AGENTS.md`（开发规范）与 `docs/playbooks/1..7`（7 阶段提示词流水线）刚落地，尚未有对应产出 |
 | 长期目标 | 应用层全栈 AI Agent：前后端分离、本地可跑、一键上云、可打包 macOS/Windows/Linux |
-| 与本阶段的关系 | 现有 `fullstack/product-admin` 是「全栈底座验证」样本，不是最终产品 |
+| 与本阶段的关系 | 现有 `frontend` 是「全栈底座验证」样本，不是最终产品 |
 
 ## 3. 目录结构（实际存在）
 
@@ -27,7 +27,7 @@ my-learning/
 ├── CONTRIBUTING.md               # 协作约定（README 最低要求、依赖/提交规范）
 ├── README.md                     # 仓库说明 + 项目索引
 ├── .editorconfig / .gitattributes / .gitignore
-├── .pre-commit-config.yaml       # ruff + 通用文件检查（仓库根，作用于 python/fastapi-demo）
+├── .pre-commit-config.yaml       # ruff + 通用文件检查（仓库根，作用于 backend）
 ├── .github/workflows/ci.yml      # 仅覆盖 Python：ruff + pytest
 ├── .vscode/
 │   ├── launch.json               # debugpy 调 FastAPI / 建表脚本（被 .gitignore 忽略）
@@ -49,7 +49,7 @@ my-learning/
 
 ## 4. 已有能力清单
 
-### 4.1 后端 `python/fastapi-demo`
+### 4.1 后端 `backend`
 
 - 分层：`api`（路由/校验）→ `services`（业务/事务）→ `models`（ORM），`schemas` 定契约，`common` 放统一响应与异常处理器。
 - 接口：7 个路径 / 12 个操作（`app.openapi()` 实测）
@@ -60,7 +60,7 @@ my-learning/
 - 演示数据脚本 `app/seed.py`（重置为 3 分类 / 14 商品）。
 - 测试 23 个（`pytest` + `TestClient`，**不连数据库**），`0.38s` 全绿。
 
-### 4.2 前端 `fullstack/product-admin`
+### 4.2 前端 `frontend`
 
 - 3 个页面：商品列表（搜索/筛选/分页/增删改）、分类管理（增改删 + 商品数条）、概览（统计卡/分布条/环形图/库存预警/最近新增）。
 - 技术：Vue 3.5 `<script setup>` + TS + Vite 6 + Element Plus + axios + vue-router 4；`@` 别名；`manualChunks` 拆 vue/element。
@@ -75,8 +75,8 @@ my-learning/
 | `docs/design/design.md` | 设计 token、组件规格、状态色语义 | 234 行 |
 | `docs/api.md` | 接口契约（请求/响应/错误码） | 919 行 |
 | `docs/delivery.md` | 18 项用例逐条结果 + 5 处缺陷复盘 | — |
-| `python/fastapi-demo/README.md` | 后端技术栈/结构/命令/限制 | 148 行 |
-| `fullstack/product-admin/README.md` | 前端安装、脚本、目录 | — |
+| `backend/README.md` | 后端技术栈/结构/命令/限制 | 148 行 |
+| `frontend/README.md` | 前端安装、脚本、目录 | — |
 
 ## 5. 技术栈与版本（实测）
 
@@ -112,18 +112,18 @@ my-learning/
 
 ```bash
 # 后端（端口 8000）
-cd python/fastapi-demo
+cd backend
 cp .env.example .env          # 填 DATABASE_URL
 .venv/bin/python -m app.init_db
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 # 前端（端口 5173）
-cd fullstack/product-admin
+cd frontend
 pnpm install && pnpm dev
 
 # 质量与验收
-cd python/fastapi-demo && make check        # ruff + format + pytest
-cd fullstack/product-admin && pnpm build && pnpm acceptance
+cd backend && make check        # ruff + format + pytest
+cd frontend && pnpm build && pnpm acceptance
 ```
 
 ## 8. 已具备的工程化能力

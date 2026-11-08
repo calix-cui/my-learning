@@ -128,7 +128,7 @@
 ## 10. 两个项目特定事实（影响上面的结论）
 
 1. ~~**uv 已装但未承担依赖声明**~~ ✅ 2026-11-07 已改造：`pyproject.toml` 的 `[project.dependencies]` 是唯一来源，`uv.lock` 锁定，`requirements*.txt` 已删除，CI 用 `uv sync --frozen`。
-2. **`pnpm-workspace.yaml` 在子目录**：`fullstack/product-admin/pnpm-workspace.yaml` 只放了 `allowBuilds`，仓库根没有 workspace。任何 monorepo 工具在提升到根之前都不成立。
+2. **`pnpm-workspace.yaml` 在子目录**：`frontend/pnpm-workspace.yaml` 只放了 `allowBuilds`，仓库根没有 workspace。任何 monorepo 工具在提升到根之前都不成立。
 
 ## 11. Top 5（按收益/成本比，已按 2026-11-06 决策调整）
 

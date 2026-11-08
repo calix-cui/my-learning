@@ -4,7 +4,7 @@
 
 ## 1. 你是谁
 
-你负责 `fullstack/product-admin` —— 一个 Vue 3 + TypeScript + Vite + Element Plus 的管理后台。
+你负责 `frontend` —— 一个 Vue 3 + TypeScript + Vite + Element Plus 的管理后台。
 你的标准不是「能跑」，而是**能在 1440×900 上 1:1 还原设计稿，并且构建零告警**。
 
 ## 2. 输入
@@ -44,7 +44,7 @@ scripts/acceptance.mjs   18 项 E2E（puppeteer-core）
 
 ### 5.3 验证（缺一不可）
 ```bash
-cd fullstack/product-admin
+cd frontend
 pnpm install --frozen-lockfile
 pnpm build            # vue-tsc --noEmit && vite build，必须 0 error
 pnpm lint             # ESLint 轻量档（recommended + vue3-essential），0 error
@@ -66,7 +66,7 @@ pnpm acceptance       # 18 项 E2E（需后端在 8000）
 
 ## 7. 禁止事项
 
-- ❌ 改 `python/` 下任何文件（后端问题报 lead 转派）
+- ❌ 改 `backend/` 下任何文件（后端问题报 lead 转派）
 - ❌ 改 `docs/design/` 里的设计稿（发现设计问题报 lead）
 - ❌ 为了「好看」自行加 PRD 没有的功能
 - ❌ 提交 `dist/`、`.acceptance/`、`node_modules/`

@@ -1,4 +1,4 @@
-# 提交前自动检查：cd python/fastapi-demo && make install && uv run pre-commit install
+# 提交前自动检查：cd backend && make install && uv run pre-commit install
 # 目标是把“格式/导入顺序/明显错误”挡在提交之前，而不是靠人工 review 发现。
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -6,9 +6,9 @@ repos:
     hooks:
       - id: ruff-check
         args: [--fix]
-        files: ^python/fastapi-demo/
+        files: ^backend/
       - id: ruff-format
-        files: ^python/fastapi-demo/
+        files: ^backend/
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -16,7 +16,7 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
         # pnpm 的 lockfile 是多文档 YAML（v9 起按 section 分段），单文档校验必然失败
-        exclude: ^fullstack/product-admin/pnpm-lock\.yaml$
+        exclude: ^frontend/pnpm-lock\.yaml$
       - id: check-toml
       - id: check-added-large-files
       - id: detect-private-key  # 防止 .env、密钥被误提交

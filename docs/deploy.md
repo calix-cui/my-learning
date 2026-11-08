@@ -22,8 +22,8 @@ open http://localhost:8080
 
 | 服务 | 镜像/构建 | 对外端口 | 说明 |
 | --- | --- | --- | --- |
-| `frontend` | `fullstack/product-admin/Dockerfile` | `${FRONTEND_PORT:-8080}→80` | nginx 托管静态产物，`/api` 反代到 `backend:8000` |
-| `backend` | `python/fastapi-demo/Dockerfile` | 仅容器网络 | 启动先跑迁移，再 `uvicorn` 监听 8000 |
+| `frontend` | `frontend/Dockerfile` | `${FRONTEND_PORT:-8080}→80` | nginx 托管静态产物，`/api` 反代到 `backend:8000` |
+| `backend` | `backend/Dockerfile` | 仅容器网络 | 启动先跑迁移，再 `uvicorn` 监听 8000 |
 | `db` | `mysql:8.4` | 仅容器网络 | utf8mb4，数据在 `db-data` 卷 |
 | `caddy` | `caddy:2.9-alpine` | `${HTTP_PORT:-80}` / `${HTTPS_PORT:-443}` | 可选，`--profile https` 才启动 |
 
@@ -34,7 +34,7 @@ open http://localhost:8080
 两个 `.env.example` 分管两件事，互不覆盖：
 
 - 仓库根 `.env.example` → 给 **docker compose** 用（复制成根 `.env`）
-- `python/fastapi-demo/.env.example` → 给 **本地直接跑后端** 用（复制成该目录 `.env`）
+- `backend/.env.example` → 给 **本地直接跑后端** 用（复制成该目录 `.env`）
 
 | 变量 | 谁读 | 必填 | 默认 | 说明 |
 |---|---|---|---|---|

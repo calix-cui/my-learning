@@ -36,7 +36,7 @@ pnpm type-check
 
 ## 代码规范与检查
 
-按 [ADR-0002](../../docs/adr/0002-frontend-quality-gate-lite.md) 的「轻量档」配置：只拦会出错的问题，不追求类型感知规则与格式统一率。
+按 [ADR-0002](../docs/adr/0002-frontend-quality-gate-lite.md) 的「轻量档」配置：只拦会出错的问题，不追求类型感知规则与格式统一率。
 
 ```bash
 pnpm lint          # ESLint 全量检查（CI 会跑，有 error 即失败）
@@ -65,7 +65,7 @@ pnpm test:watch    # 监听模式，开发时用
 
 ## 与后端联调
 
-- 后端地址：`http://127.0.0.1:8000`（FastAPI，代码位于仓库 `python/fastapi-demo/`）。
+- 后端地址：`http://127.0.0.1:8000`（FastAPI，代码位于仓库 `backend/`）。
 - 开发与预览环境都通过 Vite proxy 把 `/api` 转发到后端，因此前端代码里只写相对路径 `/api/...`，无需处理浏览器跨域。
 - axios 实例（`src/api/client.ts`）：`baseURL = '/api'`、超时 10s。
 - 统一响应约定：成功 `{ code: 200, message: "请求成功", data: ... }`；失败 HTTP 4xx/5xx + `{ code, message, data }`。
@@ -73,7 +73,7 @@ pnpm test:watch    # 监听模式，开发时用
   - 无响应（后端未启动、超时、断网）统一提示「网络异常，请确认后端已启动」；
   - 422 参数校验失败时展示后端 message，并尽量读取 `data` 中的字段错误。
 
-启动后端（在 `python/fastapi-demo/` 目录）：
+启动后端（在 `backend/` 目录）：
 
 ```bash
 make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -89,7 +89,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 | `/dashboard` | 概览 | `views/Dashboard.vue` |
 | `/chat` | 对话（会话列表 + 消息区，SSE 逐字渲染，阶段 4） | `views/ChatView.vue`、`api/chat.ts` |
 
-**每个页面的字段、状态、空态与交互细节在 [`docs/design/design.md`](../../docs/design/design.md) 与 [`docs/product/prd.md`](../../docs/product/prd.md)** —— 那里是设计与需求的唯一来源，本文件只列路由归属。
+**每个页面的字段、状态、空态与交互细节在 [`docs/design/design.md`](../docs/design/design.md) 与 [`docs/product/prd.md`](../docs/product/prd.md)** —— 那里是设计与需求的唯一来源，本文件只列路由归属。
 
 ### 表单校验（与后端字段对齐）
 

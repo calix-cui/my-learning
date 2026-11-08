@@ -6,7 +6,7 @@ Vue 3 管理后台 + FastAPI 接口 + MySQL，既能本地开发，也能一条�
 | 项 | 状态 |
 |---|---|
 | 功能 | P0 十六条需求全部实现（商品增删改查、搜索筛选、分类管理、概览） |
-| 验收 | 端到端 18/18 通过；后端 55 个单测 + 覆盖率 85.38%；前端 17 个单测 |
+| 验收 | 端到端 18/18 + 对话 10/10 通过；后端 120 个单测 + 覆盖率 87.88%；前端 26 个单测 |
 | CI | GitHub Actions 双 job 全绿（ruff / pytest / ESLint / Vitest / build） |
 | 部署 | Docker Compose 三容器 healthy，`/healthz` `/readyz` 探针可用 |
 
@@ -18,15 +18,15 @@ Vue 3 管理后台 + FastAPI 接口 + MySQL，既能本地开发，也能一条�
 
 ```bash
 # 1) 后端
-cd python/fastapi-demo
-cp ../../.env.example .env          # 填数据库密码（.env 不进版本库）
+cd backend
+cp .env.example .env                # 填数据库密码（.env 不进版本库）
 uv sync                             # 按 uv.lock 装依赖
 make migrate                        # 建表（Alembic）
 uv run python -m app.seed           # 可选：写入演示数据
 make run                            # http://127.0.0.1:8000/docs
 
 # 2) 前端（另开一个终端）
-cd fullstack/product-admin
+cd frontend
 pnpm install
 pnpm dev                            # http://127.0.0.1:5173（/api 代理到 8000）
 ```
@@ -47,14 +47,14 @@ open http://localhost:8080
 
 ```text
 my-learning/
-├── python/fastapi-demo/     # 后端：FastAPI + SQLAlchemy + Alembic + pytest
-├── fullstack/product-admin/ # 前端：Vue 3 + TS + Vite + Element Plus + Vitest
+├── backend/                 # 后端：FastAPI + SQLAlchemy + Alembic + pytest
+├── frontend/                # 前端：Vue 3 + TS + Vite + Element Plus + Vitest
 ├── docs/                    # 全部文档，入口见 docs/README.md
 ├── deploy/Caddyfile         # 可选：Caddy 反向代理（HTTPS）
 └── docker-compose.yml       # db / backend / frontend / 可选 caddy
 ```
 
-`frontend/`、`agent/` 是后续实验预留目录，当前不存在。
+`agent/`、`desktop/` 是后续阶段预留目录，当前不存在。
 
 ## 文档怎么读
 
@@ -70,10 +70,10 @@ my-learning/
 
 | 我要 | 命令 | 目录 |
 |---|---|---|
-| 后端自检（lint + 测试 + 覆盖率） | `make check` | `python/fastapi-demo` |
-| 生成/应用数据库迁移 | `make revision m="说明"` / `make migrate` | `python/fastapi-demo` |
-| 前端自检（lint + 测试 + 构建） | `pnpm lint && pnpm test && pnpm build` | `fullstack/product-admin` |
-| 端到端验收（需先起前后端） | `pnpm acceptance` | `fullstack/product-admin` |
+| 后端自检（lint + 测试 + 覆盖率） | `make check` | `backend` |
+| 生成/应用数据库迁移 | `make revision m="说明"` / `make migrate` | `backend` |
+| 前端自检（lint + 测试 + 构建） | `pnpm lint && pnpm test && pnpm build` | `frontend` |
+| 端到端验收（需先起前后端） | `pnpm acceptance` | `frontend` |
 | 起整套容器 | `docker compose up -d --build` | 仓库根 |
 
 ## 通用约定

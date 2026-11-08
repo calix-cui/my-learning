@@ -18,8 +18,8 @@
 |---|---|---|---|---|
 | 产品经理 | `product-manager` | 需求 → PRD + 验收标准 | `docs/product/` | 常设 |
 | UI 设计师 | `ui-designer` | PRD → 设计规范 + 设计稿 + 截图 | `docs/design/` | 常设 |
-| Python 后端 | `python-backend-dev` | 接口/数据/契约 | `python/fastapi-demo/` | 常设 |
-| Vue 前端 | `vue-frontend-dev` | 管理后台实现 | `fullstack/product-admin/` | 常设 |
+| Python 后端 | `python-backend-dev` | 接口/数据/契约 | `backend/` | 常设 |
+| Vue 前端 | `vue-frontend-dev` | 管理后台实现 | `frontend/` | 常设 |
 | 技术调研 | `tech-researcher`（新增） | 选型/方案调研，不写业务代码 | `<任务指定的 docs 目录>` | 按需派生 |
 
 **不常设的角色**（有需求再建，现状是不需要）：

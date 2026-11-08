@@ -7,13 +7,13 @@ on:
   push:
     branches: [main]
     paths:
-      - "python/fastapi-demo/**"
-      - "fullstack/product-admin/**"
+      - "backend/**"
+      - "frontend/**"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
-      - "python/fastapi-demo/**"
-      - "fullstack/product-admin/**"
+      - "backend/**"
+      - "frontend/**"
       - ".github/workflows/ci.yml"
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: python/fastapi-demo
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +31,7 @@ jobs:
           version: "0.13.4"
           python-version: "3.12"
           enable-cache: true
-          cache-dependency-glob: python/fastapi-demo/uv.lock
+          cache-dependency-glob: backend/uv.lock
 
       - name: 安装依赖
         run: uv sync --frozen
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: fullstack/product-admin
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -63,7 +63,7 @@ jobs:
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: fullstack/product-admin/pnpm-lock.yaml
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: 安装依赖
         run: pnpm install --frozen-lockfile

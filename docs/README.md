@@ -69,8 +69,8 @@ AI 读的（约 1739 行）      AGENTS.md、agents/、adr/、playbooks/ —— 
 | 事实 | 唯一来源 | 别处只能 |
 |---|---|---|
 | 接口路径 / 参数 / 错误文案 | `docs/api.md` | 引用 |
-| 后端命令（make xxx） | `python/fastapi-demo/Makefile` + [`toolchain.md`](toolchain.md) §6 速查表 | 引用 |
-| 前端命令（pnpm xxx） | `fullstack/product-admin/package.json` + [`toolchain.md`](toolchain.md) | 引用 |
+| 后端命令（make xxx） | `backend/Makefile` + [`toolchain.md`](toolchain.md) §6 速查表 | 引用 |
+| 前端命令（pnpm xxx） | `frontend/package.json` + [`toolchain.md`](toolchain.md) | 引用 |
 | 验收标准 | [`product/prd.md`](product/prd.md) 第 7 节 | 引用 |
 | 验收结果 | [`delivery.md`](delivery.md) | 引用 |
 | 视觉规范 | [`design/design.md`](design/design.md) | 引用 |

@@ -19,6 +19,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-08 | **目录扁平化**：`python/fastapi-demo/` → `backend/`、`fullstack/product-admin/` → `frontend/`（`git mv` 保留历史），同步 CI 路径、Compose 上下文、pre-commit 正则、`.vscode`、全部文档与角色卡；E2E 复跑 18/18 + 10/10 | 提交见 `git log` |
 | 11-08 | **阶段 4 对话功能**：会话/消息落库 + 模型抽象（fake/openai）+ 会话 CRUD + 同步与 SSE 两种发消息 + `/chat` 页面；后端 120 例 / 87.87%，前端 26 例，E2E 10 项 | [chat.md](chat.md)、[api.md](api.md) §4、[ADR-0006](adr/0006-llm-client-and-chat-storage.md) |
 | 11-07 | **名称空白校验统一**：分类改名、商品改名与新增同规则（先 strip 再判空，纯空白 400），补 5 个用例 | T-22 已解决、[api.md](api.md) §2.5/§3.3 |
 | 11-07 | **文档治理四批 + 终检**：39 份文档全量审查（22 条事实陈旧、11 处职责重叠、6 处缺失），四批重构 + [终检报告](DOCUMENTATION_FINAL_REPORT.md)；人读 1348 行 / AI 向 1739 行 / 归档 672 行，0 孤儿 0 失效链接 | [审查报告](DOCUMENTATION_AUDIT.md)、[重构方案](DOCUMENTATION_REFACTOR_PLAN.md) |
@@ -28,7 +29,7 @@
 | 11-07 | **前端轻量门禁**：ESLint 10 + Prettier + CI 前端 job | [ADR-0002](adr/0002-frontend-quality-gate-lite.md) |
 | 11-07 | **Alembic 接管 schema**：首个 revision `2a89b3237f54` | [ADR-0003](adr/0003-database-migrations-alembic.md) |
 | 11-06 | **商品管理网站 v1**：需求 → 设计 → 前后端 → 18 项验收 | [delivery.md](delivery.md) |
-| 11-05 | 后端工程化：ruff / pytest / pre-commit / CI / Makefile | `python/fastapi-demo/README.md` |
+| 11-05 | 后端工程化：ruff / pytest / pre-commit / CI / Makefile | `backend/README.md` |
 
 ## 3. 下一步
 
@@ -37,7 +38,7 @@
 | # | 阶段 | 状态 | 证据 / 缺口 |
 |---|---|---|---|
 | 1 | AI 开发基建 | ✅ | `AGENTS.md`、`agents/`、`.agents/skills/`、`adr/`、`playbooks/` |
-| 2 | 前后端项目骨架 | ✅ | `python/fastapi-demo/`、`fullstack/product-admin/` |
+| 2 | 前后端项目骨架 | ✅ | `backend/`、`frontend/` |
 | 3 | 基础 API 和数据库 | ✅ | 11 个业务接口、Alembic 迁移、MySQL |
 | 4 | **LLM 接入与基础对话** | ✅ | [chat.md](chat.md)：T1 表结构 / T2 模型抽象 / T3 会话 CRUD / T4 同步发消息 / T4b SSE 流式 / T5 `/chat` 页面 / T6 文档 |
 | 5 | Agent 基础执行循环 | ⬜ | 依赖 4 |
@@ -62,7 +63,7 @@
 | 门槛 | 判定标准 | 现状 |
 |---|---|---|
 | 文档可信 | `docs/` 无已知过期事实 | ✅ 2026-11-07（见 [DOCUMENTATION_FINAL_REPORT.md](DOCUMENTATION_FINAL_REPORT.md) §3） |
-| 基线可跑 | `make check` 55 passed / ≥80%、`pnpm lint && pnpm test && pnpm build` 全过 | ✅ 2026-11-07 |
+| 基线可跑 | `make check` 120 passed / ≥80%、`pnpm lint && pnpm test && pnpm build` 全过 | ✅ 2026-11-08（120 passed / 87.88%、前端 26 passed） |
 | 存储明确 | 对话数据存哪（新表 or 不落库）、是否需要会话 ID | ✅ 已定：`conversations` / `messages` 两表落库（[ADR-0006](adr/0006-llm-client-and-chat-storage.md)） |
 
 剩余技术债见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)：P0/P1 已清空，剩下以 P2 为主（日志规范 T-23、Element Plus 体积 T-21）。
@@ -103,8 +104,9 @@
 
 ## 7. 仓库状态
 
-- 最近提交：文档体系重构（三层结构 + 架构图/工具链图/契约精简），详见 `git log --oneline -8`
-- CI：最近一次 run `42372731737`（`8a3e806`）双 job 绿；只改 `docs/` 的提交不会触发 CI（`ci.yml` 的 `paths` 只含 `python/fastapi-demo/**`、`fullstack/product-admin/**`、自身）
+- 目录结构：`backend/`（后端）、`frontend/`（前端）、`docs/`（文档）、`deploy/`（Caddy）；`agent/`、`desktop/` 为后续阶段预留
+- 最近提交：目录扁平化 + 阶段 4 SSE 流式，详见 `git log --oneline -8`
+- CI：最近一次 run `42372731737`（`8a3e806`）双 job 绿；只改 `docs/` 的提交不会触发 CI（`ci.yml` 的 `paths` 只含 `backend/**`、`frontend/**`、自身）
 - 文档：人读 1350 行 / AI 向 1670 行 / 归档 670 行；全仓相对链接 0 失效（`/tmp/linkcheck.py` 口径）
-- 测试基线：后端 55 passed / 85.38%；前端 17 passed
+- 测试基线：后端 120 passed / 87.88%；前端 26 passed；E2E 商品 18/18、对话 10/10
 - 容器验证：三容器 healthy，`http://localhost:8080` 首页、`/api/products`、`/healthz`、`/readyz` 均 200；`down && up -d` 后数据仍在

@@ -23,7 +23,7 @@ AGENTS.md §5 要求最终支持 macOS / Windows / Linux 三平台桌面客户�
 
 ## 决策
 
-**桌面端外壳使用 Electron**，后续新增 `desktop/` 目录，构建产物复用 `fullstack/product-admin` 的 `vite build` 输出，Python 后端以子进程方式随应用启动。
+**桌面端外壳使用 Electron**，后续新增 `desktop/` 目录，构建产物复用 `frontend` 的 `vite build` 输出，Python 后端以子进程方式随应用启动。
 
 ## 理由
 
