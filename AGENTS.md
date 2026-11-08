@@ -4,13 +4,14 @@
 
 ## 0. 当前阶段与交付物（先读这一节）
 
-本仓库的**长期目标**是 AI Agent 应用（见 §1），但**当前实际交付**是「商品管理后台」：
+本仓库的**长期目标**是 AI Agent 应用（见 §1），**当前实际交付**是 **My Agent 对话应用**：
 
-- 后端 `backend/`：FastAPI + SQLAlchemy 2.0 + MySQL + Alembic，11 个业务接口 + 3 个运维探针。
-- 前端 `frontend/`：Vue 3 + TS + Vite + Element Plus，3 个页面。
-- **阶段口径以 [`docs/playbooks/05-development-plan-and-mvp-tasks.md`](docs/playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划为准**：阶段 1–3（AI 基建 / 前后端骨架 / 基础 API 与数据库）已完成，当前准备进入阶段 4（LLM 接入与基础对话）；MCP 属阶段 7，桌面端属阶段 10。进度见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) §3.1。
+- 后端 `backend/`：FastAPI + SQLAlchemy 2.0 + MySQL + Alembic，对话 7 个操作 + 3 个运维探针；模型层抽象为 `LLMClient`（`fake` 默认，可切 OpenAI 兼容服务）。
+- 前端 `frontend/`：Vue 3 + TS + Vite + Element Plus，只有对话页（`/chat`）。
+- 商品 / 分类 / 概览模块（前后端代码 + 需求/设计/验收文档）已于 2026-11-08 归档到 `archive/product-admin/`，**不参与构建、不要恢复进 `backend/` 或 `frontend/`**，除非用户明确要求。
+- **阶段口径以 [`docs/playbooks/05-development-plan-and-mvp-tasks.md`](docs/playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划为准**：阶段 1–4（AI 基建 / 前后端骨架 / 基础 API / LLM 接入与对话）已完成，下一个是阶段 5（Agent 执行循环）；MCP 属阶段 7，桌面端属阶段 10。进度见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) §3.1。
 
-**据此行动**：除非任务明确要求做 Agent 能力，否则不要按「Agent 项目」预设立场写代码；不要删除或架空现有商品管理业务。
+**据此行动**：除非任务明确要求做 Agent 能力，否则不要按「Agent 项目」预设立场写代码；不要动 `archive/` 里的归档代码。
 
 ## 1. 项目定位
 
@@ -228,12 +229,13 @@ Skill采用分层管理：全局、项目级、专项、外部工具
 
 | 任务类型 | 必读 | 需要时再查 |
 |---|---|---|
-| 改后端接口 / 校验 / 业务规则 | [`docs/api.md`](docs/api.md)、[`docs/how-it-works.md`](docs/how-it-works.md) §3–§4 | `docs/product/prd.md` 对应 F/AC |
-| 改前端页面 / 样式 / 交互 | [`docs/design/design.md`](docs/design/design.md)、[`frontend/README.md`](frontend/README.md) | `docs/api.md`、PRD 对应功能项 |
+| 改后端接口 / 校验 / 业务规则 | [`docs/api.md`](docs/api.md)、[`docs/how-it-works.md`](docs/how-it-works.md) §3–§4 | [`docs/chat.md`](docs/chat.md) 的设计取舍 |
+| 改前端页面 / 样式 / 交互 | [`frontend/README.md`](frontend/README.md)、`frontend/src/views/ChatView.vue` | `docs/api.md`、`docs/design/`（归档的设计规范仍可参考） |
+| 接 / 换模型、改提示与上下文 | [`docs/chat.md`](docs/chat.md)、[ADR-0006](docs/adr/0006-llm-client-and-chat-storage.md)、`backend/app/llm/` | [`backend/README.md`](backend/README.md)「接入真实模型」 |
 | 改表结构 / 写迁移 | [`backend/README.md`](backend/README.md)「数据库迁移」、[ADR-0003](docs/adr/0003-database-migrations-alembic.md) | `docs/how-it-works.md` §5 数据模型 |
 | 改工程化 / 门禁 / CI | [ADR-0002](docs/adr/0002-frontend-quality-gate-lite.md)、[ADR-0005](docs/adr/0005-testing-baseline.md)、[`docs/toolchain.md`](docs/toolchain.md) | `docs/agents/` 对应角色卡 |
 | 部署 / 容器 / 排障 | [`docs/deploy.md`](docs/deploy.md)、[ADR-0004](docs/adr/0004-deployment-docker-compose.md) | 根 `README.md` 快速开始 |
-| 新功能（需求到实现） | [`docs/product/prd.md`](docs/product/prd.md)、[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) §3 | 相关 ADR、`docs/how-it-works.md` §7 |
+| 新功能（需求到实现） | 先按 §2.3 出设计并写进 `docs/chat.md`（或新建对应设计文档），再实现 | 相关 ADR、`docs/how-it-works.md` §5 |
 | 技术债 / 排期 | [`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md)、[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) | — |
 
 文档分层与「事实只有一个来源」的规则见 [`docs/README.md`](docs/README.md) §3–§5；新增文档前先确认能否并入已有文件。

@@ -2,6 +2,8 @@
 
 用 Docker Compose 把「MySQL + FastAPI 后端 + Vue 前端 + Caddy 反向代理」一次拉起。默认单机部署，够用且好排障；后续要上云只需要换机器和域名。
 
+> 日常改代码**不要用容器**：Vite HMR 与 `uvicorn --reload` 都是秒级生效，容器每次改动都要重打镜像。容器的用途是「交付前验证一键部署」。
+
 ## 1. 前置条件
 
 - Docker Engine 24+（或 Docker Desktop / colima）
@@ -18,11 +20,9 @@ open http://localhost:8080
 
 首次启动后端会自动执行 `alembic upgrade head`，把表结构建好；之后再启动是幂等的，不会重复建表。
 
-容器里的库是空的（数据在 `db-data` 卷里）。要演示数据的话，跑一次种子脚本（幂等，按名字跳过已存在的分类与商品）：
+容器里的库是空的（数据在 `db-data` 卷里）。打开 `http://localhost:8080` 后先点「新建会话」即可开始用，不需要种子数据。
 
-```bash
-docker compose exec backend python -m app.seed
-```
+> 若 `.env` 里 `LLM_PROVIDER=fake`，回复是假模型（`[fake] 收到：…`），用来验证链路；要真实回答就把 `LLM_PROVIDER` 改成 `openai` 并填 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`，再 `docker compose up -d backend` 让容器带上新环境变量。
 
 ## 3. 服务与端口
 
@@ -45,7 +45,7 @@ docker compose exec backend python -m app.seed
 | 变量 | 谁读 | 必填 | 默认 | 说明 |
 |---|---|---|---|---|
 | `MYSQL_ROOT_PASSWORD` | compose → `db` | ✅ | — | MySQL root 密码；未设时 compose 直接报错退出 |
-| `MYSQL_DATABASE` | compose → `db`、`backend` | | `fastapi_demo` | 库名，后端连接串里的数据库 |
+| `MYSQL_DATABASE` | compose → `db`、`backend` | | `my_agent` | 库名，后端连接串里的数据库 |
 | `MYSQL_USER` | compose → `db`、`backend` | | `fastapi` | 应用账号（非 root） |
 | `MYSQL_PASSWORD` | compose → `db`、`backend` | ✅ | — | 应用账号密码；未设时 compose 直接报错退出 |
 | `DATABASE_URL` | `backend`（`app/config.py`） | ✅ | — | 本地跑必填；compose 里由上面四个变量拼出来，不用手写 |

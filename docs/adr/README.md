@@ -12,6 +12,7 @@
 | [ADR-0004](./0004-deployment-docker-compose.md) | 用 Docker Compose 做单机一键部署 | 已接受 | 2026-11-07 |
 | [ADR-0005](./0005-testing-baseline.md) | 测试基线：后端覆盖率门槛 + 前端 api 层单测 | 已接受 | 2026-11-07 |
 | [ADR-0006](./0006-llm-client-and-chat-storage.md) | 对话落库与模型客户端抽象 | 已接受 | 2026-11-07 |
+| [ADR-0007](./0007-archive-product-module.md) | 归档商品管理模块并更名为 My Agent | 已接受 | 2026-11-08 |
 
 ## 什么时候写 ADR
 

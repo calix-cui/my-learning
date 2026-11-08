@@ -65,7 +65,7 @@ flowchart TB
 | **Prettier** | 格式统一，避免 diff 里全是空白变化 | `pnpm format`、`pnpm format:check` | `.prettierrc.json` |
 | **Vitest** | 单元测试，只测 `src/api`（纯逻辑，不碰 DOM） | `pnpm test`、`pnpm test:watch` | `vitest.config.ts` |
 | **markdown-it + DOMPurify** | 把模型回复的 Markdown 渲染成 HTML；原文 HTML 当文本、渲染结果再消毒，外链强制 `_blank` | 页面内自动生效（`/chat`） | `frontend/src/utils/markdown.ts` |
-| **puppeteer-core** | 真浏览器跑端到端验收：商品 18 项、对话 10 项（可选，需先起前后端） | `pnpm acceptance` / `pnpm acceptance:chat` | `scripts/acceptance.mjs`、`scripts/chat-acceptance.mjs` |
+| **puppeteer-core** | 真浏览器跑端到端验收：对话 10 项（可选，需先起前后端） | `pnpm acceptance:chat` | `scripts/chat-acceptance.mjs` |
 
 ## 3. 提交与 CI
 
@@ -112,20 +112,17 @@ flowchart LR
 
 | 层 | 在哪 | 数量 | 跑法 | 连库吗 | 拦得住什么 / 拦不住什么 |
 |---|---|---|---|---|---|
-| 后端参数与路由 | `backend/tests/test_api_validation.py`(6)、`test_health.py`(4)、`test_errors.py`(5) | 15 | `make test` | 否 | 422 参数校验、404 路由、统一响应外壳；拦不住业务规则 |
-| 后端服务层规则 | `tests/test_category_service.py`(12)、`test_product_service.py`(18) | 30 | `make test` | 否（内存 SQLite） | 去空白、重名 409、分类下有商品不能删、分页与过滤；拦不住 MySQL 专有行为（1062、外键、排序规则） |
-| 后端 Schema 序列化 | `tests/test_schemas.py` | 10（6 个函数，含 parametrize） | `make test` | 否 | `price` 两位小数、时间格式、非法入参 |
-| 后端模型抽象 | `tests/test_llm.py` | 15 | `make test` | 否（`httpx.MockTransport`） | `FakeLLM` 回显与分片、401/403/429/超时/畸形帧的错误映射、上游文案不外泄 |
+| 后端探针与路由 | `backend/tests/test_health.py`(4)、`test_errors.py`(5) | 9 | `make test` | 否 | 存活/就绪探针、404 路由、统一响应外壳、5 个异常处理器 |
+| 后端模型抽象 | `tests/test_llm.py` | 13 | `make test` | 否（`httpx.MockTransport`） | `FakeLLM` 回显与分片、401/403/402/429/超时/畸形帧的错误映射、上游文案不外泄、代理配置异常兜底 |
 | 后端对话服务 | `tests/test_chat_service.py` | 30 | `make test` | 否（内存 SQLite） | 会话 CRUD、上下文截断与顺序、事务回滚、SSE 事件序列、断开即回滚 |
 | 后端对话接口 | `tests/test_chat_api.py` | 20 | `make test` | 否（`dependency_overrides`） | 会话与消息端点、`text/event-stream`、400/404/502/504 |
 | 前端工具函数 | `frontend/src/utils/markdown.test.ts` | 6 | `pnpm test` | 否（纯字符串） | 加粗/列表/代码块/自动换行、原文 HTML 不当标签、外链 rel；拦不住真实 DOM 消毒 |
-| 前端 api 层 | `frontend/src/api/*.test.ts` | 26 | `pnpm test` | 否（假 adapter） | 错误码到提示语的映射、请求封装、SSE 分帧解析；拦不住组件渲染与交互 |
-| 端到端 | `frontend/scripts/acceptance.mjs` | 18 项 | `pnpm acceptance` | **是**（真实后端 + 真实库） | 增删改查全链路、弹窗与 toast、空态；会改数据，只在本地跑 |
+| 前端 api 层 | `frontend/src/api/client.test.ts`(8)、`chat.test.ts`(9) | 17 | `pnpm test` | 否（假 adapter） | 错误码到提示语的映射、请求封装、SSE 分帧解析、流式超时 35s；拦不住组件渲染与交互 |
 | 端到端 | `frontend/scripts/chat-acceptance.mjs` | 10 项 | `pnpm acceptance:chat` | **是**（真实后端 + 真实库） | 对话页：空态、新建、流式逐字、自动命名、刷新保留、排序、删除；跑前跑后清空会话 |
 
-门禁口径：后端 `--cov-fail-under=80`（当前 87.88%，120 passed）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`，验收结果见 `docs/delivery.md`。
+门禁口径：后端 `--cov-fail-under=80`（商品模块归档后当前 91%，75 passed）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`。
 
-怎么加测试：改服务层就在 `tests/test_*_service.py` 里用 `db_session` 夹具（内存 SQLite）写一条；改前端 api 封装就在对应 `*.test.ts` 里用 `client.defaults.adapter` 造假响应。
+怎么加测试：改服务层就在 `tests/test_chat_service.py` 里用 `db_session` 夹具（内存 SQLite）写一条；改前端 api 封装就在对应 `*.test.ts` 里用 `client.defaults.adapter` 造假响应。
 
 ## 6. 常用命令速查
 
