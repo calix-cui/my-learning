@@ -107,8 +107,12 @@ docker compose down -v                  # 连数据一起清掉（谨慎）
 
 ## 9. 排障
 
+- **`docker compose` 报 `unknown command: docker compose`**：说明只装了 Docker CLI、没装 Compose 插件。检查 `docker compose version`，装法见 Docker 官方文档（或 `brew install docker-compose` 后把二进制放进 `~/.docker/cli-plugins/`）；装好后 `docker compose version` 应有输出。
+- **`docker compose` 报 `Cannot connect to the Docker daemon at unix:///var/run/docker.sock`**：daemon 没跑。用 Docker Desktop，或用 colima：`colima start`（首次会自动建 VM），之后 `docker context use colima`。
 - **`db` 一直 unhealthy**：看 `docker compose logs db`；常见是 `.env` 里 `MYSQL_PASSWORD` 为空，或端口被宿主机已有 MySQL 占用（本项目端口不映射到宿主机，通常不会冲突）。
 - **前端 502**：`backend` 还没起或迁移失败，`docker compose logs backend` 会有 Alembic 报错。
+- **构建时后端依赖下载卡住**（日志停在 `Downloading ...` 不动）：换 PyPI 镜像重试
+  `docker compose build --build-arg PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple backend`。
 - **`--frozen` 构建失败**：说明 `uv.lock` 与 `pyproject.toml` 不一致，本地先 `uv lock` 再重新构建。
 - **改完依赖没生效**：`docker compose build --no-cache backend`。
 

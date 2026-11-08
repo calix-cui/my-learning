@@ -53,3 +53,13 @@
 - 需要多副本/滚动发布，或单机资源成为瓶颈 → 评估容器编排方案。
 - 镜像构建进入 CI 后，把「构建失败」纳入合并门禁。
 - 若桌面端（Electron）需要复用同一套后端，评估把 backend 镜像作为 sidecar 的基础镜像。
+
+## 落地记录（2026-11-08）
+
+目录迁移到 `backend/`、`frontend/` 后重建镜像时，后端依赖安装在部分环境会卡住，于是把安装方式改成「`uv export` + pip」：
+
+- 仍然由 `uv.lock` 决定版本：构建时 `uv export --frozen --no-dev --no-emit-project --format requirements-txt` 导出带 `--hash` 的清单，`pip install --require-hashes` 按哈希校验安装。
+- 原因：本机 colima VM 里 `uv sync` 并发下载 wheel 会长时间停在同一批 `Downloading ...` 上（实测 >13 分钟无进展，`UV_HTTP_TIMEOUT=120` 也不解决），同一镜像源下 pip 与 `uv pip install` 都能正常装完。
+- 代价：多了一步导出，构建日志里看不到 uv 的依赖解析过程；依赖冲突仍在本地 `uv lock` 阶段暴露，不在镜像构建阶段。
+- 保留退路：网络正常的环境可以把该 `RUN` 换回 `uv sync --frozen --no-dev`，两条路径的产物一致（同一个 `/opt/venv`）。
+- 顺带补的两处：`frontend/nginx.conf` 对 `/api/` 关闭 `proxy_buffering`（否则 SSE 会被 nginx 攒到最后一次性下发）、`deploy.md` 排障补「compose 插件缺失 / daemon 未运行 / 依赖下载卡住」三条。
