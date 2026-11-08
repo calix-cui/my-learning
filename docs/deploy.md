@@ -119,6 +119,9 @@ docker compose down -v                  # 连数据一起清掉（谨慎）
 - **前端 502**：`backend` 还没起或迁移失败，`docker compose logs backend` 会有 Alembic 报错。
 - **构建时后端依赖下载卡住**（日志停在 `Downloading ...` 不动）：换 PyPI 镜像重试
   `docker compose build --build-arg PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple backend`。
+- **构建时前端卡在 `Corepack is about to download ... pnpm` 或 `Could not download the pnpm ... binary`**：换 npm 镜像重试
+  `docker compose build --build-arg NPM_REGISTRY=https://registry.npmmirror.com frontend`。
+  两个镜像源可以一起给：`docker compose build --build-arg PIP_INDEX_URL=... --build-arg NPM_REGISTRY=...`。
 - **`--frozen` 构建失败**：说明 `uv.lock` 与 `pyproject.toml` 不一致，本地先 `uv lock` 再重新构建。
 - **改完依赖没生效**：`docker compose build --no-cache backend`。
 
