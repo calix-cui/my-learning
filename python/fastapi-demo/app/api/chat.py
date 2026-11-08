@@ -1,6 +1,9 @@
+import json
+from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.common.response import Response
@@ -118,4 +121,48 @@ def send_message(
             user_message=MessageResponse.model_validate(user_message),
             assistant_message=MessageResponse.model_validate(assistant_message),
         )
+    )
+
+
+def _sse(events: Iterator[dict]) -> Iterator[str]:
+    """把事件字典编码成 SSE 帧：`data: {json}\n\n`。"""
+    for event in events:
+        # ensure_ascii=False：中文直接输出，不转成 \uXXXX，方便 curl 观察
+        yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+@router.post(
+    "/{conversation_id}/messages/stream",
+    summary="发送消息（流式）",
+    description=(
+        "写入用户消息并以 SSE 逐块返回助手回复。"
+        "事件类型：meta（带 user_message）/ delta（增量文本）/ done（最终消息）/ error。"
+    ),
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "SSE 事件流",
+        }
+    },
+)
+def stream_message(
+    conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
+    payload: MessageCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(get_llm)],
+):
+    # 先同步做完校验与落库：这样 404/400 仍是普通 JSON，而不是流里的错误事件
+    conversation, user_message, context, is_first = chat_service.prepare_stream(
+        db, conversation_id, payload.content
+    )
+    events = chat_service.stream_reply(db, conversation, user_message, context, is_first, llm)
+    return StreamingResponse(
+        _sse(events),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # 关掉 nginx 的响应缓冲，否则 delta 会被攒到最后一次性吐出
+            "X-Accel-Buffering": "no",
+        },
     )

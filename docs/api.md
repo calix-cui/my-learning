@@ -317,8 +317,40 @@ curl -s -X DELETE http://127.0.0.1:8000/api/categories/26
 | 其他上游 4xx/5xx | 502 | `模型服务不可用` |
 | 返回体不是预期 JSON / 无 content | 502 | `模型返回格式无法解析` / `模型返回内容为空` |
 | 超时（默认 30s） | 504 | `模型服务超时` |
+| 流式中途失败 | SSE `error` 事件 | 同上表文案，状态码固定在事件里 |
 
 上游的原始报错不会透传给前端，只进服务端日志。
+
+### 4.7 发送消息（流式）`POST /api/conversations/{id}/messages/stream`
+
+与 4.6 的区别只在传输方式：回复按 SSE 逐块吐出，适合前端做「逐字渲染」。请求体、校验规则、上下文窗口、事务语义与 4.6 完全一致。
+
+**为什么是 POST 而不是 GET**：设计稿里写的是 `GET .../messages/stream?content=...`，但消息最长 4000 字，塞进 query string 既可能超长、也会整段进访问日志，所以改为 POST + 请求体；代价是前端不能用原生 `EventSource`（只支持 GET），改用 `fetch` + `ReadableStream` 解析。
+
+响应头：`Content-Type: text/event-stream`、`Cache-Control: no-cache`、`X-Accel-Buffering: no`（后者防 nginx 缓冲，否则 delta 会被攒到最后一次性吐出）。
+
+每帧一行的 `data:` JSON，四种事件：
+
+| `type` | 时机 | 负载 |
+| --- | --- | --- |
+| `meta` | 开始 | `user_message`（用户消息已落库，带 id） |
+| `delta` | 每块 | `content`（增量文本，可能只有几个字） |
+| `done` | 结束 | `conversation_id`、`conversation_title`、`message_count`、`assistant_message` |
+| `error` | 失败 | `code`、`message`（502/504/500） |
+
+```
+data: {"type": "meta", "user_message": {...}}
+
+data: {"type": "delta", "content": "[fak"}
+
+data: {"type": "done", "conversation_id": 3, "conversation_title": "流式测试", "message_count": 2, "assistant_message": {...}}
+```
+
+注意三点：
+
+1. **校验错误仍是普通 JSON**（400/404），发生在开流之前，所以前端要先判 `response.ok`。
+2. **开始流式后状态码固定为 200**，模型出错只能以 `error` 事件告知，此时后端已回滚，库里不留半条对话。
+3. 客户端中途断开（关页面、切会话）后端同样回滚，不会留下「只有提问没有回复」的记录。
 
 ## 5 前端接入注意事项
 

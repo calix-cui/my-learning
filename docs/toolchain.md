@@ -62,7 +62,7 @@ flowchart TB
 | **ESLint** | 抓未使用变量、Vue 模板错误。按 ADR-0002 只开轻量档 | `pnpm lint`、`pnpm lint:fix` | `eslint.config.js` |
 | **Prettier** | 格式统一，避免 diff 里全是空白变化 | `pnpm format`、`pnpm format:check` | `.prettierrc.json` |
 | **Vitest** | 单元测试，只测 `src/api`（纯逻辑，不碰 DOM） | `pnpm test`、`pnpm test:watch` | `vitest.config.ts` |
-| **puppeteer-core** | 真浏览器跑 18 项端到端验收（可选，需先起前后端） | `pnpm acceptance` | `scripts/acceptance.mjs` |
+| **puppeteer-core** | 真浏览器跑端到端验收：商品 18 项、对话 10 项（可选，需先起前后端） | `pnpm acceptance` / `pnpm acceptance:chat` | `scripts/acceptance.mjs`、`scripts/chat-acceptance.mjs` |
 
 ## 3. 提交与 CI
 
@@ -114,6 +114,7 @@ flowchart LR
 | 后端 Schema 序列化 | `tests/test_schemas.py` | 10（6 个函数，含 parametrize） | `make test` | 否 | `price` 两位小数、时间格式、非法入参 |
 | 前端 api 层 | `fullstack/product-admin/src/api/*.test.ts` | 17 | `pnpm test` | 否（假 adapter） | 错误码到提示语的映射、请求封装；拦不住组件渲染与交互 |
 | 端到端 | `fullstack/product-admin/scripts/acceptance.mjs` | 18 项 | `pnpm acceptance` | **是**（真实后端 + 真实库） | 增删改查全链路、弹窗与 toast、空态；会改数据，只在本地跑 |
+| 端到端 | `fullstack/product-admin/scripts/chat-acceptance.mjs` | 10 项 | `pnpm acceptance:chat` | **是**（真实后端 + 真实库） | 对话页：空态、新建、流式逐字、自动命名、刷新保留、排序、删除；跑前跑后清空会话 |
 
 门禁口径：后端 `--cov-fail-under=80`（当前 85.38%，55 passed）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`，验收结果见 `docs/delivery.md`。
 

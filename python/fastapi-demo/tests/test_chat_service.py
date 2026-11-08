@@ -3,6 +3,7 @@
 import pytest
 
 from app.common.exceptions import BusinessError
+from app.llm import LLMError
 from app.models import Conversation, Message
 from app.schemas.chat import ConversationCreateRequest, ConversationUpdateRequest
 from app.services import chat_service
@@ -158,8 +159,10 @@ def test_delete_conversation_missing_raises_404(db_session):
 class RecordingLLM:
     """记录收到的上下文，便于断言截断与排序；可注入异常验证回滚。"""
 
-    def __init__(self, error: Exception | None = None) -> None:
+    def __init__(self, error: Exception | None = None, pieces: list[str] | None = None) -> None:
         self.error = error
+        self.pieces = pieces if pieces is not None else ["好", "的"]
+        self.model = "recording"
         self.received: list[list[dict[str, str]]] = []
 
     def chat(self, messages):
@@ -167,6 +170,12 @@ class RecordingLLM:
         if self.error is not None:
             raise self.error
         return {"content": "好的", "model": "recording"}
+
+    def stream(self, messages):
+        self.received.append([dict(m) for m in messages])
+        if self.error is not None:
+            raise self.error
+        yield from self.pieces
 
 
 def test_send_message_stores_both_messages(db_session):
@@ -275,3 +284,97 @@ def test_send_message_bumps_update_time(db_session):
     chat_service.send_message(db_session, conversation.id, "你好", RecordingLLM())
 
     assert db_session.get(Conversation, conversation.id).update_time >= before
+
+
+def _drain(events):
+    return list(events)
+
+
+def test_prepare_stream_writes_user_message_and_context(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+
+    _, user_message, context, is_first = chat_service.prepare_stream(
+        db_session, conversation.id, "  你好  "
+    )
+
+    assert user_message.id > 0
+    assert user_message.content == "你好"
+    assert is_first is True
+    assert [m["role"] for m in context] == ["user"]
+
+
+def test_prepare_stream_blank_content_raises_400(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+
+    with pytest.raises(BusinessError) as exc_info:
+        chat_service.prepare_stream(db_session, conversation.id, "   ")
+
+    assert exc_info.value.code == 400
+    assert str(exc_info.value) == "消息内容不能只包含空白"
+
+
+def test_prepare_stream_missing_conversation_raises_404(db_session):
+    with pytest.raises(BusinessError) as exc_info:
+        chat_service.prepare_stream(db_session, 9999, "你好")
+
+    assert exc_info.value.code == 404
+
+
+def test_stream_reply_emits_meta_delta_done_and_persists(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+    prepared = chat_service.prepare_stream(db_session, conversation.id, "帮我给可乐定价")
+
+    events = _drain(chat_service.stream_reply(db_session, *prepared, RecordingLLM()))
+
+    assert [e["type"] for e in events] == ["meta", "delta", "delta", "done"]
+    assert events[0]["user_message"]["content"] == "帮我给可乐定价"
+    assert "".join(e["content"] for e in events if e["type"] == "delta") == "好的"
+    assert events[-1]["assistant_message"]["content"] == "好的"
+    assert events[-1]["message_count"] == 2
+    assert db_session.query(Message).count() == 2
+
+
+def test_stream_reply_auto_titles_on_first_message(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+    prepared = chat_service.prepare_stream(db_session, conversation.id, "帮我给可乐定价")
+
+    events = _drain(chat_service.stream_reply(db_session, *prepared, RecordingLLM()))
+
+    assert events[-1]["conversation_title"] == "帮我给可乐定价"
+    assert db_session.get(Conversation, conversation.id).title == "帮我给可乐定价"
+
+
+def test_stream_reply_error_event_rolls_back(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+    prepared = chat_service.prepare_stream(db_session, conversation.id, "你好")
+
+    events = _drain(
+        chat_service.stream_reply(db_session, *prepared, RecordingLLM(error=LLMError()))
+    )
+
+    assert events[0]["type"] == "meta"
+    assert events[-1]["type"] == "error"
+    assert events[-1]["code"] == 502
+    assert db_session.query(Message).count() == 0
+
+
+def test_stream_reply_empty_reply_becomes_error(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+    prepared = chat_service.prepare_stream(db_session, conversation.id, "你好")
+
+    events = _drain(chat_service.stream_reply(db_session, *prepared, RecordingLLM(pieces=["  "])))
+
+    assert events[-1]["type"] == "error"
+    assert events[-1]["message"] == "模型返回内容为空"
+    assert db_session.query(Message).count() == 0
+
+
+def test_stream_reply_client_disconnect_rolls_back(db_session):
+    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+    prepared = chat_service.prepare_stream(db_session, conversation.id, "你好")
+    events = chat_service.stream_reply(db_session, *prepared, RecordingLLM())
+
+    next(events)  # 只读一条 meta 就断开
+    events.close()
+
+    assert db_session.query(Message).count() == 0

@@ -25,6 +25,54 @@ def test_fake_llm_echoes_last_user_message():
     assert reply["model"] == "fake"
 
 
+def test_fake_llm_stream_matches_chat_text():
+    llm = FakeLLM()
+    messages = [{"role": "user", "content": "你好"}]
+
+    pieces = list(llm.stream(messages))
+
+    assert len(pieces) > 1
+    assert "".join(pieces) == llm.chat(messages)["content"]
+
+
+def test_openai_compatible_stream_parses_deltas():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = request.read().decode()
+        body = (
+            'data: {"choices":[{"delta":{"content":"你"}}]}\n\n'
+            'data: {"choices":[{"delta":{"content":"好"}}]}\n\n'
+            "data: [DONE]\n\n"
+        )
+        return httpx.Response(200, content=body.encode())
+
+    pieces = list(_client(handler).stream([{"role": "user", "content": "你好"}]))
+
+    assert pieces == ["你", "好"]
+    assert '"stream":true' in captured["body"].replace(" ", "")
+
+
+def test_openai_compatible_stream_maps_auth_error():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": "bad key"})
+
+    with pytest.raises(LLMError) as exc_info:
+        list(_client(handler).stream([{"role": "user", "content": "你好"}]))
+
+    assert str(exc_info.value) == "模型服务鉴权失败，请检查 LLM_API_KEY"
+
+
+def test_openai_compatible_stream_malformed_chunk():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"data: {not json}\n\n")
+
+    with pytest.raises(LLMError) as exc_info:
+        list(_client(handler).stream([{"role": "user", "content": "你好"}]))
+
+    assert str(exc_info.value) == "模型返回格式无法解析"
+
+
 def test_fake_llm_honours_injected_error():
     llm = FakeLLM(error=LLMError("模型服务不可用"))
 

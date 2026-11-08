@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.dependencies import get_db
+from app.llm import LLMError, LLMTimeoutError, get_llm
 from app.main import app
 from app.models import Message
 
@@ -166,8 +167,6 @@ def test_send_message_empty_returns_422(client):
 
 
 def test_send_message_model_failure_returns_502(client, db_session):
-    from app.llm import LLMError, get_llm
-
     created = client.post("/api/conversations", json={}).json()["data"]
     app.dependency_overrides[get_llm] = lambda: _FailingLLM(LLMError())
 
@@ -185,8 +184,6 @@ def test_send_message_model_failure_returns_502(client, db_session):
 
 def test_send_message_model_timeout_returns_504(client, db_session):
     assert db_session.query(Message).count() == 0  # 前置：库里本来没有消息
-    from app.llm import LLMTimeoutError, get_llm
-
     created = client.post("/api/conversations", json={}).json()["data"]
     app.dependency_overrides[get_llm] = lambda: _FailingLLM(LLMTimeoutError())
 
@@ -201,9 +198,82 @@ def test_send_message_model_timeout_returns_504(client, db_session):
     assert response.json()["message"] == "模型服务超时"
 
 
+def _read_events(response) -> list[dict]:
+    """把 SSE 响应体解成事件列表。"""
+    import json
+
+    events = []
+    for line in response.iter_lines():
+        if not line.startswith("data: "):
+            continue
+        events.append(json.loads(line[len("data: ") :]))
+    return events
+
+
 class _FailingLLM:
     def __init__(self, error: Exception) -> None:
         self.error = error
+        self.model = "failing"
+
+    def stream(self, _messages):
+        raise self.error
 
     def chat(self, _messages):
         raise self.error
+
+
+def test_stream_message_sends_sse_events(client, db_session):
+    created = client.post("/api/conversations", json={}).json()["data"]
+
+    with client.stream(
+        "POST", f"/api/conversations/{created['id']}/messages/stream", json={"content": "你好"}
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        events = _read_events(response)
+
+    types = [e["type"] for e in events]
+    assert types[0] == "meta"
+    assert types[-1] == "done"
+    assert set(types[1:-1]) == {"delta"}
+    assert "".join(e["content"] for e in events if e["type"] == "delta").startswith("[fake] 收到：")
+    assert events[-1]["conversation_title"] == "你好"
+    assert db_session.query(Message).count() == 2
+
+
+def test_stream_message_blank_content_returns_json_400(client):
+    created = client.post("/api/conversations", json={}).json()["data"]
+
+    response = client.post(
+        f"/api/conversations/{created['id']}/messages/stream", json={"content": "   "}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "消息内容不能只包含空白"
+
+
+def test_stream_message_missing_conversation_returns_404(client):
+    response = client.post("/api/conversations/9999/messages/stream", json={"content": "你好"})
+
+    assert response.status_code == 404
+    assert response.json()["message"] == "会话不存在"
+
+
+def test_stream_message_llm_error_becomes_error_event(client, db_session):
+    created = client.post("/api/conversations", json={}).json()["data"]
+    app.dependency_overrides[get_llm] = lambda: _FailingLLM(LLMError())
+
+    try:
+        with client.stream(
+            "POST",
+            f"/api/conversations/{created['id']}/messages/stream",
+            json={"content": "你好"},
+        ) as response:
+            assert response.status_code == 200
+            events = _read_events(response)
+    finally:
+        app.dependency_overrides.pop(get_llm, None)
+
+    assert events[-1]["type"] == "error"
+    assert events[-1]["code"] == 502
+    assert db_session.query(Message).count() == 0

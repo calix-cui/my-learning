@@ -57,7 +57,9 @@ pnpm test:watch    # 监听模式，开发时用
 
 四条红线（出现即本次改动不算完成）：构建失败、ESLint 报 error、引入未声明的依赖、E2E 用例退化。
 
-单测边界：`src/views`、`src/components` 不写组件快照——那部分由 18 项 E2E（`pnpm acceptance`）与人工验收兜底；
+单测边界：`src/views`、`src/components` 不写组件快照——那部分由 E2E 兜底（商品 18 项 `pnpm acceptance`、对话 10 项 `pnpm acceptance:chat`）与人工验收；
+
+> 对话 E2E 跑前跑后都会清空会话。它默认打 5173 的 dev server；如果你刚改过前端代码（HMR 可能中途整页重载），改用 `pnpm build && pnpm preview` 后 `BASE=http://127.0.0.1:4173 pnpm acceptance:chat`，结果更稳定。
 单测只锁定「请求怎么发、错误怎么翻译成中文提示」这类改起来最容易静默出错的逻辑。
 升级触发条件写在 ADR-0002 里（前端 > 8000 行 / 组件 > 40 个 / 同类事故 ≥ 2 次 / E2E > 30 条）。
 
@@ -85,7 +87,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 | `/products` | 商品列表 | `views/ProductList.vue` + `components/ProductFormDialog.vue` |
 | `/categories` | 分类管理 | `views/CategoryManage.vue` + `components/CategoryFormDialog.vue` |
 | `/dashboard` | 概览 | `views/Dashboard.vue` |
-| `/chat` | 对话（会话列表 + 消息区，阶段 4） | `views/ChatView.vue`、`api/chat.ts` |
+| `/chat` | 对话（会话列表 + 消息区，SSE 逐字渲染，阶段 4） | `views/ChatView.vue`、`api/chat.ts` |
 
 **每个页面的字段、状态、空态与交互细节在 [`docs/design/design.md`](../../docs/design/design.md) 与 [`docs/product/prd.md`](../../docs/product/prd.md)** —— 那里是设计与需求的唯一来源，本文件只列路由归属。
 

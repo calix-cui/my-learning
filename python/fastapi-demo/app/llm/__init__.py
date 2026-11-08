@@ -31,7 +31,7 @@ def build_llm() -> LLMClient:
             model=settings.llm_model,
             timeout_seconds=settings.llm_timeout_seconds,
         )
-    return FakeLLM()
+    return FakeLLM(delay_seconds=settings.llm_fake_delay_seconds)
 
 
 @lru_cache

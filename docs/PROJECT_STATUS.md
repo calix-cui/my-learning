@@ -5,7 +5,7 @@
 
 ## 1. 现在在哪
 
-**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–3 已完成，阶段 4「LLM 接入与基础对话」进行中（T1–T5 已落地，剩 T4b 流式与 T6 文档）。**
+**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–3 已完成，阶段 4「LLM 接入与基础对话」已完成（T1–T6 全部落地，含 SSE 流式），下一阶段是 5「Agent 执行循环」。**
 
 阶段口径只以该文件为准。此前本文件里出现的「阶段 2 = MCP client / Agent PoC / Electron 骨架」是我自行归纳的临时说法（源自 `archive/REUSE_CANDIDATES.md` 的「MCP 建议尽早」与 ADR-0001 的 Electron 结论），**与 11 阶段计划无对应关系，已废弃**，勿再引用。
 
@@ -19,6 +19,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-08 | **阶段 4 对话功能**：会话/消息落库 + 模型抽象（fake/openai）+ 会话 CRUD + 同步与 SSE 两种发消息 + `/chat` 页面；后端 120 例 / 87.87%，前端 26 例，E2E 10 项 | [chat.md](chat.md)、[api.md](api.md) §4、[ADR-0006](adr/0006-llm-client-and-chat-storage.md) |
 | 11-07 | **名称空白校验统一**：分类改名、商品改名与新增同规则（先 strip 再判空，纯空白 400），补 5 个用例 | T-22 已解决、[api.md](api.md) §2.5/§3.3 |
 | 11-07 | **文档治理四批 + 终检**：39 份文档全量审查（22 条事实陈旧、11 处职责重叠、6 处缺失），四批重构 + [终检报告](DOCUMENTATION_FINAL_REPORT.md)；人读 1348 行 / AI 向 1739 行 / 归档 672 行，0 孤儿 0 失效链接 | [审查报告](DOCUMENTATION_AUDIT.md)、[重构方案](DOCUMENTATION_REFACTOR_PLAN.md) |
 | 11-07 | **测试基线**：后端 55 例 + 覆盖率门槛 80%（实测 85.38%），前端 Vitest 17 例 | [ADR-0005](adr/0005-testing-baseline.md) |
@@ -38,7 +39,7 @@
 | 1 | AI 开发基建 | ✅ | `AGENTS.md`、`agents/`、`.agents/skills/`、`adr/`、`playbooks/` |
 | 2 | 前后端项目骨架 | ✅ | `python/fastapi-demo/`、`fullstack/product-admin/` |
 | 3 | 基础 API 和数据库 | ✅ | 11 个业务接口、Alembic 迁移、MySQL |
-| 4 | **LLM 接入与基础对话** | ⏳ 进行中 | 设计 [chat.md](chat.md)；T1 表结构 ✅ / T2 模型抽象 ✅ / T3 会话 CRUD ✅ / T4 发消息 ✅ / T5 前端 `/chat` ✅，剩 T4b SSE、T6 文档 |
+| 4 | **LLM 接入与基础对话** | ✅ | [chat.md](chat.md)：T1 表结构 / T2 模型抽象 / T3 会话 CRUD / T4 同步发消息 / T4b SSE 流式 / T5 `/chat` 页面 / T6 文档 |
 | 5 | Agent 基础执行循环 | ⬜ | 依赖 4 |
 | 6 | Tool Calling | ⬜ | 依赖 5 |
 | 7 | Skill 和 MCP | ⬜ | 依赖 6；MCP client 在此阶段做（不自造协议，用官方 SDK） |
@@ -49,7 +50,7 @@
 
 ### 3.2 阶段 4 的接入方式（已定，设计见 [`chat.md`](chat.md)）
 
-**执行进度**：T1 数据模型 + 迁移 ✅（revision `b1b54e93e0ca`，`conversations` / `messages` 两表已建，`alembic check` 无漂移）；T2 模型抽象层 ✅（`FakeLLM` 默认 + `OpenAICompatibleClient`，`httpx.MockTransport` 覆盖 4 类错误映射）；T3 会话 CRUD ✅（5 个端点，[api.md](api.md) §4）；T4 发消息 ✅（`POST /{id}/messages`，同事务写两条消息、失败整体回滚、首条消息自动命名、上下文最近 20 条 + system，见 api.md §4.6；后端 104 例 / 覆盖率 87.59%）；T5 前端 `/chat` ✅（会话列表 + 消息区 + 输入框，Enter 发送、自动命名、刷新保留、重命名/删除，前端 23 例）
+**执行进度**：T1 数据模型 + 迁移 ✅（revision `b1b54e93e0ca`，`conversations` / `messages` 两表已建，`alembic check` 无漂移）；T2 模型抽象层 ✅（`FakeLLM` 默认 + `OpenAICompatibleClient`，`httpx.MockTransport` 覆盖 4 类错误映射）；T3 会话 CRUD ✅（5 个端点，[api.md](api.md) §4）；T4 发消息 ✅（`POST /{id}/messages`，同事务写两条消息、失败整体回滚、首条消息自动命名、上下文最近 20 条 + system，见 api.md §4.6；后端 104 例 / 覆盖率 87.59%）；T5 前端 `/chat` ✅（会话列表 + 消息区 + 输入框，Enter 发送、自动命名、刷新保留、重命名/删除，前端 26 例）；T4b 流式 ✅（`POST /{id}/messages/stream`，SSE 事件 meta/delta/done/error，先校验后开流、流结束才提交、断开即回滚，见 api.md §4.7；后端 120 例 / 覆盖率 87.87%；`pnpm acceptance:chat` 10 项 E2E 全过）；T6 文档 ✅
 
 1. **先 C 打底**：定义 `LLMClient` 协议 + 一个返回固定文本的 `FakeLLM`，在没有 API key 的情况下把「请求 → 流式输出 → 错误处理 → 测试」整条链路立起来，可独立验证。
 2. **随后接 A**：用 OpenAI 兼容 API（`base_url` + `api_key`，走 `.env`），把 `FakeLLM` 换成真实现，其余代码不动。

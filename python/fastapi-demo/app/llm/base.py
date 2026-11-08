@@ -3,6 +3,7 @@
 业务代码只依赖这里的 `LLMClient` 协议，不关心背后是假实现还是真实服务。
 """
 
+from collections.abc import Iterator
 from typing import Protocol, TypedDict
 
 from app.common.exceptions import BusinessError
@@ -37,6 +38,10 @@ class LLMTimeoutError(LLMError):
 
 
 class LLMClient(Protocol):
-    """模型客户端协议。阶段 5/6 会加 `stream()` 与 `tool_calls`，届时扩展而不是推翻。"""
+    """模型客户端协议。阶段 6 会再加 `tool_calls`。"""
 
     def chat(self, messages: list[ChatMessage]) -> LLMReply: ...
+
+    def stream(self, messages: list[ChatMessage]) -> Iterator[str]:
+        """逐块产出回复文本；最后一块通常没有换行，由调用方负责拼接。"""
+        ...

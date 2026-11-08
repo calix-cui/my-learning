@@ -9,7 +9,7 @@ import {
   getConversation,
   listConversations,
   renameConversation,
-  sendMessage,
+  sendMessageStream,
 } from '@/api/chat'
 import type { ChatConversationListItem, ChatMessage } from '@/types/api'
 
@@ -22,6 +22,8 @@ const draft = ref('')
 const loadingList = ref(false)
 const loadingMessages = ref(false)
 const sending = ref(false)
+/** 流式过程中已收到的文本；空字符串表示还在等第一个字符 */
+const streamingText = ref('')
 const messageBody = ref<HTMLElement | null>(null)
 
 const canSend = computed(
@@ -133,28 +135,59 @@ async function handleSend() {
     return
   }
   const id = activeId.value
+  // 乐观插入用户消息：等服务端 meta 回来再换成正身（带真实 id 与时间）
+  const optimisticId = -Date.now()
+  messages.value = [
+    ...messages.value,
+    {
+      id: optimisticId,
+      conversation_id: id,
+      role: 'user',
+      content,
+      model: null,
+      create_time: '',
+    },
+  ]
+  streamingText.value = ''
   sending.value = true
+  scrollToBottom()
+
+  let currentUserId = optimisticId
   try {
-    const exchange = await sendMessage(id, content)
-    // 成功才清空输入框：失败时保留原文，用户不用重打
-    draft.value = ''
-    messages.value = [...messages.value, exchange.user_message, exchange.assistant_message]
-    const first = messages.value.filter((m) => m.role === 'user').length === 1
-    if (first) {
-      activeTitle.value = exchange.user_message.content.slice(0, 30)
-    }
-    patchConversation(id, {
-      title: activeTitle.value,
-      message_count: messages.value.length,
-      update_time: exchange.assistant_message.create_time,
+    await sendMessageStream(id, content, {
+      onMeta: (message) => {
+        currentUserId = message.id
+        messages.value = messages.value.map((m) => (m.id === optimisticId ? message : m))
+      },
+      onDelta: (text) => {
+        streamingText.value += text
+        scrollToBottom()
+      },
+      onDone: (event) => {
+        // 成功才清空输入框：失败时保留原文，用户不用重打
+        draft.value = ''
+        streamingText.value = ''
+        messages.value = [...messages.value, event.assistant_message]
+        if (activeId.value === id) {
+          activeTitle.value = event.conversation_title
+        }
+        patchConversation(id, {
+          title: event.conversation_title,
+          message_count: event.message_count,
+          update_time: event.assistant_message.create_time,
+        })
+        // 最近活动变了，重排列表让它回到第一位
+        conversations.value = [...conversations.value].sort((a, b) =>
+          b.update_time.localeCompare(a.update_time),
+        )
+        scrollToBottom()
+      },
     })
-    // 最近活动变了，重排列表让它回到第一位
-    conversations.value = [...conversations.value].sort((a, b) =>
-      b.update_time.localeCompare(a.update_time),
-    )
-    scrollToBottom()
-  } catch {
-    // 拦截器已经弹过错误提示（502/504 等），输入框内容保持不动
+  } catch (error) {
+    // 后端已回滚这次提问，前端也要撤掉乐观消息
+    messages.value = messages.value.filter((m) => m.id !== currentUserId)
+    streamingText.value = ''
+    ElMessage.error(error instanceof Error ? error.message : '发送失败，请稍后重试')
   } finally {
     sending.value = false
   }
@@ -254,7 +287,11 @@ onMounted(async () => {
 
         <div v-if="sending" class="chat__row chat__row--assistant">
           <div class="chat__avatar">AI</div>
-          <div class="chat__bubble chat__bubble--typing">
+          <div v-if="streamingText" class="chat__bubble">
+            <p class="chat__content">{{ streamingText }}</p>
+            <span class="chat__time">正在输入…</span>
+          </div>
+          <div v-else class="chat__bubble chat__bubble--typing">
             <span class="chat__dot" />
             <span class="chat__dot" />
             <span class="chat__dot" />

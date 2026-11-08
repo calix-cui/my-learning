@@ -4,6 +4,7 @@
 """
 
 import time
+from collections.abc import Iterator
 
 from app.llm.base import ChatMessage, LLMError, LLMReply
 
@@ -27,8 +28,22 @@ class FakeLLM:
             raise self.error
         if self.delay_seconds:
             time.sleep(self.delay_seconds)
+        return LLMReply(content=self._full_text(messages), model=self.model)
+
+    def stream(self, messages: list[ChatMessage]) -> Iterator[str]:
+        """按固定步长切片，模拟逐块返回；拼起来与 chat() 的结果完全一致。"""
+        if self.error is not None:
+            raise self.error
+        text = self._full_text(messages)
+        step = 4
+        for index in range(0, len(text), step):
+            if self.delay_seconds:
+                time.sleep(self.delay_seconds)
+            yield text[index : index + step]
+
+    def _full_text(self, messages: list[ChatMessage]) -> str:
         last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
-        return LLMReply(content=f"[{self.model}] 收到：{last_user}", model=self.model)
+        return f"[{self.model}] 收到：{last_user}"
 
 
 __all__ = ["FakeLLM", "LLMError"]

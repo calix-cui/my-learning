@@ -14,7 +14,7 @@
 
 | 不做 | 留给 |
 |---|---|
-| 流式 SSE 输出 | 阶段 4 的第二批（T4b），首版同步返回 |
+| 流式 SSE 输出 | 阶段 4 的第二批（T4b）：`POST /messages/stream` 逐块返回 |
 | Tool Calling / function calling | 阶段 6 |
 | Agent 执行循环、多轮规划 | 阶段 5 |
 | RAG / Memory / 向量库 | 阶段 8 |
@@ -170,9 +170,9 @@ class LLMClient(Protocol):
 | T2 ✅ | 模型抽象层 | `app/llm/*`、`config.py` 5 个字段、`.env.example` | 单测：`FakeLLM` 正常/异常；`openai` 用 `httpx.MockTransport` 验 4 种错误映射 |
 | T3 ✅ | 会话 CRUD | `schemas/chat.py`、`services/chat_service.py`、`api/chat.py` 的 5 个端点 | 服务层 + 接口层单测、`docs/api.md` 新增一节 |
 | T4 ✅ | 发消息（同步） | `POST /messages`、上下文截断、自动命名 | 用 `FakeLLM` 端到端：发 2 条，库里 4 条记录 |
-| T4b | 流式输出（SSE） | `GET /messages/stream` + 前端逐字渲染 | 手工验证 + 一条集成测试 |
+| T4b ✅ | 流式输出（SSE） | `POST /api/conversations/{id}/messages/stream` + 前端 `fetch` 流式渲染 | 服务/接口单测 + `scripts/chat-acceptance.mjs` |
 | T5 ✅ | 前端 `/chat` 页面 | `api/chat.ts`、`views/ChatView.vue`、路由与侧边栏 | `pnpm lint/test/build` + 手工三流程 |
-| T6 | 文档 | `docs/api.md` §4（含 4.6 发消息）、`docs/how-it-works.md` 架构图补 chat、PROJECT_STATUS 打勾 | 链接检查 0 失效 |
+| T6 ✅ | 文档 | `docs/api.md` §4（含 4.6 发消息）、`docs/how-it-works.md` 架构图补 chat、PROJECT_STATUS 打勾 | 链接检查 0 失效 |
 
 **验收标准**（阶段 4 完成）：本地 `make run` + `pnpm dev` 后，能新建会话、发消息（`FakeLLM` 回复）、刷新后仍在、重命名与删除生效；切 `LLM_PROVIDER=openai` 并配 key 后同流程返回真实模型输出；`make check` 与前端三件套全绿；CI 双 job 绿。
 
@@ -180,7 +180,7 @@ class LLMClient(Protocol):
 
 | 风险 | 处理 |
 |---|---|
-| 同步等待模型，慢时体验差 | 首版设置 30s 超时并明确提示；T4b 换 SSE |
+| 同步等待模型，慢时体验差 | 首版设置 30s 超时并明确提示；T4b 已换 SSE（仍保留 4.6 同步接口） |
 | 上下文无限增长撑爆上下文窗口 | 只取最近 20 条；真正方案在阶段 8 |
 | `openai` 兼容层各家字段不同（如 `reasoning_content`） | 只依赖 `choices[0].message.content`；解析失败按 502 处理 |
 | 开发机没 key 就无法联调 | 默认 `fake`，CI 永远不依赖外部网络 |

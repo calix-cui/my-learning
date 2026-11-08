@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = SecretStr("")  # SecretStr 让日志/报错里显示为 **********
     llm_model: str = ""
     llm_timeout_seconds: float = 30.0
+    # 假模型每块的延迟：本地演示流式效果时调大一点（默认 0，测试不受影响）
+    llm_fake_delay_seconds: float = 0.0
 
     @model_validator(mode="after")
     def _check_openai_settings(self) -> "Settings":

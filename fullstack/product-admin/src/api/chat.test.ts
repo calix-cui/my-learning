@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { messageError } = vi.hoisted(() => ({ messageError: vi.fn() }))
 vi.mock('element-plus', () => ({ ElMessage: { error: messageError } }))
@@ -10,6 +10,7 @@ import {
   listConversations,
   renameConversation,
   sendMessage,
+  sendMessageStream,
 } from './chat'
 import client from './client'
 
@@ -125,5 +126,100 @@ describe('api/chat', () => {
 
     await expect(sendMessage(7, '你好')).rejects.toThrow('模型服务不可用')
     expect(messageError).toHaveBeenCalledWith('模型服务不可用')
+  })
+})
+
+describe('api/chat 流式', () => {
+  function mockSse(chunks: string[]) {
+    const encoder = new TextEncoder()
+    let index = 0
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (index < chunks.length) {
+          controller.enqueue(encoder.encode(chunks[index]))
+          index += 1
+        } else {
+          controller.close()
+        }
+      },
+    })
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
+        new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('按帧解析 meta / delta / done，半帧会缓存到下一块', async () => {
+    const fetchMock = mockSse([
+      'data: {"type":"meta","user_message":{"id":9,"role":"user"}}\n\n' +
+        'data: {"type":"delta","content":"你"}\n\n',
+      // 故意把一帧劈成两半，验证缓冲区拼接
+      'data: {"type":"delta","content":"好"',
+      '}\n\ndata: {"type":"done","conversation_id":3,"conversation_title":"你好","message_count":2,' +
+        '"assistant_message":{"id":10,"role":"assistant","content":"你好"}}\n\n',
+    ])
+    const deltas: string[] = []
+    let metaId = 0
+    let doneTitle = ''
+
+    await sendMessageStream(3, '你好', {
+      onMeta: (message) => {
+        metaId = message.id
+      },
+      onDelta: (text) => deltas.push(text),
+      onDone: (event) => {
+        doneTitle = event.conversation_title
+      },
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const init = fetchMock.mock.calls[0]?.[1]
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(String(init?.body))).toEqual({ content: '你好' })
+    expect(metaId).toBe(9)
+    expect(deltas.join('')).toBe('你好')
+    expect(doneTitle).toBe('你好')
+  })
+
+  it('校验失败返回普通 JSON 时抛后端 message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ code: 400, message: '消息内容不能只包含空白' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    )
+
+    await expect(
+      sendMessageStream(3, '   ', { onDelta: vi.fn(), onDone: vi.fn() }),
+    ).rejects.toThrow('消息内容不能只包含空白')
+  })
+
+  it('收到 error 事件时抛错并保留已收到的文本', async () => {
+    mockSse([
+      'data: {"type":"delta","content":"半句"}\n\n',
+      'data: {"type":"error","code":502,"message":"模型服务不可用"}\n\n',
+    ])
+    const deltas: string[] = []
+
+    await expect(
+      sendMessageStream(3, '你好', {
+        onDelta: (text) => deltas.push(text),
+        onDone: vi.fn(),
+      }),
+    ).rejects.toThrow('模型服务不可用')
+    expect(deltas.join('')).toBe('半句')
   })
 })

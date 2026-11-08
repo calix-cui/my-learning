@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Iterator
 from datetime import datetime
 
 from sqlalchemy import func, select
@@ -6,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.common.exceptions import BusinessError
-from app.llm import ChatMessage, LLMClient
+from app.llm import ChatMessage, LLMClient, LLMError
 from app.models import Conversation, Message
 from app.schemas.chat import (
     ConversationCreateRequest,
@@ -178,3 +179,104 @@ def send_message(
         raise
 
     return user_message, assistant_message
+
+
+def prepare_stream(
+    db: Session, conversation_id: int, content: str
+) -> tuple[Conversation, Message, list[ChatMessage], bool]:
+    """流式回复的前置步骤：校验 + 落用户消息 + 拼上下文。
+
+    放在生成器外面，是为了让 404/400 还能返回普通 JSON；一旦开始流式输出，
+    状态码就固定了，错误只能走 SSE 的 error 事件。
+    """
+    conversation = get_conversation(db, conversation_id)
+    text = content.strip()
+    if not text:
+        raise BusinessError("消息内容不能只包含空白")
+
+    try:
+        is_first_message = (
+            db.scalar(
+                select(func.count(Message.id)).where(Message.conversation_id == conversation_id)
+            )
+            == 0
+        )
+        user_message = Message(conversation_id=conversation_id, role="user", content=text)
+        db.add(user_message)
+        db.flush()
+        # 上下文先在内存里拼好，流式过程中不再查库，也不依赖 session 的迭代状态
+        context = _build_context(db, conversation_id)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("准备流式回复失败")
+        raise
+    return conversation, user_message, context, is_first_message
+
+
+def stream_reply(
+    db: Session,
+    conversation: Conversation,
+    user_message: Message,
+    context: list[ChatMessage],
+    is_first_message: bool,
+    llm: LLMClient,
+) -> Iterator[dict]:
+    """逐块产出 SSE 事件；流正常结束才落 assistant 消息，中途断开或出错整体回滚。
+
+    事件类型：meta（带回 user_message）/ delta（增量文本）/ done（最终消息）/ error。
+    """
+    from app.schemas.chat import MessageResponse
+
+    committed = False
+    try:
+        yield {
+            "type": "meta",
+            "user_message": MessageResponse.model_validate(user_message).model_dump(),
+        }
+
+        pieces: list[str] = []
+        for piece in llm.stream(context):
+            pieces.append(piece)
+            yield {"type": "delta", "content": piece}
+
+        reply_text = "".join(pieces).strip()
+        if not reply_text:
+            raise LLMError("模型返回内容为空")
+
+        assistant_message = Message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=reply_text,
+            model=getattr(llm, "model", None),
+        )
+        db.add(assistant_message)
+
+        if is_first_message and conversation.title == DEFAULT_TITLE:
+            conversation.title = user_message.content[:TITLE_MAX_LENGTH]
+        conversation.update_time = datetime.now()  # noqa: DTZ005
+
+        db.commit()
+        committed = True
+        db.refresh(assistant_message)
+
+        yield {
+            "type": "done",
+            "conversation_id": conversation.id,
+            "conversation_title": conversation.title,
+            "message_count": db.scalar(
+                select(func.count(Message.id)).where(Message.conversation_id == conversation.id)
+            )
+            or 0,
+            "assistant_message": MessageResponse.model_validate(assistant_message).model_dump(),
+        }
+    except BusinessError as exc:
+        db.rollback()
+        yield {"type": "error", "code": exc.code, "message": str(exc)}
+    except Exception:
+        db.rollback()
+        logger.exception("流式回复失败")
+        yield {"type": "error", "code": 500, "message": "回复生成失败，请稍后重试"}
+    finally:
+        # 客户端提前断开（GeneratorExit）时也要保证半截数据不落库
+        if not committed:
+            db.rollback()
