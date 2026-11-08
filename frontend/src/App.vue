@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Box, ChatDotRound, Files, Menu } from '@element-plus/icons-vue'
+import { ChatDotRound } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -9,14 +9,14 @@ const route = useRoute()
 const activeMenu = computed(() => route.path)
 
 /** 当前页面标题，来自路由 meta */
-const pageTitle = computed(() => (route.meta.title as string | undefined) ?? '商品管理后台')
+const pageTitle = computed(() => (route.meta.title as string | undefined) ?? 'My Agent')
 
 /** 后端联通状态：null 表示检测中，仅用于顶栏与侧边栏状态提示 */
 const backendOnline = ref<boolean | null>(null)
 
 onMounted(async () => {
   try {
-    const response = await fetch('/api/products/count')
+    const response = await fetch('/healthz')
     backendOnline.value = response.ok
   } catch {
     backendOnline.value = false
@@ -43,24 +43,12 @@ const sidebarStatusText = computed(() => {
   <el-container class="layout">
     <el-aside width="200px" class="layout__aside">
       <div class="layout__brand">
-        <span class="layout__brand-mark">商</span>
-        <span class="layout__brand-text">商品管理后台</span>
+        <span class="layout__brand-mark">AI</span>
+        <span class="layout__brand-text">My Agent</span>
       </div>
 
       <p class="layout__menu-label">功能菜单</p>
       <el-menu :default-active="activeMenu" router class="layout__menu">
-        <el-menu-item index="/dashboard">
-          <el-icon><Menu /></el-icon>
-          <span>概览</span>
-        </el-menu-item>
-        <el-menu-item index="/products">
-          <el-icon><Box /></el-icon>
-          <span>商品管理</span>
-        </el-menu-item>
-        <el-menu-item index="/categories">
-          <el-icon><Files /></el-icon>
-          <span>分类管理</span>
-        </el-menu-item>
         <el-menu-item index="/chat">
           <el-icon><ChatDotRound /></el-icon>
           <span>对话</span>

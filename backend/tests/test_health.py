@@ -20,12 +20,11 @@ def test_openapi_exposes_business_routes():
 
     assert response.status_code == 200
     paths = response.json()["paths"]
-    assert "/api/products" in paths
-    assert "/api/products/{product_id}" in paths
-    assert "/api/products/count" in paths
-    assert "/api/categories" in paths
-    assert "/api/categories/{category_id}" in paths
-    assert "/api/categories/statistics" in paths
+    # 商品 / 分类接口已随商品管理模块归档（archive/product-admin/），现在只剩对话
+    assert "/api/conversations" in paths
+    assert "/api/conversations/{conversation_id}" in paths
+    assert "/api/conversations/{conversation_id}/messages" in paths
+    assert "/api/conversations/{conversation_id}/messages/stream" in paths
 
 
 def test_healthz_is_independent_of_database():

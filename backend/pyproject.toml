@@ -76,10 +76,10 @@ addopts = "--cov=app --cov-report=term-missing --cov-fail-under=80 -q"
 [tool.coverage.run]
 source = ["app"]
 # 两个脚本只有 __main__ 入口，靠手工执行，测试覆盖不到也不该算进来
-omit = ["app/init_db.py", "app/seed.py"]
+omit = ["app/init_db.py"]
 
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# 当前实测约 85%（含 omit 后分母 383 行），门槛取 80 留出正常波动空间
+# 商品/分类模块归档后分母变小、对话链路覆盖充分，实测见 CI 日志；门槛仍是 80
 fail_under = 80

@@ -12,7 +12,7 @@ import os
 
 os.environ.setdefault(
     "DATABASE_URL",
-    "mysql+pymysql://test:test@127.0.0.1:3306/fastapi_demo_test?charset=utf8mb4",
+    "mysql+pymysql://test:test@127.0.0.1:3306/my_agent_test?charset=utf8mb4",
 )
 
 # 本地 .env 可能配了真实模型（LLM_PROVIDER=openai + 真 key）。测试固定走 fake：

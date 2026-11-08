@@ -1,6 +1,8 @@
-# fastapi-demo
+# My Agent 后端（backend）
 
-FastAPI + SQLAlchemy 的商品/分类接口练习项目：覆盖增删改查、分页与模糊查询、联表查询、分组统计、统一响应与全局异常处理，并配套 lint、测试与 CI。
+My Agent 的 API 服务：对话会话与消息落库、SSE 流式回复、可切换的模型抽象（`fake` / OpenAI 兼容），配 Alembic 迁移、全局异常处理、lint / 测试 / CI。
+
+> 商品与分类接口已随商品管理模块归档（`archive/product-admin/backend/`），现在只保留 `/api/conversations` 与三个探针。
 
 ## 技术栈
 
@@ -10,8 +12,9 @@ FastAPI + SQLAlchemy 的商品/分类接口练习项目：覆盖增删改查、�
 | FastAPI | 0.124.4 | Web 框架与依赖注入 |
 | SQLAlchemy | 2.0.44 | ORM（`Mapped` / `mapped_column` 写法） |
 | PyMySQL | 1.1.2 | MySQL 驱动 |
+| httpx | 0.28 | 调用 OpenAI 兼容接口（`stream=True` 解析 SSE） |
 | pydantic-settings | 2.12.0 | 读取 `.env` 配置 |
-| MySQL | 8.x | 数据库，库名 `fastapi_demo` |
+| MySQL | 8.x | 数据库，库名 `my_agent` |
 | 依赖管理 | uv 0.13.4（`pyproject.toml` + `uv.lock`） | 不用 requirements.txt，`.venv` 由 `uv sync` 维护 |
 | ruff / pytest / pre-commit | 见 `pyproject.toml` 的 `[dependency-groups].dev` | 工程化工具链 |
 
@@ -28,7 +31,8 @@ fastapi-demo/
 │   ├── api/              # 接口层：只做参数接收、调用 service、包装响应
 │   ├── schemas/          # 数据契约：入参校验与出参序列化
 │   ├── services/         # 业务层：校验、事务提交/回滚、ORM 读写
-│   ├── models/           # ORM 模型：categories、products
+│   ├── llm/              # 模型抽象：LLMClient 协议 + fake + OpenAI 兼容实现
+│   ├── models/           # ORM 模型：conversations、messages
 │   └── common/           # 统一响应 Response、业务异常与处理器
 ├── migrations/           # Alembic 迁移脚本（versions/ 下按 revision 链执行）
 ├── alembic.ini           # Alembic 配置（连接串不写这里，统一读 .env）
@@ -44,6 +48,7 @@ fastapi-demo/
 ```text
 api → services → models → database
  │        │
+ │        └→ llm（LLMClient 协议：fake / openai 兼容）
  └→ schemas ← services
 common（Response / BusinessError）被 api 与 main 复用
 ```
@@ -58,10 +63,10 @@ uv sync
 
 # 2. 配置：复制模板后改成自己的账号密码
 cp .env.example .env
-#    DATABASE_URL=mysql+pymysql://root:密码@127.0.0.1:3306/fastapi_demo?charset=utf8mb4
+#    DATABASE_URL=mysql+pymysql://root:密码@127.0.0.1:3306/my_agent?charset=utf8mb4
 
 # 3. 建库（迁移只建表，不建库）
-mysql -u root -p -e "CREATE DATABASE fastapi_demo DEFAULT CHARSET utf8mb4;"
+mysql -u root -p -e "CREATE DATABASE my_agent DEFAULT CHARSET utf8mb4;"
 
 # 4. 迁移到最新表结构（等价于 alembic upgrade head，可重复执行）
 uv run python -m app.init_db
@@ -120,7 +125,7 @@ make check        # 提交前自检：lint + 测试
 
 ```bash
 # 改了 app/models/ 之后：生成迁移文件（连的就是 .env 里的库）
-make revision m="为商品增加备注字段"
+make revision m="给会话加置顶字段"
 
 # 生成后务必人工 review：autogenerate 对「表/列改名」识别为「删旧的 + 建新的」，会丢数据
 git diff migrations/versions/
@@ -139,7 +144,7 @@ make check-migration
 
 ## 接口一览
 
-11 个业务操作 + 3 个运维/根路径：分类 5（增/列表/改名/删除/统计）、商品 6（增/分页列表/局部改/删除/总数/详情）、运维 3（`GET /`、`GET /healthz`、`GET /readyz`）。
+7 个对话操作 + 3 个运维/根路径：会话 5（新建/列表/详情/改名/删除）、消息 2（同步、SSE 流式）、运维 3（`GET /`、`GET /healthz`、`GET /readyz`）。
 
 **完整契约（参数、响应字段、错误文案、示例）在 [`docs/api.md`](../docs/api.md)** —— 那是唯一来源，本文件不再重复维护。
 
@@ -148,22 +153,22 @@ make check-migration
 ## 测试
 
 ```bash
-make test        # 55 个用例 + 覆盖率门槛（80%），全程不连 MySQL
+make test        # 75 个用例 + 覆盖率门槛（80%），全程不连 MySQL
 make check       # lint + 测试，提交前跑这个
 ```
 
 两类用例共用 `tests/conftest.py` 里的占位 `DATABASE_URL`：
 
-- **接口层**（`test_health` / `test_schemas` / `test_errors` / `test_api_validation`）：
-  `TestClient` 直连 ASGI 应用，用例停在参数校验与异常处理阶段，`create_engine` 惰性所以不会连库
-- **服务层**（`test_category_service` / `test_product_service`）：`db_session` 夹具给**内存 SQLite**，
-  真跑 insert/select/update/delete、分页、关键词与分类筛选、删除保护，验证的是 SQL 与业务分支
+- **接口层**（`test_health` / `test_errors` / `test_chat_api`）：`TestClient` 直连 ASGI 应用，
+  用 `dependency_overrides` 把 `get_db` / `get_llm` 换成内存 SQLite 与假模型，不连库、不联网
+- **服务层**（`test_chat_service` / `test_llm`）：`db_session` 夹具给**内存 SQLite**，
+  真跑 insert/select/update/delete、上下文截断、事务回滚、SSE 事件序列；`httpx.MockTransport` 模拟上游
 
 覆盖率门槛写在 `pyproject.toml` 的 `[tool.coverage.report] fail_under = 80`，
-`app/init_db.py` 与 `app/seed.py` 是手工执行的脚本，已 `omit` 掉。当前实测 87.88%（120 个用例）。
+`app/init_db.py` 是手工执行的脚本，已 `omit` 掉。当前实测 91%（75 个用例）。
 
-**没有覆盖到的**：MySQL 专有行为——唯一键冲突的 `1062` 分支、外键约束、`utf8mb4` 排序规则。
-这类用例需要真实 MySQL（或 testcontainers），属于后续工作。
+**没有覆盖到的**：MySQL 专有行为——外键 `ON DELETE CASCADE` 的真实级联、`utf8mb4` 排序规则、并发下的事务可见性。
+这类用例需要真实 MySQL（或 testcontainers），属于后续工作（见 `docs/TECHNICAL_DEBT.md` T-04）。
 
 ## 工程规范
 
@@ -178,12 +183,14 @@ make check       # lint + 测试，提交前跑这个
 
 ## 已知限制与后续计划
 
-- 唯一约束冲突判断依赖 MySQL 错误码 `1062`（`app/services/category_service.py`、`product_service.py`），换数据库需调整。
+- 模型调用是同步阻塞的（`httpx.Client`），单个请求占用一个工作线程；高并发下需要换成异步客户端或线程池。
 - 迁移写库需要真实 MySQL：`make check-migration` 只在本机跑，CI 目前不校验迁移一致性。
 - `Response.data` 是 `Any`，OpenAPI 里看不到具体结构；可为每个接口声明具体 `response_model`。
-- 列表接口的 `total` 与 `items` 是两次查询，极端并发下可能不一致。
+- 非流式与流式两条路径记录的 `model` 标签不一致：同步存上游返回的模型名（如 `deepseek-flash`），流式存配置名（如 `deepseek-chat`）。
+
+- 上下文只带最近 20 条消息（`CONTEXT_LIMIT`），没有摘要压缩，长对话会丢早期信息。
 - 容器化部署见根目录 [`docs/deploy.md`](../docs/deploy.md)；镜像未进 CI，构建失败只能在本地暴露。
-- 仓库里存在两个虚拟环境（`python/.venv` 与 `backend/.venv`），建议只保留项目内的 `.venv`。
+- 仓库里曾存在 `python/.venv` 旧虚拟环境（目录迁移遗留），建议删掉只保留 `backend/.venv`。
 
 ## 相关文档
 

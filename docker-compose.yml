@@ -1,8 +1,8 @@
-# 商品管理网站的一键部署编排
+# My Agent 的一键部署编排
 # 用法：cp .env.example .env 改好密码 → docker compose up -d --build
 #      需要 HTTPS 时：docker compose --profile https up -d --build
 
-name: product-admin
+name: my-agent
 
 services:
   db:
@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 里设置 MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-fastapi_demo}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-my_agent}
       MYSQL_USER: ${MYSQL_USER:-fastapi}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请在 .env 里设置 MYSQL_PASSWORD}
       TZ: Asia/Shanghai
@@ -33,7 +33,7 @@ services:
       context: ./backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-fastapi}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-fastapi_demo}?charset=utf8mb4
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-fastapi}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-my_agent}?charset=utf8mb4
       TZ: Asia/Shanghai
       # 模型接入：默认 fake（不联网）。用真实模型时在 .env 里改成 openai 并填下面几项
       LLM_PROVIDER: ${LLM_PROVIDER:-fake}
