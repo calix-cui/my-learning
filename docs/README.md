@@ -75,6 +75,7 @@ AI 读的（约 1700 行）     AGENTS.md、agents/、adr/、playbooks/ —— �
 | 命令、工具职责、CI 步骤 | [`toolchain.md`](toolchain.md) |
 | 端口、环境变量、容器服务 | [`deploy.md`](deploy.md) §3–§3.1 |
 | 对话表结构、事件协议、任务拆分 | [`chat.md`](chat.md) |
+| 账号、登录态、哪些数据与账号绑定 | [`auth.md`](auth.md) + [`api.md`](api.md) §3 |
 | 当前进度、单测数量与覆盖率 | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) |
 | 技术选择与理由 | [`adr/`](adr/README.md) |
 | 已知问题与债 | [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md) |

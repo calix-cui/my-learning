@@ -113,14 +113,17 @@ flowchart LR
 | 层 | 在哪 | 数量 | 跑法 | 连库吗 | 拦得住什么 / 拦不住什么 |
 |---|---|---|---|---|---|
 | 后端探针与路由 | `backend/tests/test_health.py`(4)、`test_errors.py`(5) | 9 | `make test` | 否 | 存活/就绪探针、404 路由、统一响应外壳、5 个异常处理器 |
-| 后端模型抽象 | `tests/test_llm.py` | 13 | `make test` | 否（`httpx.MockTransport`） | `FakeLLM` 回显与分片、401/403/402/429/超时/畸形帧的错误映射、上游文案不外泄、代理配置异常兜底 |
+| 后端模型抽象 | `tests/test_llm.py` | 16 | `make test` | 否（`httpx.MockTransport`） | `FakeLLM` 回显与分片、401/403/402/429/超时/畸形帧的错误映射、上游文案不外泄、代理配置异常兜底 |
+| 后端账号服务 | `tests/test_auth_service.py` | 29 | `make test` | 否（内存 SQLite） | 密码规则与哈希、重复邮箱、停用账号、会话签发/过期/撤销、滑动续期、改密踢其他设备；拦不住真实 Argon2 参数调优 |
+| 后端账号接口 | `tests/test_auth_api.py` | 19 | `make test` | 否（`dependency_overrides`） | 注册/登录/登出/me/设备/改密、HttpOnly Cookie、未登录一律 401、**A/B 用户数据隔离（越权一律 404）** |
 | 后端对话服务 | `tests/test_chat_service.py` | 30 | `make test` | 否（内存 SQLite） | 会话 CRUD、上下文截断与顺序、事务回滚、SSE 事件序列、断开即回滚 |
 | 后端对话接口 | `tests/test_chat_api.py` | 20 | `make test` | 否（`dependency_overrides`） | 会话与消息端点、`text/event-stream`、400/404/502/504 |
 | 前端工具函数 | `frontend/src/utils/markdown.test.ts` | 6 | `pnpm test` | 否（纯字符串） | 加粗/列表/代码块/自动换行、原文 HTML 不当标签、外链 rel；拦不住真实 DOM 消毒 |
 | 前端 api 层 | `frontend/src/api/client.test.ts`(8)、`chat.test.ts`(9) | 17 | `pnpm test` | 否（假 adapter） | 错误码到提示语的映射、请求封装、SSE 分帧解析、流式超时 35s；拦不住组件渲染与交互 |
 | 端到端 | `frontend/scripts/chat-acceptance.mjs` | 10 项 | `pnpm acceptance:chat` | **是**（真实后端 + 真实库） | 对话页：空态、新建、流式逐字、自动命名、刷新保留、排序、删除；跑前跑后清空会话 |
+| 端到端 | `frontend/scripts/auth-acceptance.mjs` | 13 项 | `pnpm acceptance:auth` | **是** | 未登录拦截与 redirect、注册即登录、刷新保持、发消息、退出后再也进不去、重新登录数据仍在、Cookie 不可被 JS 读到 |
 
-门禁口径：后端 `--cov-fail-under=80`（商品模块归档后当前 91%，75 passed）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`。
+门禁口径：后端 `--cov-fail-under=80`（商品模块归档后当前 93%，123 passed）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`。
 
 怎么加测试：改服务层就在 `tests/test_chat_service.py` 里用 `db_session` 夹具（内存 SQLite）写一条；改前端 api 封装就在对应 `*.test.ts` 里用 `client.defaults.adapter` 造假响应。
 

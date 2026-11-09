@@ -230,6 +230,7 @@ Skill采用分层管理：全局、项目级、专项、外部工具
 | 任务类型 | 必读 | 需要时再查 |
 |---|---|---|
 | 改后端接口 / 校验 / 业务规则 | [`docs/api.md`](docs/api.md)、[`docs/how-it-works.md`](docs/how-it-works.md) §3–§4 | [`docs/chat.md`](docs/chat.md) 的设计取舍 |
+| 加登录 / 改鉴权 / 数据隔离 | [`docs/auth.md`](docs/auth.md)、[ADR-0008](docs/adr/0008-auth-and-session.md)、[`docs/api.md`](docs/api.md) §3 | `backend/app/auth/`、`frontend/src/stores/session.ts` |
 | 改前端页面 / 样式 / 交互 | [`frontend/README.md`](frontend/README.md)、`frontend/src/views/ChatView.vue` | `docs/api.md`、`docs/design/`（归档的设计规范仍可参考） |
 | 接 / 换模型、改提示与上下文 | [`docs/chat.md`](docs/chat.md)、[ADR-0006](docs/adr/0006-llm-client-and-chat-storage.md)、`backend/app/llm/` | [`backend/README.md`](backend/README.md)「接入真实模型」 |
 | 改表结构 / 写迁移 | [`backend/README.md`](backend/README.md)「数据库迁移」、[ADR-0003](docs/adr/0003-database-migrations-alembic.md) | `docs/how-it-works.md` §5 数据模型 |

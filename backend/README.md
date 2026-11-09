@@ -142,9 +142,31 @@ make check-migration
 - 已有库第一次接入：确认表结构与脚本一致后 `alembic stamp head`，只写 `alembic_version`，不动数据。
 - `make check` 仍然只跑 lint + 测试（不需要数据库），CI 依赖这一点。
 
+## 账号体系
+
+- 密码：Argon2id（`argon2-cffi`），`password_hash` 不可逆；登录成功会顺带 rehash 旧参数。
+- 会话：服务端存 `sessions` 行，Cookie 里只有随机 token（`HttpOnly`、`SameSite=Lax`），库里存 `sha256(token)`。
+- 过期：`SESSION_TTL_DAYS`（默认 30 天）滑动续期，使用超过 1 小时才写一次 `last_seen_time`。
+- 第一个管理员：注册接口开放时可以直接注册；也可以关掉注册用脚本建号：
+
+```bash
+ADMIN_EMAIL=me@example.com ADMIN_PASSWORD='至少8位的密码' uv run python -m app.create_admin
+# 账号已存在时会重置密码并确保 role=admin（忘记密码时救急）
+```
+
+相关环境变量见 `.env.example` 的「账号体系」段：`ALLOW_REGISTRATION`、`SESSION_TTL_DAYS`、`APP_ENV`。
+
+设计与取舍见 [`docs/auth.md`](../docs/auth.md) 与 [`docs/adr/0008-auth-and-session.md`](../docs/adr/0008-auth-and-session.md)。
+
 ## 接口一览
 
-7 个对话操作 + 3 个运维/根路径：会话 5（新建/列表/详情/改名/删除）、消息 2（同步、SSE 流式）、运维 3（`GET /`、`GET /healthz`、`GET /readyz`）。
+7 个账号操作 + 7 个对话操作 + 3 个运维/根路径：
+
+- 账号 7（`/api/auth`）：注册、登录、登出、当前用户、设备列表、撤销设备、改密码
+- 对话 7：会话 5（新建/列表/详情/改名/删除）、消息 2（同步、SSE 流式）
+- 运维 3（`GET /`、`GET /healthz`、`GET /readyz`）
+
+除注册/登录与 3 个运维路径外都要求登录（HttpOnly Cookie `my_agent_session`），未登录返回 401。
 
 **完整契约（参数、响应字段、错误文案、示例）在 [`docs/api.md`](../docs/api.md)** —— 那是唯一来源，本文件不再重复维护。
 
@@ -153,19 +175,20 @@ make check-migration
 ## 测试
 
 ```bash
-make test        # 75 个用例 + 覆盖率门槛（80%），全程不连 MySQL
+make test        # 123 个用例 + 覆盖率门槛（80%），全程不连 MySQL
 make check       # lint + 测试，提交前跑这个
 ```
 
 两类用例共用 `tests/conftest.py` 里的占位 `DATABASE_URL`：
 
-- **接口层**（`test_health` / `test_errors` / `test_chat_api`）：`TestClient` 直连 ASGI 应用，
-  用 `dependency_overrides` 把 `get_db` / `get_llm` 换成内存 SQLite 与假模型，不连库、不联网
+- **接口层**（`test_health` / `test_errors` / `test_chat_api` / `test_auth_api`）：`TestClient` 直连 ASGI 应用，
+  用 `dependency_overrides` 把 `get_db` / `get_llm` 换成内存 SQLite 与假模型，不连库、不联网；
+  `client` 夹具真实走一遍注册接口拿 Cookie，`anon_client` 用来验证「未登录一律 401」
 - **服务层**（`test_chat_service` / `test_llm`）：`db_session` 夹具给**内存 SQLite**，
   真跑 insert/select/update/delete、上下文截断、事务回滚、SSE 事件序列；`httpx.MockTransport` 模拟上游
 
 覆盖率门槛写在 `pyproject.toml` 的 `[tool.coverage.report] fail_under = 80`，
-`app/init_db.py` 是手工执行的脚本，已 `omit` 掉。当前实测 91%（75 个用例）。
+`app/init_db.py` 是手工执行的脚本，已 `omit` 掉。当前实测 93%（123 个用例）。
 
 **没有覆盖到的**：MySQL 专有行为——外键 `ON DELETE CASCADE` 的真实级联、`utf8mb4` 排序规则、并发下的事务可见性。
 这类用例需要真实 MySQL（或 testcontainers），属于后续工作（见 `docs/TECHNICAL_DEBT.md` T-04）。

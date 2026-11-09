@@ -1,18 +1,18 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-08 · 商品管理模块已归档、项目更名为 **My Agent** · `main` 与 `origin/main` 同步（见 `git log -1`）
+> 最近更新：2026-11-09 · 新增账号体系（注册/登录/会话/数据隔离）· `main` 与 `origin/main` 同步（见 `git log -1`）
 
 ## 1. 现在在哪
 
-**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–3 已完成，阶段 4「LLM 接入与基础对话」已完成（T1–T6 全部落地，含 SSE 流式），下一阶段是 5「Agent 执行循环」。**
+**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–4 已完成，阶段 4.5「账号体系」作为对话功能的前置补强也已落地，下一阶段是 5「Agent 执行循环」。**
 
 阶段口径只以该文件为准。此前本文件里出现的「阶段 2 = MCP client / Agent PoC / Electron 骨架」是我自行归纳的临时说法（源自 `archive/REUSE_CANDIDATES.md` 的「MCP 建议尽早」与 ADR-0001 的 Electron 结论），**与 11 阶段计划无对应关系，已废弃**，勿再引用。
 
 已经有一个能跑、能测、能部署的最小闭环：
 
-- 后端 FastAPI（对话 7 个操作 + 3 个运维路径；会话与消息落库，模型层可切换 fake / OpenAI 兼容）
-- 前端 Vue 3 聊天界面（会话列表 + 消息区 + SSE 逐字渲染 + Markdown，10 项端到端验收全过）
+- 后端 FastAPI（账号 7 + 对话 7 + 运维 3 个操作；会话与消息按用户隔离落库，模型层可切换 fake / OpenAI 兼容）
+- 前端 Vue 3：登录/注册页 + 聊天界面（会话列表 + 消息区 + SSE 逐字渲染 + Markdown），未登录只能进登录/注册；13 项账号 E2E + 10 项对话 E2E 全过
 - 数据库迁移（Alembic）、依赖锁定（uv / pnpm）、质量门禁（ruff / ESLint / pytest / Vitest / CI）、容器化（Docker Compose）
 
 > 商品 / 分类 / 概览页与对应后端接口已于 2026-11-08 整体归档到 `archive/product-admin/`（`git mv`，历史保留），应用层不再暴露这些路由。
@@ -21,6 +21,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-09 | **账号体系**：注册/登录/登出/我的设备/改密 + 服务端会话（HttpOnly Cookie，库里存 SHA-256）+ Argon2id + `conversations.user_id` 数据隔离（越权一律 404）+ 前端登录守卫与 401 统一跳转；后端 123 例 / 93.37%，前端 31 例，账号 E2E 13 项 | [auth.md](auth.md)、[ADR-0008](adr/0008-auth-and-session.md)、[api.md](api.md) §3 |
 | 11-08 | **改名为 My Agent 并归档商品模块**：`product-admin` → `my-agent`（包名/标题/Compose 项目名/数据库名），商品·分类·概览的前后端代码与需求/设计/验收文档整体迁到 `archive/product-admin/`，新增迁移 `17fe0c7d2cb5` 删除 `products`/`categories` 两表；前后端只保留对话链路 | `archive/product-admin/README.md`、[ADR-0007](adr/0007-archive-product-module.md) |
 | 11-08 | **接入真实模型**：DeepSeek（OpenAI 兼容）跑通本地与容器；修 `NO_PROXY=[::1]` 导致 `httpx.InvalidURL` 启动崩溃、补 402 余额不足映射、测试强制 fake 隔离 | [backend/README.md](../backend/README.md)「接入真实模型」、[api.md](api.md) §4.6 |
 | 11-08 | **开发体验**：`scripts/dev.sh` 一条命令起前后端（都带热更新）；README 写明「日常开发用本地、容器只做交付验证」；对话页助手消息支持 Markdown 渲染（`markdown-it` + `DOMPurify`，路由级懒加载） | `frontend/src/utils/markdown.ts`、[chat.md](chat.md) §6、[toolchain.md](toolchain.md) |
@@ -46,6 +47,7 @@
 | 2 | 前后端项目骨架 | ✅ | `backend/`、`frontend/` |
 | 3 | 基础 API 和数据库 | ✅ | 对话 7 个操作 + 3 个探针、Alembic 迁移、MySQL（商品/分类接口已归档） |
 | 4 | **LLM 接入与基础对话** | ✅ | [chat.md](chat.md)：T1 表结构 / T2 模型抽象 / T3 会话 CRUD / T4 同步发消息 / T4b SSE 流式 / T5 `/chat` 页面 / T6 文档；已接 DeepSeek 实测 |
+| 4.5 | 账号体系（补强） | ✅ | [auth.md](auth.md)：users/sessions 两表 + Argon2id + 服务端会话 + 用户级数据隔离 + 登录页/守卫 |
 | 5 | Agent 基础执行循环 | ⬜ | 依赖 4 |
 | 6 | Tool Calling | ⬜ | 依赖 5 |
 | 7 | Skill 和 MCP | ⬜ | 依赖 6；MCP client 在此阶段做（不自造协议，用官方 SDK） |
@@ -68,7 +70,7 @@
 | 门槛 | 判定标准 | 现状 |
 |---|---|---|
 | 文档可信 | `docs/` 无已知过期事实 | ✅ 2026-11-07（见 [DOCUMENTATION_FINAL_REPORT.md](DOCUMENTATION_FINAL_REPORT.md) §3） |
-| 基线可跑 | `make check` 75 passed / ≥80%、`pnpm lint && pnpm test && pnpm build` 全过 | ✅ 2026-11-08（75 passed / 91%、前端 23 passed） |
+| 基线可跑 | `make check` ≥80%、`pnpm lint && pnpm test && pnpm build` 全过 | ✅ 2026-11-09（后端 123 passed / 93.37%、前端 31 passed） |
 | 存储明确 | 对话数据存哪（新表 or 不落库）、是否需要会话 ID | ✅ 已定：`conversations` / `messages` 两表落库（[ADR-0006](adr/0006-llm-client-and-chat-storage.md)） |
 
 剩余技术债见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)：P0/P1 已清空，剩下以 P2 为主（日志规范 T-23、Element Plus 体积 T-21）。
@@ -83,6 +85,7 @@
 | 后端分层 | api / schemas / services / models / common | 控制器不写 SQL，业务可单测 |
 | 前端 | Vue 3 + TS + Vite + Element Plus | 与设计稿还原度高、组件齐 |
 | 通信 | REST + 统一响应 `{code,message,data}` | 简单，任意客户端可消费 |
+| 鉴权 | 服务端会话 + HttpOnly Cookie + Argon2id，自研 `app/auth/` | 能即时踢下线、不把 token 暴露给 JS；不引 fastapi-users 以免为单人项目加一层抽象（ADR-0008） |
 | 数据库迁移 | Alembic | 结构变更要能复现与回滚（ADR-0003） |
 | 依赖管理 | uv（后端）+ pnpm（前端） | 锁定完整依赖树，CI 可复现 |
 | 质量门禁 | 后端严（ruff+pytest+80% 覆盖）、前端轻（ESLint recommended + Vitest 纯逻辑） | 单人项目，摩擦要小于收益（ADR-0002） |
@@ -94,7 +97,7 @@
 
 按优先级见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)（T-01…T-25）。当前最该处理的五条：
 
-1. **T-04 部分解决** — 后端测试用内存 SQLite，MySQL 专有行为（外键级联、排序规则、并发可见性）无自动化覆盖
+1. **T-04 部分解决** — 后端测试用内存 SQLite，MySQL 专有行为（外键级联、排序规则、并发可见性）无自动化覆盖；`users`/`sessions` 的级联删除同样只在真实 MySQL 冒烟里验证过
 2. **T-05 遗留** — CI 不校验迁移一致性（`alembic check` 需要 MySQL service）
 3. **T-02 遗留** — 前端 ESLint 未启 type-aware（ADR-0002 已接受该取舍）
 4. **T-23** — 后端日志无统一配置、无 request id，排障只能靠 uvicorn 默认输出

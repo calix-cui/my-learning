@@ -100,19 +100,58 @@ sequenceDiagram
 | 业务层 | `app/services/` | 规则（标题去空白、上下文只带最近 20 条、失败回滚）、事务提交 | HTTP 状态码细节、具体模型厂商 | 同一个规则被多个接口复用时只写一次 |
 | 模型抽象 | `app/llm/` | `LLMClient` 协议、fake 与 OpenAI 兼容两种实现、上游错误翻译 | 存库、业务规则 | 换模型 / 加工具调用时不碰业务层 |
 | 模型层 | `app/models/` | 表结构（SQLAlchemy） | 业务判断 | 数据库结构的唯一描述，Alembic 据此生成迁移 |
+| 鉴权层 | `app/auth/` | 密码哈希（Argon2id）、会话 token 的签发/校验/撤销、`get_current_user` 依赖 | 业务规则、SQL 之外的事 | 「谁能看什么」集中一处：所有接口默认拒绝，显式依赖才放行 |
 | 公共层 | `app/common/` | 统一响应 `Response`、`BusinessError` 与 5 个处理器 | 具体业务 | 「所有接口长得一样」这件事只实现一次 |
 
-一句话记忆：**api 管门面，schemas 管形状，services 管规矩，llm 管模型，models 管表，common 管统一。**
+一句话记忆：**api 管门面，schemas 管形状，services 管规矩，auth 管放行，llm 管模型，models 管表，common 管统一。**
 
 另有三个装配文件不在上表里：`app/main.py`（创建应用、挂路由、注册 5 个异常处理器与 CORS）、`app/database.py`（Engine、公共 `Base`、`SessionLocal`）、`app/dependencies.py`（`get_db` 为每个请求提供一个 Session）。它们不含业务逻辑，改动风险低但影响面大。
+
+### 3.1 登录态是怎么一路传到 SQL 的
+
+```
+浏览器 Cookie: my_agent_session=...
+  → app/auth/dependencies.py: get_current_user  校验 token 哈希、过期时间、账号是否停用
+  → app/api/chat.py: user: CurrentUser          每个路由都要求它（没有就 401）
+  → app/services/chat_service.py                user.id 出现在每条 SQL 的 where 里
+```
+
+三条硬规则（改代码时别破坏）：
+
+1. **默认拒绝**：除 `/api/auth/register`、`/api/auth/login` 与 3 个探针，所有路由都声明 `user: CurrentUser`，漏写就等于公开接口。
+2. **隔离在 service 层强制**：查询一条会话必须是 `where(id == x, user_id == user.id)`，查不到就 404（**不返回 403**，避免暴露「这个 id 存在」）。
+3. **归属只在 `conversations.user_id`**：`messages` 不冗余 `user_id`，避免两处不一致。
 
 ## 4. 数据长什么样
 
 ```mermaid
 erDiagram
+    users ||--o{ sessions : "一个账号多台设备"
+    users ||--o{ conversations : "一个账号多个会话"
     conversations ||--o{ messages : "一个会话多条消息"
+    users {
+        int id PK "自增主键"
+        varchar email UK "登录标识，统一小写"
+        varchar password_hash "Argon2id，不可逆"
+        varchar display_name "可为空"
+        varchar role "user / admin"
+        tinyint is_active "停用后立刻登录不上"
+        datetime last_login_time
+        datetime create_time
+    }
+    sessions {
+        int id PK "自增主键"
+        int user_id FK "ON DELETE CASCADE"
+        varchar token_hash UK "sha256(token)，明文只在 Cookie 里"
+        varchar user_agent
+        varchar ip
+        datetime last_seen_time "1 小时才刷新一次，滑动续期"
+        datetime expires_time "默认 30 天，有索引"
+        datetime create_time
+    }
     conversations {
         int id PK "自增主键"
+        int user_id FK "所属用户，数据隔离唯一维度，有索引"
         varchar title "默认「新会话」，首条消息前 30 字自动命名"
         varchar agent_key "默认 default，为多 Agent 预留"
         datetime update_time "有索引，列表按它倒序"
@@ -130,10 +169,11 @@ erDiagram
 
 （图片版：[`images/diagram-data-model.png`](images/diagram-data-model.png)，由本节 mermaid 导出；改图请改上面的代码块，图片只是快照）
 
-两条真实约束，验收时会碰到：
+三条真实约束，验收时会碰到：
 
 1. **删会话即删消息**：数据库外键 `ON DELETE CASCADE`，前端不需要逐条删。
 2. **上下文只带最近 20 条**：`CONTEXT_LIMIT=20`，system 消息全带；这是成本与连贯性的折中，不是越多越好。
+3. **删账号即删数据**：`sessions` 与 `conversations` 都对 `users.id` 建了 `ON DELETE CASCADE`，消息随会话级联删除；这是 v1 的取舍——没有回收站，删了就没了。
 
 ## 5. 代码地图（要改什么去哪）
 
@@ -141,9 +181,11 @@ erDiagram
 |---|---|---|
 | 加一个接口 | `app/api/chat.py` | `app/schemas/`、`docs/api.md`（契约） |
 | 改业务规则 | `app/services/chat_service.py` | `tests/test_chat_service.py` |
+| 加登录 / 改鉴权 | `app/auth/`、`app/api/auth.py` | `tests/test_auth_service.py`、`tests/test_auth_api.py`、`docs/auth.md` |
 | 换模型 / 加模型参数 | `app/llm/`、`app/config.py` | `tests/test_llm.py`、`backend/README.md`「接入真实模型」 |
 | 加字段 | `app/models/` → `make revision m="..."` | `app/schemas/`、`docs/api.md` |
 | 改页面 | `frontend/src/views/ChatView.vue` | `frontend/src/api/chat.ts`、`utils/markdown.ts` |
+| 改登录页 / 守卫 | `frontend/src/views/{Login,Register}View.vue`、`router/index.ts` | `src/stores/session.ts`、`src/api/client.ts` |
 | 改样式 | `frontend/src/styles/index.css` + 组件内 `<style scoped>` | — |
 | 改部署 | `docker-compose.yml`、两个 `Dockerfile`、`nginx.conf` | `docs/deploy.md` |
 
@@ -153,5 +195,6 @@ erDiagram
 2. `app/api/chat.py` → `app/services/chat_service.py` → `app/models/conversation.py`——顺着一条链路看穿分层
 3. `app/llm/base.py` → `app/llm/fake.py` → `app/llm/openai_compatible.py`——模型是怎么被抽象掉的
 4. `app/common/response.py` 与 `app/common/exceptions.py`——统一响应与错误是怎么做到的
-5. `frontend/src/api/chat.ts` → `views/ChatView.vue`——前端怎么调接口、怎么渲染流式与 Markdown
-6. 回到本页第 2 节，把时序图与真实代码对一遍
+5. `app/auth/dependencies.py` → `app/api/chat.py`——登录态怎么变成 `user.id` 并进到 SQL
+6. `frontend/src/api/chat.ts` → `views/ChatView.vue`——前端怎么调接口、怎么渲染流式与 Markdown
+7. 回到本页第 2 节，把时序图与真实代码对一遍

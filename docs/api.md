@@ -5,14 +5,16 @@
 
 | 版本 | 日期 | 覆盖 | 维护 |
 | --- | --- | --- | --- |
-| v2.0 | 2026-11-08 | 对话 7 个操作 + 3 个运维/根路径（商品与分类接口已归档） | Python 后端 |
+| v2.1 | 2026-11-09 | 账号 7 个操作 + 对话 7 个操作 + 3 个运维/根路径（商品与分类接口已归档） | Python 后端 |
 
 ## 1 通用约定
 
 ### 1.1 基础地址与路由
 
 - 开发 baseURL：`http://127.0.0.1:8000`；业务接口统一前缀 `/api`；请求/响应为 JSON、UTF-8。
+- 账号 7 个操作（`/api/auth`）：`POST /register`、`POST /login`、`POST /logout`、`GET /me`、`GET /sessions`、`DELETE /sessions/{id}`、`POST /password`。
 - 对话 7 个操作（`/api/conversations`）：`POST ""`、`GET ""`、`GET /{id}`、`PATCH /{id}`、`DELETE /{id}`、`POST /{id}/messages`（同步）、`POST /{id}/messages/stream`（SSE）。
+- **除注册/登录与 3 个运维路径外，所有接口都要求登录**：会话靠 HttpOnly Cookie `my_agent_session` 传递，未登录返回 401（见 3）。
 - 运维 3 个路径（无 `/api` 前缀、裸 JSON）：`GET /`、`GET /healthz`、`GET /readyz`。
 - 商品 / 分类接口已随商品管理模块归档（`archive/product-admin/`），旧契约见 `archive/product-admin/docs/api-product-admin.md`。
 - 交互式文档：`/docs`（Swagger UI）、`/redoc`、机器可读 `/openapi.json`。
@@ -40,8 +42,11 @@
 
 | HTTP/code | 含义 | 真实文案 | data |
 | --- | --- | --- | --- |
-| 400 | 业务规则不满足 | `会话标题不能只包含空白`、`消息内容不能为空` | null |
-| 404 | 资源不存在 | `会话不存在`、`Not Found`（未定义路径） | null |
+| 400 | 业务规则不满足 | `会话标题不能只包含空白`、`消息内容不能为空`、`密码至少 8 位`、`密码最多 72 位`、`原密码不正确` | null |
+| 401 | 未登录 / 会话失效 | `请先登录`、`邮箱或密码不正确` | null |
+| 403 | 被拒绝 | `注册已关闭`（`ALLOW_REGISTRATION=false`）、`账号已被停用` | null |
+| 409 | 冲突 | `该邮箱已注册` | null |
+| 404 | 资源不存在 | `会话不存在`、`登录会话不存在`、`Not Found`（未定义路径）；**越权访问他人资源也返回 404**（不暴露存在性） | null |
 | 422 | 参数校验失败 | `请求参数校验失败`（缺字段、类型错、`page<1`、`page_size>100`、`content` 超 4000 字、路径 ID 非整数） | 明细数组 |
 | 502 | 上游模型出错 | `模型服务鉴权失败，请检查 LLM_API_KEY`、`模型服务余额不足，请检查账户余额`、`模型服务限流，请稍后重试`、`模型服务不可用`、`模型返回格式无法解析`、`模型返回内容为空`（见 4.6） | null |
 | 504 | 上游超时 | `模型服务超时`（默认 30s，见 `LLM_TIMEOUT_SECONDS`） | null |
@@ -203,20 +208,93 @@ data: {"type": "done", "conversation_id": 3, "conversation_title": "流式测试
 2. **开始流式后状态码固定为 200**，模型出错只能以 `error` 事件告知，此时后端已回滚，库里不留半条对话。
 3. 客户端中途断开（关页面、切会话）后端同样回滚，不会留下「只有提问没有回复」的记录。
 
-## 3 前端接入注意事项
+## 3 账号与鉴权接口（`/api/auth`）
+
+### 3.1 会话机制
+
+- 登录成功由后端 `Set-Cookie: my_agent_session=<opaque>; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`。库里只存 `SHA-256(token)`，明文 token 只在 Cookie 里。
+- 前端**不要**把 token 存 localStorage——JS 读不到这个 Cookie（`document.cookie` 不含它），请求靠浏览器自动携带；开发期走 Vite proxy，同源无跨域问题。
+- 有效期 `SESSION_TTL_DAYS`（默认 30 天）滑动续期：距上次刷新超过 1 小时才更新 `last_seen_time` 与过期时间。
+- 前端也可以在 `Authorization: Bearer <token>` 里带同一个 token（脚本/测试用），后端优先读 header。
+
+### 3.2 注册 `POST /api/auth/register`
+
+请求：`{"email":"me@example.com","password":"password123","display_name":null}`（`display_name` 可省，≤50 字；密码 8–72 位）。
+响应：`200` + `UserResponse`，**同时下发会话 Cookie**（注册即登录）。
+
+```bash
+curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: application/json' \
+  -d '{"email":"me@example.com","password":"password123"}'
+# {"code":200,"message":"请求成功","data":{"id":1,"email":"me@example.com","role":"user",...}}
+# set-cookie: my_agent_session=...; HttpOnly; SameSite=lax; Path=/
+```
+
+`ALLOW_REGISTRATION=false` 时返回 `403 注册已关闭`；邮箱已存在返回 `409 该邮箱已注册`；邮箱格式非法或密码 <8 位是 `422`。
+
+### 3.3 登录 `POST /api/auth/login`
+
+请求：`{"email":"me@example.com","password":"password123"}`；响应同注册（下发新 Cookie、更新 `last_login_time`）。
+密码错 `401 邮箱或密码不正确`；账号被停用 `403 账号已被停用`。
+
+### 3.4 登出 `POST /api/auth/logout`
+
+删除当前会话行并清 Cookie；重复调用仍返回 `200 已退出登录`。
+
+### 3.5 当前用户 `GET /api/auth/me`
+
+返回 `UserResponse`；未登录 `401 请先登录`。前端启动时用它判断登录态，**该请求的 401 不应触发整页跳转**（否则会丢掉 `?redirect=`）。
+
+### 3.6 我的登录设备 `GET /api/auth/sessions` / `DELETE /api/auth/sessions/{id}`
+
+```json
+{"items":[{"id":3,"user_agent":"Mozilla/5.0 ...","ip":"127.0.0.1",
+           "create_time":"2026-11-09 10:00:00","last_seen_time":"2026-11-09 10:00:00",
+           "expires_time":"2026-12-09 10:00:00","is_current":true}]}
+```
+
+`is_current` 标出当前浏览器；删别人的会话（含其他用户）返回 `404 登录会话不存在`。
+
+### 3.7 修改密码 `POST /api/auth/password`
+
+请求：`{"old_password":"...","new_password":"..."}`；成功后**只保留当前会话**，其他设备全部失效（需重新登录）。
+原密码错 `400 原密码不正确`；新密码不合规 `422`。
+
+## 4 前端接入注意事项
 
 1. **统一解包**：所有业务响应都是 `{code,message,data}`；axios 拦截器里 `code !== 200` 时抛错并展示 `message`，业务层只拿 `data`。
 2. **422 的 `data` 是数组**：不是 `null`，也不是字符串；表单页可读 `data[0].loc` 定位字段，列表页只 toast `message` 即可。
 3. **成功也是 HTTP 200**：不要只按 201 判成功；删除成功无数据（`data: null`）。
 4. **`create_time` / `update_time` 非 ISO**：形如 `"2026-11-08 22:01:33"`；`new Date(...)` 在 Safari 会 Invalid Date，需先 `s.replace(" ", "T")`。
 5. **流式用 `fetch` 而非 `EventSource`**：接口是 `POST` + body（内容可达 4000 字，不能塞 query），前端按 `\n\n` 分帧、`data:` 行 `JSON.parse`，见 `frontend/src/api/chat.ts`。
-6. **CORS / 代理**：开发期推荐 Vite proxy（`/api` → `http://127.0.0.1:8000`）；直连时后端已放行 5173/4173（见 1.6）。
+6. **CORS / 代理**：开发期推荐 Vite proxy（`/api` → `http://127.0.0.1:8000`）；直连时后端已放行 5173/4173（见 1.6），跨域请求需 `withCredentials`。
+7. **401 统一处理**：`src/api/client.ts` 拦截器收到 401 会清本地登录态并跳 `/login?redirect=...`；`/auth/me` 探测请求带 `skipAuthRedirect: true` 豁免，由路由守卫自行判断。
 
-## 附录 A：数据模型（`conversations` / `messages`）
+## 附录 A：数据模型（`users` / `sessions` / `conversations` / `messages`）
 
 ```
+users
+  id              int  pk
+  email           varchar(255)  unique
+  password_hash   varchar(255)  Argon2id
+  display_name    varchar(50)   nullable
+  role            varchar(20)   默认 user（admin 用脚本建）
+  is_active       tinyint(1)    默认 1
+  last_login_time datetime     nullable
+  create_time     datetime
+
+sessions
+  id              int  pk
+  user_id         int  FK → users.id ON DELETE CASCADE，有索引
+  token_hash      varchar(64)  unique（sha256(token)）
+  user_agent      varchar(255) nullable
+  ip              varchar(64)  nullable
+  last_seen_time  datetime
+  expires_time    datetime     有索引
+  create_time     datetime
+
 conversations
   id            int  pk autoincrement
+  user_id       int  FK → users.id ON DELETE CASCADE，有索引（数据隔离唯一维度）
   title         varchar(100)  默认「新会话」
   agent_key     varchar(50)   默认 default（为多 Agent 预留）
   update_time   datetime      有索引，列表按它倒序
@@ -231,10 +309,11 @@ messages
   create_time      datetime
 ```
 
-删会话即删该会话全部消息（数据库外键 `ON DELETE CASCADE`），前端不需要逐条删。
+删会话即删该会话全部消息（`ON DELETE CASCADE`），前端不需要逐条删；`messages` 不冗余 `user_id`，归属通过会话间接确定。
 
 ## 附录 B：本地起服务与自检
 
 - 起服务：项目根 `./scripts/dev.sh`（推荐）或 `cd backend && make run` + `cd frontend && pnpm dev`。
 - 自检：`cd backend && make check`；`cd frontend && pnpm lint && pnpm test && pnpm build`。
-- 端到端：`cd frontend && pnpm acceptance:chat`（需前后端在跑，会清空会话）。
+- 端到端：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录，需前后端在跑）。
+- 第一个管理员：`cd backend && ADMIN_EMAIL=... ADMIN_PASSWORD='至少8位' uv run python -m app.create_admin`（存在则重置密码并升权）。

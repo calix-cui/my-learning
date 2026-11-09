@@ -46,7 +46,7 @@ pnpm lint          # ESLint 全量检查（CI 会跑，有 error 即失败）
 pnpm lint:fix      # 自动修可修的问题
 pnpm format        # Prettier 格式化（本地用，不进 CI 阻断）
 pnpm format:check  # 只检查格式，不写入
-pnpm test          # Vitest 单测（src/api + src/utils，23 个用例，无 DOM、不连后端）
+pnpm test          # Vitest 单测（src/api + src/stores + src/utils，31 个用例，无 DOM、不连后端）
 pnpm test:watch    # 监听模式，开发时用
 ```
 
@@ -85,9 +85,13 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 
 | 路由 | 页面 | 组件 |
 | --- | --- | --- |
-| `/` | 重定向到 `/chat` | `src/router/index.ts` |
+| `/login` | 登录（公开） | `views/LoginView.vue`、`stores/session.ts` |
+| `/register` | 注册（公开，注册即登录） | `views/RegisterView.vue` |
 | `/chat` | 对话（左会话列表 + 右消息区，SSE 逐字渲染，助手消息按 Markdown 渲染） | `views/ChatView.vue`、`api/chat.ts`、`utils/markdown.ts` |
-| 其他 | 兜底重定向到 `/chat` | `src/router/index.ts` |
+| `/` / 其他 | 重定向到 `/chat`；未登录时守卫改送 `/login?redirect=...` | `src/router/index.ts` |
+
+未登录只剩登录/注册两个页面可达：`router.beforeEach` 先向后端确认一次登录态（`GET /api/auth/me`），再决定放行或跳转。
+任何接口返回 401 时，`src/api/client.ts` 会清本地状态并跳登录页（启动探测请求带 `skipAuthRedirect` 豁免）。
 
 **接口字段、错误文案的唯一来源是 [`docs/api.md`](../docs/api.md)**，本文件只说明前端怎么用。
 
@@ -110,21 +114,27 @@ frontend/
 ├── package.json
 ├── README.md
 ├── scripts/
-│   └── chat-acceptance.mjs    # 对话端到端验收（10 项，CDP 驱动真实浏览器）
+│   ├── chat-acceptance.mjs    # 对话端到端验收（10 项，CDP 驱动真实浏览器）
+│   └── auth-acceptance.mjs    # 账号端到端验收（13 项：注册→刷新→退出→再登录）
 └── src/
     ├── main.ts                # 挂载 Element Plus（zh-cn）+ router
     ├── App.vue                # 侧栏 + 顶栏 + <router-view>
     ├── env.d.ts               # .vue 模块类型声明
-    ├── router/index.ts        # / → /chat，对话页懒加载
+    ├── router/index.ts        # 路由 + 登录守卫（未登录只能进 /login、/register）
     ├── api/
-    │   ├── client.ts          # axios 实例 + 统一响应/错误拦截
+    │   ├── client.ts          # axios 实例 + 统一响应/错误拦截 + 401 跳登录
     │   ├── chat.ts            # 对话 6 个接口封装 + SSE 流式解析
-    │   └── chat.test.ts
-    ├── types/api.ts           # 与后端一一对应的 TS 类型（对话）
+    │   ├── auth.ts            # 账号 7 个接口封装
+    │   └── unauthorized.ts    # 401 回调注册（避免 client 与 store 互相 import）
+    ├── stores/session.ts      # 全局登录态：user + loaded，登录/登出/清除
+    ├── types/api.ts           # 与后端一一对应的 TS 类型（对话 + 账号）
     ├── utils/
     │   ├── markdown.ts        # markdown-it + DOMPurify 渲染
     │   └── markdown.test.ts
-    ├── views/ChatView.vue     # 对话页
+    ├── views/
+    │   ├── ChatView.vue       # 对话页
+    │   ├── LoginView.vue      # 登录页
+    │   └── RegisterView.vue   # 注册页
     └── styles/index.css       # 设计 token CSS 变量 + 全局基础样式
 ```
 
