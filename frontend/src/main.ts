@@ -4,9 +4,13 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 import App from './App.vue'
 import router from './router'
+import { initTheme } from './stores/theme'
 
 import 'element-plus/dist/index.css'
 import './styles/index.css'
+
+// 在挂载前把主题写进 :root，避免首屏闪一下默认配色
+initTheme()
 
 const app = createApp(App)
 

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ChatDotRound } from '@element-plus/icons-vue'
+import { ChatDotRound, Setting } from '@element-plus/icons-vue'
 
 import { logout, session } from '@/stores/session'
 
@@ -24,6 +24,16 @@ async function handleLogout() {
   await logout()
   ElMessage.success('已退出登录')
   await router.replace({ name: 'login' })
+}
+
+async function handleUserCommand(command: string) {
+  if (command === 'logout') {
+    await handleLogout()
+    return
+  }
+  if (command === 'settings') {
+    await router.push({ name: 'settings' })
+  }
 }
 
 /** 当前高亮菜单项，与路由路径保持一致 */
@@ -75,6 +85,10 @@ const sidebarStatusText = computed(() => {
           <el-icon><ChatDotRound /></el-icon>
           <span>对话</span>
         </el-menu-item>
+        <el-menu-item index="/settings">
+          <el-icon><Setting /></el-icon>
+          <span>设置</span>
+        </el-menu-item>
       </el-menu>
 
       <div class="layout__aside-footer">
@@ -109,7 +123,7 @@ const sidebarStatusText = computed(() => {
             {{ backendStatusText }}
           </span>
           <span class="layout__divider" />
-          <el-dropdown trigger="click" @command="handleLogout">
+          <el-dropdown trigger="click" @command="handleUserCommand">
             <span class="layout__user-trigger">
               <el-avatar :size="28" class="layout__avatar">{{ avatarText }}</el-avatar>
               <span class="layout__user">{{ userLabel }}</span>
@@ -117,7 +131,8 @@ const sidebarStatusText = computed(() => {
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item disabled>{{ session.user?.email }}</el-dropdown-item>
-                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+                <el-dropdown-item divided command="settings">设置</el-dropdown-item>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>

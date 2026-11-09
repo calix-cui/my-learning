@@ -10,7 +10,8 @@
 |---|---|---|---|---|
 | T-UI-01 | 设计体系推翻重建（DESIGN.md + 全部页面设计稿） | UI 设计师 | DONE（待用户确认） | 已产出 PRODUCT.md / DESIGN.md / 5 张稿 |
 | T-FE-01 | 按新设计重构全部页面 | Vue 前端 | TODO | T-UI-01 |
-| T-FE-02 | 新增【设置】模块 | Vue 前端（+ 后端按需） | TODO | T-UI-01；口径见 [`../setting design.md`](../setting%20design.md) |
+| T-FE-02 | 新增【设置】模块 | Vue 前端（+ 后端按需） | IN_PROGRESS（外观已完成） | T-UI-01；口径见 [`../setting design.md`](../setting%20design.md) |
+| T-FE-03 | 主题系统（4 套主题 + 明暗/跟随系统） | Vue 前端 | DONE | — |
 | T-DOC-01 | 设计工具链调研（design-taste-frontend / impeccable） | Lead | IN_PROGRESS | — |
 
 阶段 5「Agent 基础执行循环」仍按 11 阶段计划排在业务队列里，被上面三条 UI/前端任务插队，尚未开始。
@@ -45,3 +46,14 @@
 ## T-DOC-01 · 设计工具链调研（Lead）
 
 见本轮答复：`design-taste-frontend` 与 `impeccable` 的分工、可用命令、需要用户配合的点。
+
+---
+
+## T-FE-03 · 主题系统（2026-11-09 已完成）
+
+- **用户原话（m06192）**：「要，做好以后有各种主题的准备，需要设计一套 theme 功能，只添加代码中的配置和对应主题色就可以增加主题」；并要求「前端先完成【主题】功能再继续」。
+- **实现**：`frontend/src/theme/`（types / tokens / apply / themes×4）+ `stores/theme.ts` + `components/theme/{ThemeCard,ModeSwitch}.vue` + `components/settings/AppearancePanel.vue` + `views/SettingsView.vue`（路由 `/settings`，侧边栏与用户菜单都可进）。
+- **新增主题只需两处**：`theme/themes/<id>.ts` 写 18 个语义色（light + dark），在 `theme/themes/index.ts` 的数组里加一项。色阶（Element Plus 的 light-3/5/7/8/9）由 `color-mix` 自动派生。
+- **兼容层**：`styles/index.css` 的旧 `--pa-*` 全部映射到 `--ma-*`，老页面不改代码即跟随主题。
+- **验证**：`pnpm type-check` / `lint` / `test`（39 passed，主题相关 8 例）/ `build` 全绿；4 套主题 × 明暗 × 跟随系统的实测截图见 [`docs/design/README.md`](../design/README.md#主题系统2026-11-09-落地)。
+- **已知未做**：主题只存 localStorage，**未随账号同步**（换设备要重选）；等「模型接入」一起做设置读写接口时再补 `user_settings`。

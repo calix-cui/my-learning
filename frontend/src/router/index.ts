@@ -6,6 +6,7 @@ import { isLoggedIn, loadCurrentUser, session } from '@/stores/session'
 const ChatView = () => import('@/views/ChatView.vue')
 const LoginView = () => import('@/views/LoginView.vue')
 const RegisterView = () => import('@/views/RegisterView.vue')
+const SettingsView = () => import('@/views/SettingsView.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -28,6 +29,12 @@ const router = createRouter({
       name: 'chat',
       component: ChatView,
       meta: { title: '对话' },
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: SettingsView,
+      meta: { title: '设置' },
     },
     { path: '/:pathMatch(.*)*', redirect: '/chat' },
   ],

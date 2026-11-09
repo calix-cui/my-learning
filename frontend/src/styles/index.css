@@ -1,33 +1,36 @@
-/* 设计 token：取自 docs/design 设计稿，中性蓝 + 中性灰 */
+/*
+ * 兼容层：旧的 --pa-* 变量全部指向主题层 --ma-*（由 src/theme 在运行时写入 :root）。
+ * 好处：换主题只改一层变量，页面组件不用动；T-FE-01 重构时再把组件逐步改成直接用 --ma-*。
+ */
 :root {
-  --pa-color-primary: #2563eb;
-  --pa-color-primary-dark: #1d4ed8;
-  --pa-color-primary-light: #3b82f6;
-  --pa-color-primary-100: #dbeafe;
-  --pa-color-primary-soft: #eff6ff;
-  --pa-color-success: #059669;
-  --pa-color-success-500: #10b981;
-  --pa-color-success-soft: #ecfdf5;
-  --pa-color-success-border: #a7f3d0;
-  --pa-color-warning: #d97706;
-  --pa-color-warning-soft: #fffbeb;
-  --pa-color-danger: #dc2626;
-  --pa-color-danger-soft: #fef2f2;
-  --pa-color-info: #6b7280;
-  --pa-color-info-soft: #f3f4f6;
+  --pa-color-primary: var(--ma-color-accent);
+  --pa-color-primary-dark: var(--ma-color-accent-hover);
+  --pa-color-primary-light: color-mix(in srgb, var(--ma-color-accent) 72%, transparent);
+  --pa-color-primary-100: var(--ma-color-accent-soft);
+  --pa-color-primary-soft: var(--ma-color-accent-soft);
+  --pa-color-success: var(--ma-color-success);
+  --pa-color-success-500: var(--ma-color-success);
+  --pa-color-success-soft: var(--ma-color-success-soft);
+  --pa-color-success-border: color-mix(in srgb, var(--ma-color-success) 32%, transparent);
+  --pa-color-warning: var(--ma-color-warn);
+  --pa-color-warning-soft: var(--ma-color-warn-soft);
+  --pa-color-danger: var(--ma-color-danger);
+  --pa-color-danger-soft: var(--ma-color-danger-soft);
+  --pa-color-info: var(--ma-color-muted);
+  --pa-color-info-soft: var(--ma-color-sunken);
 
-  --pa-color-text-primary: #111827;
-  --pa-color-text-regular: #374151;
-  --pa-color-text-secondary: #6b7280;
-  --pa-color-text-muted: #9ca3af;
+  --pa-color-text-primary: var(--ma-color-ink);
+  --pa-color-text-regular: var(--ma-color-ink);
+  --pa-color-text-secondary: var(--ma-color-muted);
+  --pa-color-text-muted: var(--ma-color-faint);
 
-  --pa-color-border: #e5e7eb;
-  --pa-color-border-strong: #d1d5db;
-  --pa-color-border-light: #f3f4f6;
-  --pa-color-bg-page: #f5f7fa;
-  --pa-color-bg-card: #ffffff;
-  --pa-color-bg-header: #fafbfc;
-  --pa-color-bg-hover: #f8fafc;
+  --pa-color-border: var(--ma-color-line);
+  --pa-color-border-strong: var(--ma-color-line-strong);
+  --pa-color-border-light: var(--ma-color-line);
+  --pa-color-bg-page: var(--ma-color-canvas);
+  --pa-color-bg-card: var(--ma-color-surface);
+  --pa-color-bg-header: var(--ma-color-surface);
+  --pa-color-bg-hover: var(--ma-color-sunken);
 
   --pa-font-size-title: 18px;
   --pa-font-size-subtitle: 15px;
@@ -44,9 +47,9 @@
   --pa-radius-sm: 6px;
   --pa-radius: 8px;
   --pa-radius-lg: 12px;
-  --pa-shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.04);
-  --pa-shadow-md: 0 4px 12px rgba(17, 24, 39, 0.1);
-  --pa-shadow-lg: 0 16px 40px rgba(17, 24, 39, 0.18);
+  --pa-shadow-sm: 0 1px 2px rgb(28 27 24 / 4%);
+  --pa-shadow-md: 0 4px 12px rgb(28 27 24 / 8%);
+  --pa-shadow-lg: 0 16px 40px rgb(28 27 24 / 14%);
 
   --pa-aside-width: 200px;
   --pa-topbar-height: 56px;
@@ -55,21 +58,15 @@
   --pa-table-head-height: 44px;
 }
 
-/* 覆盖 Element Plus 主色，使按钮、开关、分页等组件与设计 token 一致 */
+/* 覆盖 Element Plus：主色与中性色都跟随主题层（色阶由 apply.ts 用 color-mix 派生） */
 :root {
-  --el-color-primary: #2563eb;
-  --el-color-primary-light-3: #5b8def;
-  --el-color-primary-light-5: #8fb2f4;
-  --el-color-primary-light-7: #c3d5f9;
-  --el-color-primary-light-8: #dbe6fc;
-  --el-color-primary-light-9: #eff6ff;
-  --el-color-primary-dark-2: #1d4ed8;
-  --el-color-success: #059669;
-  --el-color-warning: #d97706;
-  --el-color-danger: #dc2626;
-  --el-color-info: #6b7280;
   --el-border-radius-base: 6px;
   --el-font-size-base: 14px;
+  /* 菜单透明：避免 el-menu 默认的浅色底在深色主题下变成一块块「方框」 */
+  --el-menu-bg-color: transparent;
+  --el-menu-hover-bg-color: var(--ma-color-sunken);
+  --el-menu-text-color: var(--ma-color-ink);
+  --el-menu-active-color: var(--ma-color-accent);
 }
 
 * {

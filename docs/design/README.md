@@ -54,3 +54,44 @@ open docs/design/mockups/03-chat.html
 - 设置页是否保留「外观」（明暗主题会牵动整套 token 的暗色映射）。
 - 「数据管理」里的导出格式（JSON / Markdown 二选一还是都给）。
 - 是否要「关于」分节（版本与健康状态）。
+
+## 主题系统（2026-11-09 落地）
+
+主题是**运行时可切**的：`:root` 上挂一层 `--ma-*` 语义变量，组件只引用这层；换主题 = 重写这批变量，不重渲染组件、不换 CSS 文件。
+
+| 位置 | 作用 |
+|---|---|
+| `frontend/src/theme/types.ts` | `ThemeColors` 的 18 个语义色 + `ThemeDefinition`（一套主题必须同时给 light / dark） |
+| `frontend/src/theme/themes/*.ts` | 每套主题一个文件：松林（默认）/ 暖砂 / 靛蓝 / 石墨 |
+| `frontend/src/theme/themes/index.ts` | 注册表：数组顺序即设置页展示顺序，第一个是默认 |
+| `frontend/src/theme/apply.ts` | `buildThemeVars()` 编译 CSS 变量；`buildElementPlusVars()` 用 `color-mix` 把 accent 派生成 Element Plus 的 6 档主色，**不需要为每个主题手写色阶** |
+| `frontend/src/stores/theme.ts` | 单例状态：`themeId` + `mode(light/dark/system)`，写 `localStorage['my-agent.theme']`，监听 `prefers-color-scheme`，挂载前写进 DOM 防闪白 |
+| `frontend/src/styles/index.css` | 兼容层：旧的 `--pa-*` 全部指向 `--ma-*`，老页面不用改就跟着换肤 |
+
+**新增一套主题（只改两处）**：
+
+```ts
+// 1) frontend/src/theme/themes/sakura.ts
+export const sakuraTheme: ThemeDefinition = {
+  id: 'sakura',
+  name: '樱',
+  description: '一句话描述这锅配色适合什么时候用。',
+  light: { canvas: '#…', surface: '#…', /* 18 个键都不能少 */ },
+  dark: { /* 同上 */ },
+}
+
+// 2) frontend/src/theme/themes/index.ts
+export const themes = [pineTheme, sandTheme, indigoTheme, graphiteTheme, sakuraTheme]
+```
+
+漏任何一个色键，`src/theme/apply.test.ts` 的「每个主题都给全」用例会直接红灯，不会等到界面上出现透明洞。
+
+### 截图
+
+| 浅色 · 松林 | 深色 · 松林 |
+|---|---|
+| ![浅色](images/theme-settings-light.png) | ![深色](images/theme-settings-dark.png) |
+
+| 浅色 · 暖砂 | 深色 · 靛蓝（对话页） |
+|---|---|
+| ![暖砂](images/theme-settings-sand.png) | ![对话](images/theme-chat-dark.png) |
