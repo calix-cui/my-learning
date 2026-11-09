@@ -71,3 +71,17 @@
 门禁有效性实测（break-glass）：临时写入未使用变量（`.ts` 与 `<script setup>` 各一处）+ 缺失 `v-for` key 的模板，`pnpm lint` 报 3 个 error 且退出码 1；删除临时文件后恢复 `exit=0`。
 
 未做（按本 ADR 的「暂缓」）：Vitest 单测、Playwright、覆盖率门槛、Prettier 参与 CI。
+
+### 修订记录（2026-11-09）
+
+原表里「Vitest 只测 `src/api` 与 `src/utils`」的边界已随实践扩大——原因不是想加门槛，而是出现了**只有组件测试能拦**的错误（`storeToRefs` 解构丢状态导致主题格子全空，纯逻辑测试完全看不见）。本次只加能力，不放宽红线：
+
+| 项 | 变化 | 取舍 |
+| --- | --- | --- |
+| 组件测试 | 引入 `@vue/test-utils@2.5.1` + `happy-dom@21.0.4` + `@pinia/testing@2.0.2`，新增 11 例（`ThemeCard` / `ModeSwitch` / `AppearancePanel`） | 默认环境仍是 `node`；组件测试按文件切 `happy-dom`，不影响纯逻辑测试速度（全量 50 例 ~1s） |
+| 覆盖率 | 引入 `@vitest/coverage-v8@3.2.7`，`pnpm test:coverage` 出报告 | **仍不设门槛**，也不进 CI——`src/views` 覆盖率为 0 属预期，页面流程由 E2E 兜底 |
+| 无障碍 | `eslint-plugin-vuejs-accessibility` recommended | 首次接入报出 3 个真实问题（label 未关联、会话项用 div 承载点击），已修；不引入运行时 a11y 测试框架 |
+| 调试 | `vite-plugin-vue-devtools` | 仅开发期注入，`build` 产物不含 |
+| 掉队项 | `@vitest/eslint-plugin@1.6.28` 要求 `typescript>=6`，本项目 TS 5.7 | 不装；等升 TS 6 时再补 |
+
+Playwright 仍然暂缓：现有 `puppeteer-core` 验收脚本 + 组件测试已覆盖当前风险，引入第二套 E2E 框架只会增加维护面。

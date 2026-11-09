@@ -21,7 +21,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
-| 11-09 | **账号体系**：注册/登录/登出/我的设备/改密 + 服务端会话（HttpOnly Cookie，库里存 SHA-256）+ Argon2id + `conversations.user_id` 数据隔离（越权一律 404）+ 前端登录守卫与 401 统一跳转；后端 123 例 / 93.37%，前端 39 例，账号 E2E 13 项 | [auth.md](auth.md)、[ADR-0008](adr/0008-auth-and-session.md)、[api.md](api.md) §3 |
+| 11-09 | **账号体系**：注册/登录/登出/我的设备/改密 + 服务端会话（HttpOnly Cookie，库里存 SHA-256）+ Argon2id + `conversations.user_id` 数据隔离（越权一律 404）+ 前端登录守卫与 401 统一跳转；后端 123 例 / 93.37%，前端 50 例（含组件 11），账号 E2E 13 项 | [auth.md](auth.md)、[ADR-0008](adr/0008-auth-and-session.md)、[api.md](api.md) §3 |
 | 11-08 | **改名为 My Agent 并归档商品模块**：`product-admin` → `my-agent`（包名/标题/Compose 项目名/数据库名），商品·分类·概览的前后端代码与需求/设计/验收文档整体迁到 `archive/product-admin/`，新增迁移 `17fe0c7d2cb5` 删除 `products`/`categories` 两表；前后端只保留对话链路 | `archive/product-admin/README.md`、[ADR-0007](adr/0007-archive-product-module.md) |
 | 11-08 | **接入真实模型**：DeepSeek（OpenAI 兼容）跑通本地与容器；修 `NO_PROXY=[::1]` 导致 `httpx.InvalidURL` 启动崩溃、补 402 余额不足映射、测试强制 fake 隔离 | [backend/README.md](../backend/README.md)「接入真实模型」、[api.md](api.md) §4.6 |
 | 11-08 | **开发体验**：`scripts/dev.sh` 一条命令起前后端（都带热更新）；README 写明「日常开发用本地、容器只做交付验证」；对话页助手消息支持 Markdown 渲染（`markdown-it` + `DOMPurify`，路由级懒加载） | `frontend/src/utils/markdown.ts`、[chat.md](chat.md) §6、[toolchain.md](toolchain.md) |
@@ -70,7 +70,7 @@
 | 门槛 | 判定标准 | 现状 |
 |---|---|---|
 | 文档可信 | `docs/` 无已知过期事实 | ✅ 2026-11-07（见 [DOCUMENTATION_FINAL_REPORT.md](DOCUMENTATION_FINAL_REPORT.md) §3） |
-| 基线可跑 | `make check` ≥80%、`pnpm lint && pnpm test && pnpm build` 全过 | ✅ 2026-11-09（后端 123 passed / 93.37%、前端 39 passed） |
+| 基线可跑 | `make check` ≥80%、`pnpm lint && pnpm test && pnpm build` 全过 | ✅ 2026-11-09（后端 123 passed / 93.37%、前端 50 passed） |
 | 存储明确 | 对话数据存哪（新表 or 不落库）、是否需要会话 ID | ✅ 已定：`conversations` / `messages` 两表落库（[ADR-0006](adr/0006-llm-client-and-chat-storage.md)） |
 
 剩余技术债见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)：P0/P1 已清空，剩下以 P2 为主（日志规范 T-23、Element Plus 体积 T-21）。

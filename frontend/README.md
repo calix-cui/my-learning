@@ -48,21 +48,25 @@ pnpm lint          # ESLint 全量检查（CI 会跑，有 error 即失败）
 pnpm lint:fix      # 自动修可修的问题
 pnpm format        # Prettier 格式化（本地用，不进 CI 阻断）
 pnpm format:check  # 只检查格式，不写入
-pnpm test          # Vitest 单测（src/api + src/stores + src/theme + src/utils，39 个用例，无 DOM、不连后端）
+pnpm test          # Vitest 单测：纯逻辑 39 例 + 组件 11 例，共 50 例，不连后端
+pnpm test:coverage # 同上，额外出覆盖率报告（coverage/index.html，不设门槛）
 pnpm test:watch    # 监听模式，开发时用
 ```
 
 | 项 | 配置 | 说明 |
 | --- | --- | --- |
-| ESLint | `eslint.config.js`（flat config，ESLint 10） | `@eslint/js` recommended + `typescript-eslint` recommended + `eslint-plugin-vue` flat/essential + `eslint-config-prettier` 收尾 |
+| ESLint | `eslint.config.js`（flat config，ESLint 10） | `@eslint/js` recommended + `typescript-eslint` recommended + `eslint-plugin-vue` flat/essential + `eslint-plugin-vuejs-accessibility` recommended + `eslint-config-prettier` 收尾 |
 | 关闭项 | 不启用 type-aware 规则 | 需要 `parserOptions.projectService`，跑得慢、误报多；`vue-tsc --noEmit` 已经把类型错拦在构建里 |
 | Prettier | `.prettierrc.json` | 单引号、无分号、行宽 100、`trailingComma: all`；**不参与 CI**，避免为格式改代码 |
-| Vitest | `vitest.config.ts` | 测 `src/api` 的请求封装与错误映射、`src/utils/markdown.ts` 的渲染与消毒，`environment: node`，不设覆盖率门槛 |
+| Vitest | `vitest.config.ts` | 默认 `environment: node` 跑纯逻辑；组件测试在文件顶部写 `// @vitest-environment happy-dom` 切 DOM（`src/test/setup.ts` 补 `matchMedia` / `ResizeObserver` / `Element.scrollTo`） |
+| 组件测试 | `@vue/test-utils` + `happy-dom` + `@pinia/testing` | 断言「用户能看到什么、点了会怎样」而不是内部实现；需要 store 时用 `createTestingPinia`（`stubActions: true` 断言调用、`false` 验真实行为） |
+| 覆盖率 | `@vitest/coverage-v8` | `pnpm test:coverage` 出报告；**不设门槛**——组件覆盖率虚高没有意义，页面流程由 E2E 兜底 |
+| DevTools | `vite-plugin-vue-devtools` | `pnpm dev` 时提供组件树 / Pinia 状态 / 路由 / 性能面板（只在开发期注入，不进产物） |
 | CI | `.github/workflows/ci.yml` 的 `frontend` job | 三条：`pnpm build`（含 `vue-tsc`）、`pnpm lint`、`pnpm test` |
 
 四条红线（出现即本次改动不算完成）：构建失败、ESLint 报 error、引入未声明的依赖、E2E 用例退化。
 
-单测边界：`src/views` 不写组件快照——那部分由 E2E 兜底（对话 10 项 `pnpm acceptance:chat`）与人工验收。
+单测边界：组件测**行为**（渲染出什么、点击后 emit / store 怎么变），不写快照、不断言 class 名与 DOM 结构；页面级完整流程（登录拦截、流式对话）交给 E2E 与人工验收。
 
 > 对话 E2E 跑前跑后都会清空会话。它默认打 5173 的 dev server；如果你刚改过前端代码（HMR 可能中途整页重载），改用 `pnpm build && pnpm preview` 后 `BASE=http://127.0.0.1:4173 pnpm acceptance:chat`，结果更稳定。
 

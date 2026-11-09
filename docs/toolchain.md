@@ -63,7 +63,13 @@ flowchart TB
 | **vue-tsc** | 类型检查。`vite build` 不做类型检查，所以 build 脚本里先跑它 | `pnpm type-check`（已包含在 `pnpm build`） | `tsconfig.json` |
 | **ESLint** | 抓未使用变量、Vue 模板错误。按 ADR-0002 只开轻量档 | `pnpm lint`、`pnpm lint:fix` | `eslint.config.js` |
 | **Prettier** | 格式统一，避免 diff 里全是空白变化 | `pnpm format`、`pnpm format:check` | `.prettierrc.json` |
-| **Vitest** | 单元测试，只测 `src/api`、`src/stores`、`src/theme`、`src/utils`（纯逻辑，不碰 DOM） | `pnpm test`、`pnpm test:watch` | `vitest.config.ts` |
+| **Vitest** | 单元测试：纯逻辑在 `node` 环境跑，组件测试按文件切 `happy-dom` | `pnpm test`、`pnpm test:watch` | `vitest.config.ts`、`src/test/setup.ts` |
+| **@vue/test-utils** | 挂载组件、点按钮、断言渲染结果 | `pnpm test` | 各 `*.test.ts` |
+| **happy-dom** | 组件测试的 DOM 实现，比 jsdom 快 | — | 测试文件顶部的 `// @vitest-environment happy-dom` |
+| **@pinia/testing** | 组件测试里造 Pinia：`createTestingPinia({ stubActions })` | `pnpm test` | 同上 |
+| **@vitest/coverage-v8** | 覆盖率报告（不设门槛，页面流程靠 E2E） | `pnpm test:coverage` | `vitest.config.ts` 的 `test.coverage` |
+| **eslint-plugin-vuejs-accessibility** | 拦「读屏器真的读不到」的问题：缺 alt / label 未关联 / div 当按钮 | `pnpm lint` | `eslint.config.js` |
+| **vite-plugin-vue-devtools** | 开发期组件树 / Pinia 状态 / 路由面板 | `pnpm dev` 后打开浏览器面板 | `vite.config.ts` |
 | **Pinia** | 全局状态（登录态、主题）；setup store 写法，卸载手写单例 | 组件里 `useSessionStore()` / `useThemeStore()` | `src/stores/` |
 | **markdown-it + DOMPurify** | 把模型回复的 Markdown 渲染成 HTML；原文 HTML 当文本、渲染结果再消毒，外链强制 `_blank` | 页面内自动生效（`/chat`） | `frontend/src/utils/markdown.ts` |
 | **puppeteer-core** | 真浏览器跑端到端验收：对话 10 项（可选，需先起前后端） | `pnpm acceptance:chat` | `scripts/chat-acceptance.mjs` |
@@ -121,6 +127,7 @@ flowchart LR
 | 后端对话接口 | `tests/test_chat_api.py` | 20 | `make test` | 否（`dependency_overrides`） | 会话与消息端点、`text/event-stream`、400/404/502/504 |
 | 前端工具函数 | `frontend/src/utils/markdown.test.ts` | 6 | `pnpm test` | 否（纯字符串） | 加粗/列表/代码块/自动换行、原文 HTML 不当标签、外链 rel；拦不住真实 DOM 消毒 |
 | 前端 api 层 | `frontend/src/api/client.test.ts`(8)、`chat.test.ts`(9) | 17 | `pnpm test` | 否（假 adapter） | 错误码到提示语的映射、请求封装、SSE 分帧解析、流式超时 35s；拦不住组件渲染与交互 |
+| 前端组件 | `ThemeCard.test.ts`(4)、`ModeSwitch.test.ts`(3)、`AppearancePanel.test.ts`(4) | 11 | `pnpm test` | 否（happy-dom + 假 store） | 色块是否取对模式、`aria-pressed` 与徽标、v-model 双向绑定、点主题走 store 并落盘；拦不住真实浏览器布局 |
 | 端到端 | `frontend/scripts/chat-acceptance.mjs` | 10 项 | `pnpm acceptance:chat` | **是**（真实后端 + 真实库） | 对话页：空态、新建、流式逐字、自动命名、刷新保留、排序、删除；跑前跑后清空会话 |
 | 端到端 | `frontend/scripts/auth-acceptance.mjs` | 13 项 | `pnpm acceptance:auth` | **是** | 未登录拦截与 redirect、注册即登录、刷新保持、发消息、退出后再也进不去、重新登录数据仍在、Cookie 不可被 JS 读到 |
 

@@ -90,8 +90,8 @@ export const themes = [pineTheme, sandTheme, indigoTheme, graphiteTheme, sakuraT
 
 | 浅色 · 松林 | 深色 · 松林 |
 |---|---|
-| ![浅色](images/theme-settings-light.png) | ![深色](images/theme-settings-dark.png) |
+| ![浅色](../images/theme-settings-light.png) | ![深色](../images/theme-settings-dark.png) |
 
 | 浅色 · 暖砂 | 深色 · 靛蓝（对话页） |
 |---|---|
-| ![暖砂](images/theme-settings-sand.png) | ![对话](images/theme-chat-dark.png) |
+| ![暖砂](../images/theme-settings-sand.png) | ![对话](../images/theme-chat-dark.png) |

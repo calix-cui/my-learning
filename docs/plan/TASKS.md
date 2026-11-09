@@ -61,6 +61,16 @@
 
 ---
 
+## T-FE-05 前端测试与质量基建（DONE 2026-11-09）
+
+- **目标**：按本地 Vue 相关 Skill 补齐前端缺失的工具，让「组件行为」也能被自动化拦住。
+- **新增**：`@vue/test-utils` + `happy-dom` + `@pinia/testing`（组件测试）、`@vitest/coverage-v8`（`pnpm test:coverage`）、`eslint-plugin-vuejs-accessibility`（a11y 静态检查）、`vite-plugin-vue-devtools`（开发期面板）。
+- **不装**：`@vitest/eslint-plugin`（要求 TS ≥6，本项目 5.7）、Playwright（已有 puppeteer 验收脚本 + 组件测试）。
+- **实体改动**：`vitest.config.ts`（vue 插件 + `src/test/setup.ts`）、`eslint.config.js`（a11y recommended + `coverage/**` 忽略）、`vite.config.ts`（devtools 插件）、`package.json`（`test:coverage`）、新增 3 个组件测试。
+- **顺带修的 a11y 真问题**：`ModeSwitch` 的 label 未与 input 关联（补 `id`/`for`）；`ChatView` 会话列表项用 `div @click` → 改为内部 `<button>`，键盘可 Tab 可 Enter，`aria-current` 标记当前会话。
+- **验证**：`pnpm test` **50 passed**（组件 11 例）；`pnpm type-check` / `lint` / `format:check` / `build` 全过；`pnpm acceptance:auth` 13/13、`acceptance:chat` 10/10；覆盖率可出报告（未设门槛）。
+- **记录**：ADR-0002 追加「修订记录（2026-11-09）」，说明组件测试与覆盖率的加入理由与边界。
+
 ## T-FE-04 · 状态管理迁到 Pinia（2026-11-09 已完成）
 
 - **用户原话（m06333）**：「把前端改成用 pinia 进行状态管理，使用 vue-best-practices skill 和 vue-pinia-best-practices skill」。
