@@ -241,15 +241,20 @@ onMounted(async () => {
           :key="item.id"
           class="chat__item"
           :class="{ 'chat__item--active': item.id === activeId }"
-          @click="openConversation(item.id)"
         >
-          <div class="chat__item-main">
+          <!-- 用 button 而不是给 div 加点击：键盘 Tab 能到、Enter/Space 能选，读屏器也会念成按钮 -->
+          <button
+            type="button"
+            class="chat__item-main"
+            :aria-current="item.id === activeId ? 'true' : undefined"
+            @click="openConversation(item.id)"
+          >
             <span class="chat__item-title">{{ item.title }}</span>
             <span class="chat__item-meta">
               {{ item.message_count }} 条 · {{ item.update_time.slice(5, 16) }}
             </span>
-          </div>
-          <span class="chat__item-actions" @click.stop>
+          </button>
+          <span class="chat__item-actions">
             <el-button link :icon="Edit" size="small" title="重命名" @click="handleRename(item)" />
             <el-button link :icon="Delete" size="small" title="删除" @click="handleDelete(item)" />
           </span>
@@ -394,7 +399,6 @@ onMounted(async () => {
   align-items: center;
   gap: var(--pa-space-2);
   padding: var(--pa-space-2) var(--pa-space-3);
-  cursor: pointer;
   border-radius: var(--pa-radius-sm);
 }
 
@@ -412,6 +416,19 @@ onMounted(async () => {
   flex-direction: column;
   min-width: 0;
   gap: 2px;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.chat__item-main:focus-visible {
+  outline: 2px solid var(--ma-color-accent);
+  outline-offset: 2px;
+  border-radius: var(--ma-radius-sm);
 }
 
 .chat__item-title {

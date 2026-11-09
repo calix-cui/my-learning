@@ -7,15 +7,18 @@
 import js from '@eslint/js'
 import prettier from 'eslint-config-prettier'
 import pluginVue from 'eslint-plugin-vue'
+import vueA11y from 'eslint-plugin-vuejs-accessibility'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default [
-  { ignores: ['dist/**', 'node_modules/**', '.acceptance/**'] },
+  { ignores: ['dist/**', 'node_modules/**', '.acceptance/**', 'coverage/**'] },
 
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/essential'],
+  // 无障碍只开 recommended：拦「读屏器真的读不到」的问题（缺 alt、缺 label、div 当按钮）
+  ...vueA11y.configs['flat/recommended'],
 
   {
     languageOptions: {

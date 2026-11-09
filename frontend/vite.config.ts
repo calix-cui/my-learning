@@ -2,10 +2,12 @@ import { fileURLToPath, URL } from 'node:url'
 
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
+import vueDevtools from 'vite-plugin-vue-devtools'
 
 // 开发服务器固定 5173，预览服务器固定 4173；两者均不占用后端 8000 端口。
 export default defineConfig({
-  plugins: [vue()],
+  // 只影响 `pnpm dev`：Vite DevTools 面板（组件树 / Pinia 状态 / 路由 / 性能）
+  plugins: [vue(), vueDevtools()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

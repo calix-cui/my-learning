@@ -16,10 +16,12 @@ const options: { value: ThemeModeSetting; label: string }[] = [
     <label
       v-for="option in options"
       :key="option.value"
+      :for="`theme-mode-${option.value}`"
       class="mode-switch__item"
       :class="{ 'is-active': model === option.value }"
     >
       <input
+        :id="`theme-mode-${option.value}`"
         v-model="model"
         class="mode-switch__radio"
         type="radio"
