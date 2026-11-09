@@ -22,13 +22,20 @@ os.environ["LLM_BASE_URL"] = ""
 os.environ["LLM_API_KEY"] = ""
 os.environ["LLM_MODEL"] = ""
 
+from collections.abc import Iterator
+
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models  # noqa: F401  导入即把模型注册到 Base.metadata
+from app.auth.service import register_user
 from app.database import Base
+from app.dependencies import get_db
+from app.main import app
+from app.models import User
 
 
 @pytest.fixture()
@@ -50,3 +57,48 @@ def db_session() -> Session:
     finally:
         session.close()
         engine.dispose()
+
+
+def _override_get_db(db_session: Session):
+    """把 get_db 换成同一个内存 SQLite 会话，接口层与服务层看到同一份数据。"""
+
+    def override():
+        yield db_session
+
+    return override
+
+
+@pytest.fixture()
+def user(db_session: Session) -> User:
+    """服务层测试默认用一个已注册用户；需要第二个用户时直接调用 register_user。"""
+    return register_user(db_session, "user@example.com", "password123")
+
+
+@pytest.fixture()
+def anon_client(db_session: Session) -> Iterator[TestClient]:
+    """未登录客户端：所有业务接口都应 401。"""
+
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def client(db_session: Session) -> Iterator[TestClient]:
+    """已登录客户端：真实走一遍注册接口，拿到 HttpOnly Cookie 后再做业务请求。"""
+    app.dependency_overrides[get_db] = _override_get_db(db_session)
+    try:
+        test_client = TestClient(app)
+        response = test_client.post(
+            "/api/auth/register",
+            json={"email": "user@example.com", "password": "password123"},
+        )
+        assert response.status_code == 200, response.text
+        yield test_client
+    finally:
+        app.dependency_overrides.clear()

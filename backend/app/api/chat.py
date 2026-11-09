@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import CurrentUser
 from app.common.response import Response
 from app.dependencies import get_db
 from app.llm import LLMClient, get_llm
@@ -32,10 +33,13 @@ router = APIRouter(prefix="/conversations", tags=["对话相关的接口"])
 )
 def create_conversation(
     payload: ConversationCreateRequest,
+    user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ):
     return Response.success(
-        data=ConversationResponse.model_validate(chat_service.create_conversation(db, payload))
+        data=ConversationResponse.model_validate(
+            chat_service.create_conversation(db, user.id, payload)
+        )
     )
 
 
@@ -46,11 +50,12 @@ def create_conversation(
     description="按最后活动时间倒序返回会话，每项带该会话的消息条数。",
 )
 def list_conversations(
+    user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
     page: Annotated[int, Query(ge=1, description="页码")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="每页条数")] = 10,
 ):
-    page_data = chat_service.list_conversations(db, page=page, page_size=page_size)
+    page_data = chat_service.list_conversations(db, user.id, page=page, page_size=page_size)
     return Response.success(data=ConversationPageResponse.model_validate(page_data))
 
 
@@ -62,9 +67,10 @@ def list_conversations(
 )
 def get_conversation(
     conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
+    user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ):
-    conversation = chat_service.get_conversation(db, conversation_id)
+    conversation = chat_service.get_conversation(db, user.id, conversation_id)
     data = {
         **ConversationResponse.model_validate(conversation).model_dump(),
         "messages": [MessageResponse.model_validate(m).model_dump() for m in conversation.messages],
@@ -81,9 +87,10 @@ def get_conversation(
 def rename_conversation(
     conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
     payload: ConversationUpdateRequest,
+    user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ):
-    conversation = chat_service.rename_conversation(db, conversation_id, payload)
+    conversation = chat_service.rename_conversation(db, user.id, conversation_id, payload)
     return Response.success(data=ConversationResponse.model_validate(conversation))
 
 
@@ -95,9 +102,10 @@ def rename_conversation(
 )
 def delete_conversation(
     conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
+    user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ):
-    chat_service.delete_conversation(db, conversation_id)
+    chat_service.delete_conversation(db, user.id, conversation_id)
     return Response.success()
 
 
@@ -110,11 +118,12 @@ def delete_conversation(
 def send_message(
     conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
     payload: MessageCreateRequest,
+    user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(get_llm)],
 ):
     user_message, assistant_message = chat_service.send_message(
-        db, conversation_id, payload.content, llm
+        db, user.id, conversation_id, payload.content, llm
     )
     return Response.success(
         data=MessageExchangeResponse(
@@ -149,12 +158,13 @@ def _sse(events: Iterator[dict]) -> Iterator[str]:
 def stream_message(
     conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
     payload: MessageCreateRequest,
+    user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(get_llm)],
 ):
     # 先同步做完校验与落库：这样 404/400 仍是普通 JSON，而不是流里的错误事件
     conversation, user_message, context, is_first = chat_service.prepare_stream(
-        db, conversation_id, payload.content
+        db, user.id, conversation_id, payload.content
     )
     events = chat_service.stream_reply(db, conversation, user_message, context, is_first, llm)
     return StreamingResponse(

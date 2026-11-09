@@ -23,9 +23,11 @@ CONTEXT_LIMIT = 20
 TITLE_MAX_LENGTH = 30
 
 
-def create_conversation(db: Session, payload: ConversationCreateRequest) -> Conversation:
+def create_conversation(
+    db: Session, user_id: int, payload: ConversationCreateRequest
+) -> Conversation:
     title = (payload.title or "").strip() or DEFAULT_TITLE
-    conversation = Conversation(title=title)
+    conversation = Conversation(user_id=user_id, title=title)
     try:
         db.add(conversation)
         db.commit()
@@ -37,11 +39,15 @@ def create_conversation(db: Session, payload: ConversationCreateRequest) -> Conv
     return conversation
 
 
-def list_conversations(db: Session, page: int = 1, page_size: int = 10) -> dict:
+def list_conversations(db: Session, user_id: int, page: int = 1, page_size: int = 10) -> dict:
     try:
-        total = db.scalar(select(func.count(Conversation.id))) or 0
+        total = (
+            db.scalar(select(func.count(Conversation.id)).where(Conversation.user_id == user_id))
+            or 0
+        )
         rows = db.scalars(
             select(Conversation)
+            .where(Conversation.user_id == user_id)
             # 最近聊过的排前面；同一秒创建时用 id 倒序保证顺序稳定
             .order_by(Conversation.update_time.desc(), Conversation.id.desc())
             .offset((page - 1) * page_size)
@@ -70,18 +76,23 @@ def list_conversations(db: Session, page: int = 1, page_size: int = 10) -> dict:
         raise BusinessError("查询会话列表失败，请稍后重试", code=500) from exc
 
 
-def get_conversation(db: Session, conversation_id: int) -> Conversation:
-    conversation = db.get(Conversation, conversation_id)
+def get_conversation(db: Session, user_id: int, conversation_id: int) -> Conversation:
+    """按「当前用户 + 会话 id」取会话：别人的会话在这里和不存在是一个结果（404）。"""
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id, Conversation.user_id == user_id
+        )
+    )
     if conversation is None:
         raise BusinessError("会话不存在", code=404)
     return conversation
 
 
 def rename_conversation(
-    db: Session, conversation_id: int, payload: ConversationUpdateRequest
+    db: Session, user_id: int, conversation_id: int, payload: ConversationUpdateRequest
 ) -> Conversation:
     # 先判存在，保证「id 不存在 + 空标题」返回 404 而不是 400
-    conversation = get_conversation(db, conversation_id)
+    conversation = get_conversation(db, user_id, conversation_id)
     title = payload.title.strip()
     if not title:
         raise BusinessError("会话标题不能只包含空白")
@@ -96,8 +107,8 @@ def rename_conversation(
     return conversation
 
 
-def delete_conversation(db: Session, conversation_id: int) -> None:
-    conversation = get_conversation(db, conversation_id)
+def delete_conversation(db: Session, user_id: int, conversation_id: int) -> None:
+    conversation = get_conversation(db, user_id, conversation_id)
     try:
         db.delete(conversation)
         db.commit()
@@ -125,14 +136,14 @@ def _build_context(db: Session, conversation_id: int) -> list[ChatMessage]:
 
 
 def send_message(
-    db: Session, conversation_id: int, content: str, llm: LLMClient
+    db: Session, user_id: int, conversation_id: int, content: str, llm: LLMClient
 ) -> tuple[Message, Message]:
     """写入用户消息、调用模型、写入回复。
 
     两条消息在同一个事务里提交：模型失败时整体回滚，库里不留半条对话，
     用户重试不会看到「自己的消息在、回复没有」的中间态。
     """
-    conversation = get_conversation(db, conversation_id)
+    conversation = get_conversation(db, user_id, conversation_id)
     text = content.strip()
     if not text:
         raise BusinessError("消息内容不能只包含空白")
@@ -182,14 +193,14 @@ def send_message(
 
 
 def prepare_stream(
-    db: Session, conversation_id: int, content: str
+    db: Session, user_id: int, conversation_id: int, content: str
 ) -> tuple[Conversation, Message, list[ChatMessage], bool]:
     """流式回复的前置步骤：校验 + 落用户消息 + 拼上下文。
 
     放在生成器外面，是为了让 404/400 还能返回普通 JSON；一旦开始流式输出，
     状态码就固定了，错误只能走 SSE 的 error 事件。
     """
-    conversation = get_conversation(db, conversation_id)
+    conversation = get_conversation(db, user_id, conversation_id)
     text = content.strip()
     if not text:
         raise BusinessError("消息内容不能只包含空白")

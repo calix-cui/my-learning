@@ -9,5 +9,7 @@
 
 from app.models.conversation import Conversation
 from app.models.message import Message
+from app.models.session import LoginSession
+from app.models.user import User
 
-__all__ = ["Conversation", "Message"]
+__all__ = ["Conversation", "LoginSession", "Message", "User"]

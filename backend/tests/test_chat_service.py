@@ -16,8 +16,10 @@ def _add_message(db, conversation: Conversation, role: str, content: str) -> Mes
     return message
 
 
-def test_create_conversation_uses_default_title(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_create_conversation_uses_default_title(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
 
     assert conversation.title == "新会话"
     assert conversation.agent_key == "default"
@@ -25,58 +27,62 @@ def test_create_conversation_uses_default_title(db_session):
     assert conversation.update_time is not None
 
 
-def test_create_conversation_trims_title(db_session):
+def test_create_conversation_trims_title(db_session, user):
     conversation = chat_service.create_conversation(
-        db_session, ConversationCreateRequest(title="  商品定价  ")
+        db_session, user.id, ConversationCreateRequest(title="  商品定价  ")
     )
 
     assert conversation.title == "商品定价"
 
 
-def test_create_conversation_blank_title_falls_back_to_default(db_session):
+def test_create_conversation_blank_title_falls_back_to_default(db_session, user):
     conversation = chat_service.create_conversation(
-        db_session, ConversationCreateRequest(title="   ")
+        db_session, user.id, ConversationCreateRequest(title="   ")
     )
 
     assert conversation.title == "新会话"
 
 
-def test_list_conversations_orders_by_update_time_desc(db_session):
-    first = chat_service.create_conversation(db_session, ConversationCreateRequest(title="早"))
-    second = chat_service.create_conversation(db_session, ConversationCreateRequest(title="晚"))
+def test_list_conversations_orders_by_update_time_desc(db_session, user):
+    first = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest(title="早")
+    )
+    second = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest(title="晚")
+    )
     _add_message(db_session, first, "user", "让 first 变成最近活动")
     # update_time 有 onupdate，写入消息不会自动改会话，这里手动触发一次更新
     first.title = "早（已更新）"
     db_session.commit()
 
-    page = chat_service.list_conversations(db_session)
+    page = chat_service.list_conversations(db_session, user.id)
 
     assert page["total"] == 2
     assert [item["title"] for item in page["items"]] == ["早（已更新）", "晚"]
     assert second.id != first.id
 
 
-def test_list_conversations_counts_messages(db_session):
+def test_list_conversations_counts_messages(db_session, user):
     conversation = chat_service.create_conversation(
-        db_session, ConversationCreateRequest(title="有消息")
+        db_session, user.id, ConversationCreateRequest(title="有消息")
     )
     _add_message(db_session, conversation, "user", "你好")
     _add_message(db_session, conversation, "assistant", "在的")
-    chat_service.create_conversation(db_session, ConversationCreateRequest(title="空会话"))
+    chat_service.create_conversation(db_session, user.id, ConversationCreateRequest(title="空会话"))
 
-    page = chat_service.list_conversations(db_session)
+    page = chat_service.list_conversations(db_session, user.id)
 
     counts = {item["title"]: item["message_count"] for item in page["items"]}
     assert counts == {"有消息": 2, "空会话": 0}
 
 
-def test_list_conversations_paginates(db_session):
+def test_list_conversations_paginates(db_session, user):
     for index in range(3):
         chat_service.create_conversation(
-            db_session, ConversationCreateRequest(title=f"会话{index}")
+            db_session, user.id, ConversationCreateRequest(title=f"会话{index}")
         )
 
-    page = chat_service.list_conversations(db_session, page=2, page_size=2)
+    page = chat_service.list_conversations(db_session, user.id, page=2, page_size=2)
 
     assert page["total"] == 3
     assert len(page["items"]) == 1
@@ -84,44 +90,46 @@ def test_list_conversations_paginates(db_session):
     assert page["page_size"] == 2
 
 
-def test_get_conversation_returns_messages_in_order(db_session):
+def test_get_conversation_returns_messages_in_order(db_session, user):
     conversation = chat_service.create_conversation(
-        db_session, ConversationCreateRequest(title="顺序")
+        db_session, user.id, ConversationCreateRequest(title="顺序")
     )
     _add_message(db_session, conversation, "user", "第一句")
     _add_message(db_session, conversation, "assistant", "第二句")
 
-    loaded = chat_service.get_conversation(db_session, conversation.id)
+    loaded = chat_service.get_conversation(db_session, user.id, conversation.id)
 
     assert [m.content for m in loaded.messages] == ["第一句", "第二句"]
 
 
-def test_get_conversation_missing_raises_404(db_session):
+def test_get_conversation_missing_raises_404(db_session, user):
     with pytest.raises(BusinessError) as exc_info:
-        chat_service.get_conversation(db_session, 9999)
+        chat_service.get_conversation(db_session, user.id, 9999)
 
     assert exc_info.value.code == 404
     assert str(exc_info.value) == "会话不存在"
 
 
-def test_rename_conversation_trims(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_rename_conversation_trims(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
 
     renamed = chat_service.rename_conversation(
-        db_session, conversation.id, ConversationUpdateRequest(title="  新名字  ")
+        db_session, user.id, conversation.id, ConversationUpdateRequest(title="  新名字  ")
     )
 
     assert renamed.title == "新名字"
 
 
-def test_rename_conversation_rejects_blank(db_session):
+def test_rename_conversation_rejects_blank(db_session, user):
     conversation = chat_service.create_conversation(
-        db_session, ConversationCreateRequest(title="原名")
+        db_session, user.id, ConversationCreateRequest(title="原名")
     )
 
     with pytest.raises(BusinessError) as exc_info:
         chat_service.rename_conversation(
-            db_session, conversation.id, ConversationUpdateRequest(title="   ")
+            db_session, user.id, conversation.id, ConversationUpdateRequest(title="   ")
         )
 
     assert exc_info.value.code == 400
@@ -129,29 +137,31 @@ def test_rename_conversation_rejects_blank(db_session):
     assert db_session.get(Conversation, conversation.id).title == "原名"
 
 
-def test_rename_missing_conversation_prefers_404(db_session):
+def test_rename_missing_conversation_prefers_404(db_session, user):
     with pytest.raises(BusinessError) as exc_info:
-        chat_service.rename_conversation(db_session, 9999, ConversationUpdateRequest(title="   "))
+        chat_service.rename_conversation(
+            db_session, user.id, 9999, ConversationUpdateRequest(title="   ")
+        )
 
     assert exc_info.value.code == 404
 
 
-def test_delete_conversation_removes_messages(db_session):
+def test_delete_conversation_removes_messages(db_session, user):
     conversation = chat_service.create_conversation(
-        db_session, ConversationCreateRequest(title="待删")
+        db_session, user.id, ConversationCreateRequest(title="待删")
     )
     _add_message(db_session, conversation, "user", "你好")
     _add_message(db_session, conversation, "assistant", "在的")
 
-    chat_service.delete_conversation(db_session, conversation.id)
+    chat_service.delete_conversation(db_session, user.id, conversation.id)
 
     assert db_session.get(Conversation, conversation.id) is None
     assert db_session.query(Message).count() == 0
 
 
-def test_delete_conversation_missing_raises_404(db_session):
+def test_delete_conversation_missing_raises_404(db_session, user):
     with pytest.raises(BusinessError) as exc_info:
-        chat_service.delete_conversation(db_session, 9999)
+        chat_service.delete_conversation(db_session, user.id, 9999)
 
     assert exc_info.value.code == 404
 
@@ -178,11 +188,13 @@ class RecordingLLM:
         yield from self.pieces
 
 
-def test_send_message_stores_both_messages(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_send_message_stores_both_messages(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
 
     user_message, assistant_message = chat_service.send_message(
-        db_session, conversation.id, "  你好  ", RecordingLLM()
+        db_session, user.id, conversation.id, "  你好  ", RecordingLLM()
     )
 
     assert user_message.content == "你好"
@@ -193,54 +205,66 @@ def test_send_message_stores_both_messages(db_session):
     assert assistant_message.model == "recording"
 
 
-def test_send_message_auto_titles_on_first_message(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_send_message_auto_titles_on_first_message(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
 
-    chat_service.send_message(db_session, conversation.id, "帮我给可乐定价", RecordingLLM())
+    chat_service.send_message(
+        db_session, user.id, conversation.id, "帮我给可乐定价", RecordingLLM()
+    )
 
     assert db_session.get(Conversation, conversation.id).title == "帮我给可乐定价"
 
 
-def test_send_message_title_truncated_to_30_chars(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_send_message_title_truncated_to_30_chars(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
 
-    chat_service.send_message(db_session, conversation.id, "很长的第一句话" * 10, RecordingLLM())
+    chat_service.send_message(
+        db_session, user.id, conversation.id, "很长的第一句话" * 10, RecordingLLM()
+    )
 
     title = db_session.get(Conversation, conversation.id).title
     assert len(title) == 30
     assert title == ("很长的第一句话" * 10)[:30]
 
 
-def test_send_message_keeps_custom_title(db_session):
+def test_send_message_keeps_custom_title(db_session, user):
     conversation = chat_service.create_conversation(
-        db_session, ConversationCreateRequest(title="我自己起的")
+        db_session, user.id, ConversationCreateRequest(title="我自己起的")
     )
 
-    chat_service.send_message(db_session, conversation.id, "新消息", RecordingLLM())
+    chat_service.send_message(db_session, user.id, conversation.id, "新消息", RecordingLLM())
 
     assert db_session.get(Conversation, conversation.id).title == "我自己起的"
 
 
-def test_send_message_blank_content_raises_400(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_send_message_blank_content_raises_400(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
 
     with pytest.raises(BusinessError) as exc_info:
-        chat_service.send_message(db_session, conversation.id, "   ", RecordingLLM())
+        chat_service.send_message(db_session, user.id, conversation.id, "   ", RecordingLLM())
 
     assert exc_info.value.code == 400
     assert str(exc_info.value) == "消息内容不能只包含空白"
     assert db_session.query(Message).count() == 0
 
 
-def test_send_message_missing_conversation_returns_404_before_blank_check(db_session):
+def test_send_message_missing_conversation_returns_404_before_blank_check(db_session, user):
     with pytest.raises(BusinessError) as exc_info:
-        chat_service.send_message(db_session, 9999, "   ", RecordingLLM())
+        chat_service.send_message(db_session, user.id, 9999, "   ", RecordingLLM())
 
     assert exc_info.value.code == 404
 
 
-def test_send_message_context_keeps_last_20_and_system(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_send_message_context_keeps_last_20_and_system(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
     db_session.add(Message(conversation_id=conversation.id, role="system", content="你是助手"))
     for index in range(25):
         db_session.add(
@@ -249,7 +273,7 @@ def test_send_message_context_keeps_last_20_and_system(db_session):
     db_session.commit()
     llm = RecordingLLM()
 
-    chat_service.send_message(db_session, conversation.id, "最新一句", llm)
+    chat_service.send_message(db_session, user.id, conversation.id, "最新一句", llm)
 
     context = llm.received[0]
     assert context[0] == {"role": "system", "content": "你是助手"}
@@ -259,12 +283,15 @@ def test_send_message_context_keeps_last_20_and_system(db_session):
     assert context[1]["content"] == "历史6"
 
 
-def test_send_message_rolls_back_when_model_fails(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_send_message_rolls_back_when_model_fails(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
 
     with pytest.raises(BusinessError) as exc_info:
         chat_service.send_message(
             db_session,
+            user.id,
             conversation.id,
             "你好",
             RecordingLLM(error=BusinessError("模型挂了", code=502)),
@@ -275,13 +302,13 @@ def test_send_message_rolls_back_when_model_fails(db_session):
     assert db_session.get(Conversation, conversation.id).title == "新会话"
 
 
-def test_send_message_bumps_update_time(db_session):
+def test_send_message_bumps_update_time(db_session, user):
     conversation = chat_service.create_conversation(
-        db_session, ConversationCreateRequest(title="旧")
+        db_session, user.id, ConversationCreateRequest(title="旧")
     )
     before = conversation.update_time
 
-    chat_service.send_message(db_session, conversation.id, "你好", RecordingLLM())
+    chat_service.send_message(db_session, user.id, conversation.id, "你好", RecordingLLM())
 
     assert db_session.get(Conversation, conversation.id).update_time >= before
 
@@ -290,11 +317,13 @@ def _drain(events):
     return list(events)
 
 
-def test_prepare_stream_writes_user_message_and_context(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_prepare_stream_writes_user_message_and_context(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
 
     _, user_message, context, is_first = chat_service.prepare_stream(
-        db_session, conversation.id, "  你好  "
+        db_session, user.id, conversation.id, "  你好  "
     )
 
     assert user_message.id > 0
@@ -303,26 +332,30 @@ def test_prepare_stream_writes_user_message_and_context(db_session):
     assert [m["role"] for m in context] == ["user"]
 
 
-def test_prepare_stream_blank_content_raises_400(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
+def test_prepare_stream_blank_content_raises_400(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
 
     with pytest.raises(BusinessError) as exc_info:
-        chat_service.prepare_stream(db_session, conversation.id, "   ")
+        chat_service.prepare_stream(db_session, user.id, conversation.id, "   ")
 
     assert exc_info.value.code == 400
     assert str(exc_info.value) == "消息内容不能只包含空白"
 
 
-def test_prepare_stream_missing_conversation_raises_404(db_session):
+def test_prepare_stream_missing_conversation_raises_404(db_session, user):
     with pytest.raises(BusinessError) as exc_info:
-        chat_service.prepare_stream(db_session, 9999, "你好")
+        chat_service.prepare_stream(db_session, user.id, 9999, "你好")
 
     assert exc_info.value.code == 404
 
 
-def test_stream_reply_emits_meta_delta_done_and_persists(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
-    prepared = chat_service.prepare_stream(db_session, conversation.id, "帮我给可乐定价")
+def test_stream_reply_emits_meta_delta_done_and_persists(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
+    prepared = chat_service.prepare_stream(db_session, user.id, conversation.id, "帮我给可乐定价")
 
     events = _drain(chat_service.stream_reply(db_session, *prepared, RecordingLLM()))
 
@@ -334,9 +367,11 @@ def test_stream_reply_emits_meta_delta_done_and_persists(db_session):
     assert db_session.query(Message).count() == 2
 
 
-def test_stream_reply_auto_titles_on_first_message(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
-    prepared = chat_service.prepare_stream(db_session, conversation.id, "帮我给可乐定价")
+def test_stream_reply_auto_titles_on_first_message(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
+    prepared = chat_service.prepare_stream(db_session, user.id, conversation.id, "帮我给可乐定价")
 
     events = _drain(chat_service.stream_reply(db_session, *prepared, RecordingLLM()))
 
@@ -344,9 +379,11 @@ def test_stream_reply_auto_titles_on_first_message(db_session):
     assert db_session.get(Conversation, conversation.id).title == "帮我给可乐定价"
 
 
-def test_stream_reply_error_event_rolls_back(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
-    prepared = chat_service.prepare_stream(db_session, conversation.id, "你好")
+def test_stream_reply_error_event_rolls_back(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
+    prepared = chat_service.prepare_stream(db_session, user.id, conversation.id, "你好")
 
     events = _drain(
         chat_service.stream_reply(db_session, *prepared, RecordingLLM(error=LLMError()))
@@ -358,9 +395,11 @@ def test_stream_reply_error_event_rolls_back(db_session):
     assert db_session.query(Message).count() == 0
 
 
-def test_stream_reply_empty_reply_becomes_error(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
-    prepared = chat_service.prepare_stream(db_session, conversation.id, "你好")
+def test_stream_reply_empty_reply_becomes_error(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
+    prepared = chat_service.prepare_stream(db_session, user.id, conversation.id, "你好")
 
     events = _drain(chat_service.stream_reply(db_session, *prepared, RecordingLLM(pieces=["  "])))
 
@@ -369,9 +408,11 @@ def test_stream_reply_empty_reply_becomes_error(db_session):
     assert db_session.query(Message).count() == 0
 
 
-def test_stream_reply_client_disconnect_rolls_back(db_session):
-    conversation = chat_service.create_conversation(db_session, ConversationCreateRequest())
-    prepared = chat_service.prepare_stream(db_session, conversation.id, "你好")
+def test_stream_reply_client_disconnect_rolls_back(db_session, user):
+    conversation = chat_service.create_conversation(
+        db_session, user.id, ConversationCreateRequest()
+    )
+    prepared = chat_service.prepare_stream(db_session, user.id, conversation.id, "你好")
     events = chat_service.stream_reply(db_session, *prepared, RecordingLLM())
 
     next(events)  # 只读一条 meta 就断开

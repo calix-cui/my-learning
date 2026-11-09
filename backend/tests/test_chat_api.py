@@ -1,24 +1,8 @@
 """会话接口层测试：用内存 SQLite 覆盖 get_db，走完整的 HTTP 链路。"""
 
-import pytest
-from fastapi.testclient import TestClient
-
-from app.dependencies import get_db
 from app.llm import LLMError, LLMTimeoutError, get_llm
 from app.main import app
 from app.models import Message
-
-
-@pytest.fixture()
-def client(db_session):
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
 
 
 def test_create_conversation_returns_default_title(client):

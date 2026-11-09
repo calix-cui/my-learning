@@ -15,6 +15,7 @@ dependencies = [
     "PyMySQL[rsa]==1.1.2",         # MySQL 驱动；[rsa] 提供认证所需额外依赖
     "alembic==1.20.1",             # 迁移：生成版本化脚本、按版本升级/回滚
     "pydantic-settings==2.12.0",   # 读环境变量与 .env
+    "argon2-cffi>=23.1",
 ]
 
 [dependency-groups]
@@ -28,6 +29,10 @@ dev = [
 [tool.uv]
 # 这不是要发布成包的应用，uv 只需同步依赖，不要尝试构建/安装本项目
 package = false
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple"
+default = true
 
 [tool.ruff]
 # 与 fastapi 0.124 / SQLAlchemy 2.0 支持的 Python 版本对齐：代码用到 X | None 语法，最低 3.10
@@ -62,7 +67,9 @@ ignore = [
 # Starlette 要求异常处理器签名固定为 (request, exc)，request 未使用也必须保留
 "app/common/exceptions.py" = ["ARG001"]
 # 测试里构造“无时区的 datetime”是为了对齐接口输出的时间格式，属于有意为之
-"tests/*" = ["DTZ001"]
+"tests/*" = ["DTZ001", "DTZ005"]
+# 账号模块的会话时间与项目其他表一致，使用本地 naive 时间（见 ADR-0008）
+"app/auth/*" = ["DTZ005"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
@@ -76,7 +83,8 @@ addopts = "--cov=app --cov-report=term-missing --cov-fail-under=80 -q"
 [tool.coverage.run]
 source = ["app"]
 # 两个脚本只有 __main__ 入口，靠手工执行，测试覆盖不到也不该算进来
-omit = ["app/init_db.py"]
+# 两个手工脚本不参与覆盖率：init_db 只调 alembic，create_admin 只读环境变量建号
+omit = ["app/init_db.py", "app/create_admin.py"]
 
 [tool.coverage.report]
 show_missing = true

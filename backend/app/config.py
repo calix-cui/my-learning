@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     # 假模型每块的延迟：本地演示流式效果时调大一点（默认 0，测试不受影响）
     llm_fake_delay_seconds: float = 0.0
 
+    # 账号体系（阶段 4.5）。allow_registration=false 时注册接口直接返回 403，
+    # 适合部署到公网后只允许管理员用脚本建号。
+    allow_registration: bool = True
+    session_ttl_days: int = 30
+    # development / production。production 下会话 Cookie 才会带 Secure（要求 https）
+    app_env: str = "development"
+
     @model_validator(mode="after")
     def _check_openai_settings(self) -> "Settings":
         """选 openai 时，缺 base_url / key / model 直接在启动阶段失败，而不是等第一次请求。"""
