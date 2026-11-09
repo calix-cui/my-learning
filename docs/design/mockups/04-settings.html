@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>My Agent · 设置</title>
+<link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand__mark">AI</div>
+        <div class="brand__name">My Agent</div>
+      </div>
+      <div class="sidebar__body">
+        <div class="sidebar__label">会话</div>
+        <button class="thread">
+          <div class="thread__title">给可乐设计三档定价</div>
+          <div class="thread__meta">4 条 · 11-09 21:20</div>
+        </button>
+        <button class="thread">
+          <div class="thread__title">FastAPI 的依赖注入怎么讲清楚</div>
+          <div class="thread__meta">2 条 · 11-09 18:04</div>
+        </button>
+      </div>
+      <div class="sidebar__footer">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar">李</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:var(--ink)">李维</div>
+            <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis">liwei@example.com</div>
+          </div>
+          <button class="btn-ghost btn" style="height:30px;padding:0 8px;color:var(--pine);font-weight:600">设置</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="topbar__crumbs">首页 <span style="color:var(--ink-faint)">/</span> <b>设置</b></div>
+        <div class="topbar__user"><span class="dot-online"></span> 已连接</div>
+      </div>
+
+      <div class="settings">
+        <nav class="settings__nav">
+          <button class="settings__item">模型接入</button>
+          <button class="settings__item">账号资料</button>
+          <button class="settings__item">登录设备</button>
+          <button class="settings__item">外观</button>
+          <button class="settings__item">数据管理</button>
+          <button class="settings__item is-active">概览</button>
+        </nav>
+
+        <div class="settings__panel">
+          <div class="settings__col">
+            <div class="settings__h1">设置</div>
+            <div class="settings__note">这里的改动只影响你自己的账号，保存后立即生效。</div>
+
+            <div class="section">
+              <div class="row">
+                <div>
+                  <div class="row__label">当前模型</div>
+                  <div class="row__hint">DeepSeek · deepseek-chat · 超时 60s</div>
+                </div>
+                <span class="pill"><i></i> 运行正常</span>
+              </div>
+              <div class="row">
+                <div>
+                  <div class="row__label">账号</div>
+                  <div class="row__hint">liwei@example.com · 显示名「李维」</div>
+                </div>
+                <button class="btn btn-secondary" style="height:34px;font-size:13px">修改资料</button>
+              </div>
+              <div class="row">
+                <div>
+                  <div class="row__label">登录设备</div>
+                  <div class="row__hint">3 台设备在线，最早一台将于 12-09 过期</div>
+                </div>
+                <button class="btn btn-secondary" style="height:34px;font-size:13px">查看设备</button>
+              </div>
+              <div class="row">
+                <div>
+                  <div class="row__label">数据量</div>
+                  <div class="row__hint">27 个会话 · 184 条消息</div>
+                </div>
+                <button class="btn btn-secondary" style="height:34px;font-size:13px">导出</button>
+              </div>
+            </div>
+
+            <div class="section section--danger">
+              <div class="section__title" style="color:var(--danger)">删除账号</div>
+              <div class="section__desc">
+                会连同 27 个会话、184 条消息、3 台登录设备一起删除。删除后无法恢复，导出的文件请自行保存。
+              </div>
+              <button class="btn btn-danger" style="height:36px;font-size:13px">删除我的账号</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,47 @@
+# 任务队列
+
+> 用户口头下达、尚未排进 11 阶段计划的任务，按「一个接一个来」的顺序记在这里。
+> 状态：`TODO` / `IN_PROGRESS` / `BLOCKED` / `DONE`。同一时刻只允许一个 `IN_PROGRESS`。
+> 更长的阶段计划见 [`playbooks/05-development-plan-and-mvp-tasks.md`](../playbooks/05-development-plan-and-mvp-tasks.md) 与 [`PROJECT_STATUS.md`](../PROJECT_STATUS.md) §3。
+
+## 队列总览（2026-11-09 登记）
+
+| # | 任务 | 负责角色 | 状态 | 前置 |
+|---|---|---|---|---|
+| T-UI-01 | 设计体系推翻重建（DESIGN.md + 全部页面设计稿） | UI 设计师 | DONE（待用户确认） | 已产出 PRODUCT.md / DESIGN.md / 5 张稿 |
+| T-FE-01 | 按新设计重构全部页面 | Vue 前端 | TODO | T-UI-01 |
+| T-FE-02 | 新增【设置】模块 | Vue 前端（+ 后端按需） | TODO | T-UI-01；口径见 [`../setting design.md`](../setting%20design.md) |
+| T-DOC-01 | 设计工具链调研（design-taste-frontend / impeccable） | Lead | IN_PROGRESS | — |
+
+阶段 5「Agent 基础执行循环」仍按 11 阶段计划排在业务队列里，被上面三条 UI/前端任务插队，尚未开始。
+
+---
+
+## T-UI-01 · 设计体系推翻重建
+
+- **用户原话（m06047）**：「@UI 设计师：设计规范与设计稿。推翻所有旧的页面设计，使用 design-taste-frontend Skill，重构当前页面设计。阅读官网 https://impeccable.style/designing/ 和 https://www.tasteskill.dev/guide」。
+- **已裁决（m06091）**：
+  1. **不碰已归档的商品/分类**，只针对现有界面重新设计，**从零重建、不参考归档实现**；
+  2. 设计工具链用 `impeccable`（Operate 模式）产出 **`DESIGN.md`**，旧的 `archive/product-admin/docs/design/design.md` 已由用户删除；
+  3. 覆盖**全部页面**：`/login`、`/register`、`/chat`、`/settings`（新增）。
+- **现状**：当前应用只有 `/login`、`/register`、`/chat` 三个页面；`DESIGN.md` 与 `PRODUCT.md` 尚未创建（`impeccable context` 报 `NO_PRODUCT_MD`）。
+- **已交付（2026-11-09）**：根目录 `PRODUCT.md`（impeccable 产品上下文）+ `DESIGN.md`（YAML token + 8 节规范）；`docs/design/mockups/{01-login,02-register,03-chat,04-settings,05-settings-model}.html` 与 `docs/images/design-*.png`（1440×900 @2x）；`docs/design/README.md` 索引与「与现有实现的差异」清单。
+- **验收（草稿，待用户确认后定稿）**：一套可复用的设计 token + 组件规格；每个页面一张 1440×900 设计稿；与现有 Element Plus 组件能对上（不引入第二套 UI 库）；对比度、焦点态、空/错/载三态齐备。
+
+## T-FE-01 · 按新设计重构全部页面
+
+- **用户原话（m06047）**：「@Vue 前端：商品管理后台实现。请你同样根据本地安装的 vue 和前端开发相关的 skill 更新自己的提示词，并在第一步 UI 设计师更新设计之后，根据最新设计，重构当前全部页面」。
+- **内容**：先把 `docs/agents/vue-frontend-dev.md` 按本地 Vue 相关 Skill（`vue-best-practices`、`vue-router-best-practices`、`vue-pinia-best-practices`、`vue-testing-best-practices`、`vue-debug-guides`、`frontend-ui-engineering`）更新角色卡，再按 T-UI-01 的产出重构页面。
+- **依赖**：T-UI-01 完成并确认。**不得自行改设计**；实现与设计稿不符时报给 Lead。
+
+## T-FE-02 · 新增【设置】模块
+
+- **用户原话（m06047）**：「增加【设置】模块，功能设计参考 @docs/Setting design.md」。
+- **已裁决（m06091）**：**不做 workspace**；`docs/setting design.md` 已按「个人助手、单账号、无团队空间」重写（保留 Local/Cloud 双模式、数据归属表、安全要求；设置页首版候选：模型接入 / 账号资料与密码 / 登录设备 / 数据导出与注销 / 外观 / 关于）。
+- **仍待确认**：设置页首版具体勾哪些项、API Key 是否允许在页面填写、是否要「注销账号」这种不可逆操作。
+
+---
+
+## T-DOC-01 · 设计工具链调研（Lead）
+
+见本轮答复：`design-taste-frontend` 与 `impeccable` 的分工、可用命令、需要用户配合的点。

@@ -114,6 +114,6 @@ cd frontend && pnpm acceptance
 ## 9. 相关文档
 
 - 需求与验收标准：[`product/prd.md`](product/prd.md)
-- 视觉规范：[`design/design.md`](design/design.md)
+- 视觉规范：原 `docs/design/design.md` 已于 2026-11-09 随设计重建删除；新设计规范见根目录 [`DESIGN.md`](../../../DESIGN.md)
 - 接口契约：[`api-product-admin.md`](api-product-admin.md)
 - 前端说明：见 `archive/product-admin/frontend/`（原 `frontend/README.md` 已随模块归档，未保留副本）

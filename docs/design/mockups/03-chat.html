@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>My Agent · 对话</title>
+<link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand__mark">AI</div>
+        <div class="brand__name">My Agent</div>
+      </div>
+
+      <div class="sidebar__body">
+        <div class="row" style="padding:0 8px 10px">
+          <span class="sidebar__label" style="padding:0">会话</span>
+          <button class="btn btn-primary" style="height:30px;padding:0 12px;font-size:13px">新建</button>
+        </div>
+
+        <button class="thread is-active">
+          <div class="thread__title">给可乐设计三档定价</div>
+          <div class="thread__meta">4 条 · 11-09 21:20</div>
+        </button>
+        <button class="thread">
+          <div class="thread__title">FastAPI 的依赖注入怎么讲清楚</div>
+          <div class="thread__meta">2 条 · 11-09 18:04</div>
+        </button>
+        <button class="thread">
+          <div class="thread__title">把这段 SQL 改成 Alembic 迁移</div>
+          <div class="thread__meta">6 条 · 11-08 23:41</div>
+        </button>
+        <button class="thread">
+          <div class="thread__title">周报：本周工程化进展</div>
+          <div class="thread__meta">2 条 · 11-08 17:12</div>
+        </button>
+      </div>
+
+      <div class="sidebar__footer">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar">李</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:var(--ink)">李维</div>
+            <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis">liwei@example.com</div>
+          </div>
+          <button class="btn-ghost btn" style="height:30px;padding:0 8px" title="设置">设置</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="topbar__crumbs">首页 <span style="color:var(--ink-faint)">/</span> <b>对话</b></div>
+        <div class="topbar__user">
+          <span class="dot-online"></span> 已连接
+          <span class="pill">deepseek-chat</span>
+        </div>
+      </div>
+
+      <div class="chat">
+        <div class="chat__head">
+          <div class="chat__title">给可乐设计三档定价</div>
+          <div class="chat__sub">4 条消息 · 最近更新 21:20</div>
+        </div>
+
+        <div class="chat__scroll">
+          <div class="chat__col">
+            <div class="msg msg--user">
+              <div class="msg__bubble">帮我给可乐设计三档定价，每档一句话理由</div>
+              <div class="msg__meta">21:19</div>
+            </div>
+
+            <div class="msg msg--ai">
+              <div class="msg__who"><i></i> 助手</div>
+              <div class="msg__bubble">
+                <p>好的，三档按「走量 / 升级 / 稀缺」分层，价格带拉开才有人往上买：</p>
+
+                <h3>第一档｜基础款 · 3 元/瓶（500ml）</h3>
+                <p>锚定大众心理价位，让顾客毫无负担地随手拿一瓶，保证日销基本盘。</p>
+
+                <h3>第二档｜零糖款 · 4 元/瓶（500ml）</h3>
+                <p>健康焦虑溢价——多花一元买「没有负罪感」。</p>
+
+                <h3>第三档｜限定款 · 9 元/瓶（330ml）</h3>
+                <p>用稀缺性拉高价格天花板，利润贡献远超走量款。</p>
+
+                <p>如果要做 A/B 测试，建议先在第二档试：</p>
+                <pre>档位      容量     单价    每 100ml
+基础款    500ml    3.0     0.60
+零糖款    500ml    4.0     0.80
+限定款    330ml    9.0     2.73</pre>
+              </div>
+              <div class="msg__meta">21:20 · deepseek-chat</div>
+            </div>
+
+            <div class="msg msg--user">
+              <div class="msg__bubble">第二档和第三档的价差会不会太大？</div>
+              <div class="msg__meta">21:20</div>
+            </div>
+
+            <div class="msg msg--ai">
+              <div class="msg__who"><i></i> 助手</div>
+              <div class="msg__bubble">
+                <p>大，但这是有意的：限定款卖的不是解渴，是「拍照发朋友圈」的社交货币。真正需要担心的不是价差，而是<b>限定款有没有真的限量</b>——一旦随时能买到，第三档就塌回第二档。</p>
+              </div>
+              <div class="msg__meta">21:20 · deepseek-chat</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="composer">
+          <div class="composer__inner">
+            <div class="composer__box is-focus">
+              <div class="composer__ph">输入消息，Enter 发送，Shift + Enter 换行</div>
+              <div class="composer__bar">
+                <span class="composer__count">0 / 4000</span>
+                <button class="btn btn-primary" style="height:32px;padding:0 14px;font-size:13px">发送</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
