@@ -101,3 +101,40 @@
 - 设置页首版是否包含「外观主题」（会牵动前端主题变量）。
 - API Key 是否允许在设置页填写（vs 只认 `.env`）。
 - 是否需要「注销账号」（连带删数据）——涉及不可逆操作与二次确认文案。
+
+## 五、实现契约（2026-11-09 定稿）
+
+模型配置与密钥的存储、加密与解析规则见 [ADR-0009](adr/0009-per-user-model-settings.md)。接口一览：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/settings/model` | 读当前用户的模型配置；Key 只返回 `has_api_key` 与末四位 `api_key_hint` |
+| `PUT` | `/api/settings/model` | 保存配置；`api_key` 传 `null` 表示不变、传空串表示清除；其余字段缺省表示不改 |
+| `POST` | `/api/settings/model/test` | 用当前（或本次提交的）配置发一次最小请求，返回 `ok` / `latency_ms` / `model` / `message` |
+| `PATCH` | `/api/auth/me` | 改显示名（邮箱不可改） |
+| `DELETE` | `/api/auth/me` | 注销账号：需带密码，级联删除会话、消息、登录会话与设置 |
+| `GET` | `/api/settings/export?format=json\|markdown` | 导出全部对话（`Content-Disposition: attachment`） |
+
+约定：
+
+- 所有接口都必须登录；越权与不存在一律 404。
+- `model_provider` 只接受 `fake` / `openai`；`openai` 且没有可用 Key 时，保存成功但调用返回 400「请先在设置里填写 API Key」。
+- 导出为**流式响应**，不把整份数据读进内存再拼字符串。
+- 注销账号是不可逆操作，前端必须二次确认并要求输入密码。
+
+## 六、实现状态（2026-11-09）
+
+| 设置分节 | 状态 | 前端 | 后端 |
+|---|---|---|---|
+| 模型接入 | ✅ 已实现 | `components/settings/ModelPanel.vue`（provider 分段、Base URL、Key 掩码 + 更换/清除、模型名、超时、测试连接 + 保存） | `GET/PUT /api/settings/model`、`POST /api/settings/model/test`；Key 存 `user_settings.model_api_key_ciphertext`（Fernet） |
+| 账号资料 | ✅ 已实现 | `AccountPanel.vue`（显示名、只读邮箱、改密码） | `PATCH /api/auth/me`、`POST /api/auth/password` |
+| 登录设备 | ✅ 已实现 | `DevicesPanel.vue`（设备名解析、当前设备标记、撤销） | `GET /api/auth/sessions`、`DELETE /api/auth/sessions/{id}` |
+| 外观 | ✅ 已实现 | `AppearancePanel.vue`（4 套主题 × 明暗/跟随系统） | 无（只存 `localStorage`） |
+| 数据管理 | ✅ 已实现 | `DataPanel.vue`（导出 JSON/Markdown、注销账号二次确认） | `GET /api/settings/export`、`DELETE /api/auth/me` |
+
+口径差异（与本文档前五节相比）：
+
+- **不做 workspace / RBAC**：权限只有 `user` / `admin`，`role` 列先留着但不参与业务判断。
+- **Key 只显示末四位**：这是硬约束，任何接口都不返回明文；没有 `APP_SECRET_KEY` 时不能保存 Key。
+- **主题只存本机**：还没做 `user_settings` 里的外观字段，换设备要重选。
+- 待做：偏好的服务端同步（`user_settings` 加外观列）、API Token（给脚本/桌面端用）。

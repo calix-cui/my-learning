@@ -1,7 +1,7 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-09 · 前端按 `DESIGN.md` 重构全部页面并接入品牌资产 · `main` 与 `origin/main` 同步（见 `git log -1`）
+> 最近更新：2026-11-09 · 设置模块（模型接入/账号资料/登录设备/外观/数据管理）落地 · `main` 与 `origin/main` 同步（见 `git log -1`）
 
 ## 1. 现在在哪
 
@@ -11,7 +11,7 @@
 
 已经有一个能跑、能测、能部署的最小闭环：
 
-- 后端 FastAPI（账号 7 + 对话 7 + 运维 3 个操作；会话与消息按用户隔离落库，模型层可切换 fake / OpenAI 兼容）
+- 后端 FastAPI（账号 9 + 对话 7 + 设置 4 + 运维 3 个操作；会话与消息按用户隔离落库，每个账号可自带模型配置）
 - 前端 Vue 3：登录/注册页 + 聊天界面（会话列表 + 消息区 + SSE 逐字渲染 + Markdown），未登录只能进登录/注册；13 项账号 E2E + 10 项对话 E2E 全过
 - 数据库迁移（Alembic）、依赖锁定（uv / pnpm）、质量门禁（ruff / ESLint / pytest / Vitest / CI）、容器化（Docker Compose）
 
@@ -21,6 +21,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-09 | **设置模块（T-FE-02）**：模型接入（Key Fernet 加密存 `user_settings`、界面只显示末四位、可测试连接）/ 账号资料（改显示名、改密码踢其他设备）/ 登录设备（撤销）/ 外观 / 数据管理（导出 JSON·Markdown、注销账号）；聊天按账号取模型，未配置回落环境变量 | [ADR-0009](adr/0009-per-user-model-settings.md)、[api.md](api.md) §3.8–3.9、§4；后端 148 例 / 94.22%，前端 54 例，设置 E2E 13 项 |
 | 11-09 | **前端按 `DESIGN.md` 重构全部页面**：外壳（264 侧栏 + 48 顶栏 + 1080 内容区）、对话（720 阅读列 + 气泡 + 输入盒）、登录/注册（400 卡片 + 衬线标题 + logo）、设置（200 导航 + 560 表单）；会话状态提升到 `stores/chat.ts`；`styles/index.css` 收敛为 token 兜底 + reset + Element Plus 映射；接入 logo/favicon/manifest | `DESIGN.md`、[design/README.md](design/README.md)、截图 `docs/images/ui-0*.png`；前端 50 例、E2E 13+10 全过 |
 | 11-09 | **账号体系**：注册/登录/登出/我的设备/改密 + 服务端会话（HttpOnly Cookie，库里存 SHA-256）+ Argon2id + `conversations.user_id` 数据隔离（越权一律 404）+ 前端登录守卫与 401 统一跳转；后端 123 例 / 93.37%，前端 50 例（含组件 11），账号 E2E 13 项 | [auth.md](auth.md)、[ADR-0008](adr/0008-auth-and-session.md)、[api.md](api.md) §3 |
 | 11-08 | **改名为 My Agent 并归档商品模块**：`product-admin` → `my-agent`（包名/标题/Compose 项目名/数据库名），商品·分类·概览的前后端代码与需求/设计/验收文档整体迁到 `archive/product-admin/`，新增迁移 `17fe0c7d2cb5` 删除 `products`/`categories` 两表；前后端只保留对话链路 | `archive/product-admin/README.md`、[ADR-0007](adr/0007-archive-product-module.md) |

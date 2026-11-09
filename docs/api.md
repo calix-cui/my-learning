@@ -259,7 +259,67 @@ curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: applic
 请求：`{"old_password":"...","new_password":"..."}`；成功后**只保留当前会话**，其他设备全部失效（需重新登录）。
 原密码错 `400 原密码不正确`；新密码不合规 `422`。
 
-## 4 前端接入注意事项
+### 3.8 修改显示名 `PATCH /api/auth/me`
+
+请求：`{"display_name":"小张"}`；传空串表示清空（界面回落到邮箱）。返回 `UserResponse`。
+同一个接口不处理密码——改密码走 3.7。
+
+### 3.9 注销账号 `DELETE /api/auth/me`
+
+请求：`{"password":"..."}`（要再输一次密码，避免误点）。成功后**删除账号及其全部数据**
+（会话、消息、设置、登录设备），并清 Cookie；密码错 `400 密码不正确`。
+
+## 4 设置接口（`/api/settings`）
+
+全部需要登录；未登录 `401 请先登录`。
+
+### 4.1 读取模型配置 `GET /api/settings/model`
+
+```json
+{"code":200,"message":"请求成功","data":{
+  "provider":"openai","base_url":"https://api.deepseek.com/v1","model":"deepseek-chat",
+  "timeout_seconds":60,"has_api_key":true,"api_key_hint":"4321",
+  "can_store_api_key":true,"inherited_from_env":false,
+  "update_time":"2026-11-09 22:40:00"}}
+```
+
+- `inherited_from_env=true`：这个账号还没保存过配置，当前用的是服务端环境变量那套。
+- `api_key_hint` 只有末四位；**任何接口都不会返回 Key 明文**。
+- `can_store_api_key=false`：服务端没配 `APP_SECRET_KEY`，此时只能保存其他字段。
+
+### 4.2 保存模型配置 `PUT /api/settings/model`
+
+```json
+{"provider":"openai","base_url":"https://api.deepseek.com/v1","model":"deepseek-chat",
+ "timeout_seconds":60,"api_key":"sk-..."}
+```
+
+- 只传要改的字段即可。
+- `api_key` 三态：**不传** = 保持原值；**空串** = 清除已保存的 Key；**非空** = 加密保存并只留末四位。
+- `provider=openai` 时 `base_url` 与 `model` 不能为空（`400`）；`timeout_seconds` 范围 5–300（`422`）。
+- 未配置 `APP_SECRET_KEY` 却要保存 Key → `400 服务端未配置 APP_SECRET_KEY，无法保存自定义 Key`。
+
+### 4.3 测试连通性 `POST /api/settings/model/test`
+
+请求字段同 4.2，可以只带本次还没保存的临时值（不落库）。返回：
+
+```json
+{"ok":true,"latency_ms":590,"model":"deepseek-flash","message":"连接正常"}
+```
+
+失败时 `ok=false`，`message` 是给人看的原因（缺 Key、鉴权失败、限流、余额不足、超时…），
+**上游返回的原文不外泄**。
+
+### 4.4 导出数据 `GET /api/settings/export?format=json|markdown`
+
+流式响应，`Content-Disposition` 为 attachment（浏览器直接下载）；只含当前账号的数据，不含 Key 与登录凭据。
+
+- `json`：`{"exported_at","schema":"my-agent.export.v1","user","conversations":[{...,"messages":[...]}]}`
+- `markdown`：一级标题 + 账号信息 + 每个会话一节
+
+其他 `format` 取值 → `422`。
+
+## 5 前端接入注意事项
 
 1. **统一解包**：所有业务响应都是 `{code,message,data}`；axios 拦截器里 `code !== 200` 时抛错并展示 `message`，业务层只拿 `data`。
 2. **422 的 `data` 是数组**：不是 `null`，也不是字符串；表单页可读 `data[0].loc` 定位字段，列表页只 toast `message` 即可。
@@ -269,7 +329,7 @@ curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: applic
 6. **CORS / 代理**：开发期推荐 Vite proxy（`/api` → `http://127.0.0.1:8000`）；直连时后端已放行 5173/4173（见 1.6），跨域请求需 `withCredentials`。
 7. **401 统一处理**：`src/api/client.ts` 拦截器收到 401 会清本地登录态并跳 `/login?redirect=...`；`/auth/me` 探测请求带 `skipAuthRedirect: true` 豁免，由路由守卫自行判断。
 
-## 附录 A：数据模型（`users` / `sessions` / `conversations` / `messages`）
+## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages`）
 
 ```
 users
@@ -291,6 +351,17 @@ sessions
   last_seen_time  datetime
   expires_time    datetime     有索引
   create_time     datetime
+
+user_settings
+  id                        int  pk
+  user_id                   int  FK → users.id ON DELETE CASCADE，unique
+  model_provider            varchar(20)   默认 fake
+  model_base_url            varchar(255)  nullable
+  model_name                varchar(64)   nullable
+  model_timeout_seconds     int           默认 30
+  model_api_key_ciphertext  varchar(512)  nullable（Fernet 密文）
+  model_api_key_hint        varchar(8)    nullable（末四位）
+  create_time / update_time datetime
 
 conversations
   id            int  pk autoincrement
@@ -315,5 +386,5 @@ messages
 
 - 起服务：项目根 `./scripts/dev.sh`（推荐）或 `cd backend && make run` + `cd frontend && pnpm dev`。
 - 自检：`cd backend && make check`；`cd frontend && pnpm lint && pnpm test && pnpm build`。
-- 端到端：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录，需前后端在跑）。
+- 端到端（需前后端在跑）：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录）、`pnpm acceptance:settings`（模型设置→测试连接→改显示名→导出→注销）。
 - 第一个管理员：`cd backend && ADMIN_EMAIL=... ADMIN_PASSWORD='至少8位' uv run python -m app.create_admin`（存在则重置密码并升权）。

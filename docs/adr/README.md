@@ -14,6 +14,7 @@
 | [ADR-0006](./0006-llm-client-and-chat-storage.md) | 对话落库与模型客户端抽象 | 已接受 | 2026-11-07 |
 | [ADR-0007](./0007-archive-product-module.md) | 归档商品管理模块并更名为 My Agent | 已接受 | 2026-11-08 |
 | [ADR-0008](./0008-auth-and-session.md) | 个人助手的账号体系：服务端会话 + 行级归属隔离 | 提议 | 2026-11-09 |
+| [ADR-0009](./0009-per-user-model-settings.md) | 每用户模型配置与密钥加密 | 已接受 | 2026-11-09 |
 
 ## 什么时候写 ADR
 

@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | T-UI-01 | 设计体系推翻重建（DESIGN.md + 全部页面设计稿） | UI 设计师 | DONE（待用户确认） | 已产出 PRODUCT.md / DESIGN.md / 5 张稿 |
 | T-FE-01 | 按新设计重构全部页面 | Vue 前端 | DONE | 提交见 `docs/plan/TASKS.md` §T-FE-01 记录 |
-| T-FE-02 | 新增【设置】模块 | Vue 前端（+ 后端按需） | IN_PROGRESS（外观已完成） | T-UI-01；口径见 [`../setting design.md`](../setting%20design.md) |
+| T-FE-02 | 新增【设置】模块 | Vue 前端（+ 后端按需） | DONE | T-UI-01；口径见 [`../setting design.md`](../setting%20design.md)、[ADR-0009](../adr/0009-per-user-model-settings.md) |
 | T-FE-03 | 主题系统（4 套主题 + 明暗/跟随系统） | Vue 前端 | DONE | — |
 | T-FE-04 | 状态管理迁到 Pinia（setup store） | Vue 前端 | DONE | 用户 m06333 |
 | T-DOC-01 | 设计工具链调研（design-taste-frontend / impeccable） | Lead | IN_PROGRESS | — |
@@ -43,7 +43,12 @@
 
 - **用户原话（m06047）**：「增加【设置】模块，功能设计参考 @docs/Setting design.md」。
 - **已裁决（m06091）**：**不做 workspace**；`docs/setting design.md` 已按「个人助手、单账号、无团队空间」重写（保留 Local/Cloud 双模式、数据归属表、安全要求；设置页首版候选：模型接入 / 账号资料与密码 / 登录设备 / 数据导出与注销 / 外观 / 关于）。
-- **仍待确认**：设置页首版具体勾哪些项、API Key 是否允许在页面填写、是否要「注销账号」这种不可逆操作。
+- **已定（2026-11-09）**：五节全部落地——模型接入（Key 加密存 `user_settings`，界面只显示末四位）/ 账号资料（显示名 + 改密码）/ 登录设备（复用 `/api/auth/sessions`）/ 外观 / 数据管理（导出 JSON·Markdown + 注销账号，需再输密码并输入「注销」）。
+- **落地记录**：
+  - 后端：`user_settings` 表 + `app/common/crypto.py`（Fernet，主密钥 `APP_SECRET_KEY`）+ `/api/settings/{model,model/test,export}` + `PATCH/DELETE /api/auth/me`；聊天改用 `get_user_llm`，按账号取模型，未保存过则回落环境变量（决策见 ADR-0009）。
+  - 前端：`stores/settings.ts`、`components/settings/{Model,Account,Devices,Data}Panel.vue`，设置页五节全部可点；顶栏模型标签改为「账号里配置的模型」。
+  - 修的真问题：① `App.vue` 只在 `onMounted` 取设置 → 登录页首屏时还没登录，登录后标签永远「未配置」，改成 `watch(isLoggedIn)`；② `User.conversations` 没有 `cascade="all, delete-orphan"`，注销时 SQLAlchemy 先把 `user_id` 置空 → MySQL `1048 Column 'user_id' cannot be null`，补级联并加回归用例。
+  - 验证：后端 148 例 / 94.22%（含设置服务 11、设置接口 15）；前端 54 例（含 ModelPanel 4）；`pnpm acceptance:settings` **13/13**；`acceptance:auth` 13/13、`acceptance:chat` 10/10。
 
 ---
 
