@@ -160,10 +160,11 @@ ADMIN_EMAIL=me@example.com ADMIN_PASSWORD='至少8位的密码' uv run python -m
 
 ## 接口一览
 
-7 个账号操作 + 7 个对话操作 + 3 个运维/根路径：
+9 个账号操作 + 7 个对话操作 + 4 个设置操作 + 3 个运维/根路径：
 
-- 账号 7（`/api/auth`）：注册、登录、登出、当前用户、设备列表、撤销设备、改密码
+- 账号 9（`/api/auth`）：注册、登录、登出、当前用户、设备列表、撤销设备、改密码、改显示名、注销账号
 - 对话 7：会话 5（新建/列表/详情/改名/删除）、消息 2（同步、SSE 流式）
+- 设置 4（`/api/settings`）：读模型配置、存模型配置、测试连通性、导出数据
 - 运维 3（`GET /`、`GET /healthz`、`GET /readyz`）
 
 除注册/登录与 3 个运维路径外都要求登录（HttpOnly Cookie `my_agent_session`），未登录返回 401。
@@ -220,3 +221,18 @@ make check       # lint + 测试，提交前跑这个
 - [接口契约](../docs/api.md)：参数、响应字段、错误文案、真实示例
 - [系统怎么跑起来](../docs/how-it-works.md)：分层理由、请求时序、数据模型、新增资源的步骤
 - [工具链](../docs/toolchain.md)：uv / ruff / pytest / Alembic 各自解决什么问题
+
+## 设置与模型配置（按账号）
+
+每个账号可以自带模型配置，存在 `user_settings` 表；**没有保存过就回落环境变量**那一套，所以单账号本地开发不需要进设置页。
+
+- 接口：`GET/PUT /api/settings/model`、`POST /api/settings/model/test`、`GET /api/settings/export?format=json|markdown`，契约见 [`docs/api.md`](../docs/api.md) §4。
+- API Key 用 Fernet 加密后存库（`model_api_key_ciphertext`），**接口只返回末四位**；加密主密钥来自 `APP_SECRET_KEY`。
+- 没配 `APP_SECRET_KEY` 时：其他字段照常可保存，但保存 Key 会返回 `400 服务端未配置 APP_SECRET_KEY，无法保存自定义 Key`。生成一把：
+
+  ```bash
+  uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  ```
+
+- 聊天不再用全局 `get_llm()`，改用 `get_user_llm()`（`app/llm/__init__.py`）：按当前登录用户解析配置，缺项时错误提示会指向设置页而不是环境变量。
+- 线上更换主密钥会让已存 Key 无法解密（按未配置处理，用户重填即可），所以 `APP_SECRET_KEY` 要跟数据库一样按「不可随意更换」对待。

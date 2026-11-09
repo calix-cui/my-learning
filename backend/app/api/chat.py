@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import CurrentUser
 from app.common.response import Response
 from app.dependencies import get_db
-from app.llm import LLMClient, get_llm
+from app.llm import LLMClient, get_user_llm
 from app.schemas.chat import (
     ConversationCreateRequest,
     ConversationDetailResponse,
@@ -120,7 +120,7 @@ def send_message(
     payload: MessageCreateRequest,
     user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-    llm: Annotated[LLMClient, Depends(get_llm)],
+    llm: Annotated[LLMClient, Depends(get_user_llm)],
 ):
     user_message, assistant_message = chat_service.send_message(
         db, user.id, conversation_id, payload.content, llm
@@ -160,7 +160,7 @@ def stream_message(
     payload: MessageCreateRequest,
     user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-    llm: Annotated[LLMClient, Depends(get_llm)],
+    llm: Annotated[LLMClient, Depends(get_user_llm)],
 ):
     # 先同步做完校验与落库：这样 404/400 仍是普通 JSON，而不是流里的错误事件
     conversation, user_message, context, is_first = chat_service.prepare_stream(

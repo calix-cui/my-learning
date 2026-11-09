@@ -173,3 +173,11 @@ def change_password(db: Session, user: User, old_password: str, new_password: st
     new_password = _validate_password(new_password)
     user.password_hash = hash_password(new_password)
     db.commit()
+
+
+def delete_account(db: Session, user: User, password: str) -> None:
+    """注销账号：密码二次确认后整行删除，会话/设置由外键级联清理。"""
+    if not verify_password(password, user.password_hash):
+        raise BusinessError("密码不正确", code=400)
+    db.delete(user)
+    db.commit()

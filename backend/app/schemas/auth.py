@@ -69,3 +69,17 @@ class SessionResponse(BaseModel):
 
 class SessionListResponse(BaseModel):
     items: list[SessionResponse]
+
+
+class AccountUpdateRequest(BaseModel):
+    """只允许改显示名；邮箱是登录标识，改它要另走验证流程。"""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    display_name: str | None = Field(default=None, max_length=50)
+
+
+class AccountDeleteRequest(BaseModel):
+    """注销账号必须再输一次密码，避免别人拿着已登录的浏览器一键删号。"""
+
+    password: str = Field(min_length=1, max_length=72)

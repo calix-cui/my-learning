@@ -22,6 +22,8 @@ from app.auth.dependencies import (
 from app.common.response import Response
 from app.dependencies import get_db
 from app.schemas.auth import (
+    AccountDeleteRequest,
+    AccountUpdateRequest,
     LoginRequest,
     PasswordChangeRequest,
     RegisterRequest,
@@ -72,6 +74,28 @@ def logout(request: Request, response: FastapiResponse, db: DbSession):
 @router.get("/me", response_model=Response, summary="当前登录用户")
 def read_me(user: CurrentUser):
     return Response.success(data=UserDetailResponse.model_validate(user).model_dump(mode="json"))
+
+
+@router.patch("/me", response_model=Response, summary="修改当前用户的资料")
+def update_me(payload: AccountUpdateRequest, user: CurrentUser, db: DbSession):
+    if "display_name" in payload.model_fields_set:
+        # 传空串等于清空显示名，界面回落到邮箱
+        user.display_name = payload.display_name or None
+        db.commit()
+        db.refresh(user)
+    return Response.success(data=UserDetailResponse.model_validate(user).model_dump(mode="json"))
+
+
+@router.delete("/me", response_model=Response, summary="注销账号（级联删除全部数据）")
+def delete_me(
+    payload: AccountDeleteRequest,
+    response: FastapiResponse,
+    user: CurrentUser,
+    db: DbSession,
+):
+    service.delete_account(db, user, payload.password)
+    clear_session_cookie(response)
+    return Response.success(message="账号已注销")
 
 
 @router.get("/sessions", response_model=Response, summary="我的登录设备")

@@ -1,6 +1,6 @@
 """会话接口层测试：用内存 SQLite 覆盖 get_db，走完整的 HTTP 链路。"""
 
-from app.llm import LLMError, LLMTimeoutError, get_llm
+from app.llm import LLMError, LLMTimeoutError, get_user_llm
 from app.main import app
 from app.models import Message
 
@@ -152,14 +152,14 @@ def test_send_message_empty_returns_422(client):
 
 def test_send_message_model_failure_returns_502(client, db_session):
     created = client.post("/api/conversations", json={}).json()["data"]
-    app.dependency_overrides[get_llm] = lambda: _FailingLLM(LLMError())
+    app.dependency_overrides[get_user_llm] = lambda: _FailingLLM(LLMError())
 
     try:
         response = client.post(
             f"/api/conversations/{created['id']}/messages", json={"content": "你好"}
         )
     finally:
-        app.dependency_overrides.pop(get_llm, None)
+        app.dependency_overrides.pop(get_user_llm, None)
 
     assert response.status_code == 502
     assert response.json() == {"code": 502, "message": "模型服务不可用", "data": None}
@@ -169,14 +169,14 @@ def test_send_message_model_failure_returns_502(client, db_session):
 def test_send_message_model_timeout_returns_504(client, db_session):
     assert db_session.query(Message).count() == 0  # 前置：库里本来没有消息
     created = client.post("/api/conversations", json={}).json()["data"]
-    app.dependency_overrides[get_llm] = lambda: _FailingLLM(LLMTimeoutError())
+    app.dependency_overrides[get_user_llm] = lambda: _FailingLLM(LLMTimeoutError())
 
     try:
         response = client.post(
             f"/api/conversations/{created['id']}/messages", json={"content": "你好"}
         )
     finally:
-        app.dependency_overrides.pop(get_llm, None)
+        app.dependency_overrides.pop(get_user_llm, None)
 
     assert response.status_code == 504
     assert response.json()["message"] == "模型服务超时"
@@ -245,7 +245,7 @@ def test_stream_message_missing_conversation_returns_404(client):
 
 def test_stream_message_llm_error_becomes_error_event(client, db_session):
     created = client.post("/api/conversations", json={}).json()["data"]
-    app.dependency_overrides[get_llm] = lambda: _FailingLLM(LLMError())
+    app.dependency_overrides[get_user_llm] = lambda: _FailingLLM(LLMError())
 
     try:
         with client.stream(
@@ -256,7 +256,7 @@ def test_stream_message_llm_error_becomes_error_event(client, db_session):
             assert response.status_code == 200
             events = _read_events(response)
     finally:
-        app.dependency_overrides.pop(get_llm, None)
+        app.dependency_overrides.pop(get_user_llm, None)
 
     assert events[-1]["type"] == "error"
     assert events[-1]["code"] == 502

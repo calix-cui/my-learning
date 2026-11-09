@@ -10,6 +10,7 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.session import LoginSession
+    from app.models.user_settings import UserSettings
 
 
 class User(Base):
@@ -34,7 +35,16 @@ class User(Base):
     last_login_time: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, comment="最近一次登录成功时间"
     )
+    settings: Mapped["UserSettings | None"] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
     sessions: Mapped[list["LoginSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    conversations: Mapped[list["Conversation"]] = relationship(back_populates="user")
+    # 注销账号时要连带删掉对话：没有 delete-orphan 的 relationship 会让
+    # SQLAlchemy 先把 user_id 置空（NOT NULL 列 → 1048 报错），而不是删行。
+    conversations: Mapped[list["Conversation"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=False,
+    )

@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     session_ttl_days: int = 30
     # development / production。production 下会话 Cookie 才会带 Secure（要求 https）
     app_env: str = "development"
+    # 对称加密主密钥（Fernet，urlsafe-base64 的 32 字节）。留空时禁止用户保存自定义 API Key，
+    # 但系统仍可用环境变量里的模型跑通——见 ADR-0009。
+    app_secret_key: SecretStr = SecretStr("")
 
     @model_validator(mode="after")
     def _check_openai_settings(self) -> "Settings":
