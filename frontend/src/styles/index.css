@@ -1,75 +1,49 @@
-/*
- * 兼容层：旧的 --pa-* 变量全部指向主题层 --ma-*（由 src/theme 在运行时写入 :root）。
- * 好处：换主题只改一层变量，页面组件不用动；T-FE-01 重构时再把组件逐步改成直接用 --ma-*。
+/**
+ * 全局样式：只放三件事
+ * 1. 主题变量兜底（JS 装上之前的第一帧，避免闪白）
+ * 2. reset 与基础排版（DESIGN.md 的正文 15px/1.75）
+ * 3. Element Plus 的令牌映射与少量结构性覆盖
+ *
+ * 页面级布局写在各自组件的 <style scoped> 里，不要往这里堆。
  */
+
+/* 兜底值 = 松林 · 浅色，必须与 src/theme/themes/pine.ts 的 light 保持一致；
+   运行时由 applyThemeToDocument() 覆盖到 :root 上。 */
 :root {
-  --pa-color-primary: var(--ma-color-accent);
-  --pa-color-primary-dark: var(--ma-color-accent-hover);
-  --pa-color-primary-light: color-mix(in srgb, var(--ma-color-accent) 72%, transparent);
-  --pa-color-primary-100: var(--ma-color-accent-soft);
-  --pa-color-primary-soft: var(--ma-color-accent-soft);
-  --pa-color-success: var(--ma-color-success);
-  --pa-color-success-500: var(--ma-color-success);
-  --pa-color-success-soft: var(--ma-color-success-soft);
-  --pa-color-success-border: color-mix(in srgb, var(--ma-color-success) 32%, transparent);
-  --pa-color-warning: var(--ma-color-warn);
-  --pa-color-warning-soft: var(--ma-color-warn-soft);
-  --pa-color-danger: var(--ma-color-danger);
-  --pa-color-danger-soft: var(--ma-color-danger-soft);
-  --pa-color-info: var(--ma-color-muted);
-  --pa-color-info-soft: var(--ma-color-sunken);
-
-  --pa-color-text-primary: var(--ma-color-ink);
-  --pa-color-text-regular: var(--ma-color-ink);
-  --pa-color-text-secondary: var(--ma-color-muted);
-  --pa-color-text-muted: var(--ma-color-faint);
-
-  --pa-color-border: var(--ma-color-line);
-  --pa-color-border-strong: var(--ma-color-line-strong);
-  --pa-color-border-light: var(--ma-color-line);
-  --pa-color-bg-page: var(--ma-color-canvas);
-  --pa-color-bg-card: var(--ma-color-surface);
-  --pa-color-bg-header: var(--ma-color-surface);
-  --pa-color-bg-hover: var(--ma-color-sunken);
-
-  --pa-font-size-title: 18px;
-  --pa-font-size-subtitle: 15px;
-  --pa-font-size-body: 14px;
-  --pa-font-size-caption: 12px;
-
-  --pa-space-1: 4px;
-  --pa-space-2: 8px;
-  --pa-space-3: 12px;
-  --pa-space-4: 16px;
-  --pa-space-6: 24px;
-  --pa-space-8: 32px;
-
-  --pa-radius-sm: 6px;
-  --pa-radius: 8px;
-  --pa-radius-lg: 12px;
-  --pa-shadow-sm: 0 1px 2px rgb(28 27 24 / 4%);
-  --pa-shadow-md: 0 4px 12px rgb(28 27 24 / 8%);
-  --pa-shadow-lg: 0 16px 40px rgb(28 27 24 / 14%);
-
-  --pa-aside-width: 200px;
-  --pa-topbar-height: 56px;
-  --pa-content-padding: 24px;
-  --pa-table-row-height: 48px;
-  --pa-table-head-height: 44px;
+  --ma-mode: light;
+  --ma-color-canvas: #faf8f4;
+  --ma-color-surface: #ffffff;
+  --ma-color-sunken: #f3f0ea;
+  --ma-color-ink: #1c1b18;
+  --ma-color-muted: #6b675e;
+  --ma-color-faint: #9a958a;
+  --ma-color-line: #e5e0d6;
+  --ma-color-line-strong: #d2ccbe;
+  --ma-color-accent: #1f4d46;
+  --ma-color-accent-hover: #173a35;
+  --ma-color-accent-soft: #e7efec;
+  --ma-color-on-accent: #ffffff;
+  --ma-color-success: #2f6b52;
+  --ma-color-success-soft: #e6f0ea;
+  --ma-color-warn: #b4722a;
+  --ma-color-warn-soft: #fbf1e4;
+  --ma-color-danger: #a6352b;
+  --ma-color-danger-soft: #fbeae7;
+  --ma-font-sans: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  --ma-font-serif: 'Songti SC', 'Noto Serif SC', Georgia, serif;
+  --ma-font-mono: 'SF Mono', Menlo, Consolas, monospace;
+  --ma-radius-sm: 6px;
+  --ma-radius-md: 10px;
+  --ma-radius-lg: 14px;
+  --ma-sidebar-width: 264px;
+  --ma-content-width: 1080px;
+  --ma-reading-width: 720px;
+  color-scheme: light;
 }
 
-/* 覆盖 Element Plus：主色与中性色都跟随主题层（色阶由 apply.ts 用 color-mix 派生） */
-:root {
-  --el-border-radius-base: 6px;
-  --el-font-size-base: 14px;
-  /* 菜单透明：避免 el-menu 默认的浅色底在深色主题下变成一块块「方框」 */
-  --el-menu-bg-color: transparent;
-  --el-menu-hover-bg-color: var(--ma-color-sunken);
-  --el-menu-text-color: var(--ma-color-ink);
-  --el-menu-active-color: var(--ma-color-accent);
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -77,78 +51,198 @@ html,
 body,
 #app {
   height: 100%;
-  margin: 0;
-  padding: 0;
 }
 
 body {
-  color: var(--pa-color-text-regular);
-  font-family:
-    -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial,
-    sans-serif;
-  font-size: var(--pa-font-size-body);
-  font-variant-numeric: tabular-nums;
-  background-color: var(--pa-color-bg-page);
-  -webkit-font-smoothing: antialiased;
-}
-
-/* 页面通用容器 */
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pa-space-4);
-}
-
-/* 卡片容器：卡片头 / 内容 / 底部均为整宽，内部各自留 24px 边距 */
-.panel {
-  display: flex;
-  flex-direction: column;
-  background-color: var(--pa-color-bg-card);
-  border: 1px solid var(--pa-color-border);
-  border-radius: var(--pa-radius);
-  box-shadow: var(--pa-shadow-sm);
-}
-
-.panel--search {
-  flex: none;
-  padding: var(--pa-space-4) var(--pa-space-6);
-}
-
-.panel__header {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--pa-space-3);
-  height: 56px;
-  padding: 0 var(--pa-space-6);
-  border-bottom: 1px solid var(--pa-color-border-light);
-}
-
-.panel__title-group {
-  display: flex;
-  align-items: center;
-  gap: var(--pa-space-2);
-}
-
-.panel__title {
   margin: 0;
-  color: var(--pa-color-text-primary);
-  font-size: var(--pa-font-size-subtitle);
-  font-weight: 600;
+  font-family: var(--ma-font-sans);
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ma-color-ink);
+  background: var(--ma-color-canvas);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizelegibility;
 }
 
-.panel__meta {
-  color: var(--pa-color-text-muted);
-  font-size: var(--pa-font-size-caption);
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
 }
 
-.panel__actions {
+a {
+  color: inherit;
+}
+
+/* 数字统一等宽，时间/计数不跳动 */
+time,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 细滚动条，避免默认滚动条破坏留白 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ma-color-line-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--ma-color-line-strong);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- Element Plus：把 el 变量接到设计令牌上 ---------- */
+
+.el-button {
+  font-family: inherit;
+  border-radius: var(--ma-radius-sm);
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--ma-color-accent);
+  --el-button-border-color: var(--ma-color-accent);
+  --el-button-hover-bg-color: var(--ma-color-accent-hover);
+  --el-button-hover-border-color: var(--ma-color-accent-hover);
+  --el-button-active-bg-color: var(--ma-color-accent-hover);
+  --el-button-active-border-color: var(--ma-color-accent-hover);
+  --el-button-text-color: var(--ma-color-on-accent);
+}
+
+.el-button.is-link {
+  font-weight: 500;
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: var(--ma-radius-sm);
+  box-shadow: 0 0 0 1px var(--ma-color-line-strong) inset;
+}
+
+.el-input__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px var(--ma-color-faint) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow:
+    0 0 0 1px var(--ma-color-accent) inset,
+    0 0 0 3px var(--ma-color-accent-soft);
+}
+
+.el-form-item__label {
+  font-size: 13px;
+  color: var(--ma-color-muted);
+}
+
+.el-dropdown-menu__item {
+  font-size: 14px;
+  gap: 6px;
+}
+
+.el-card,
+.el-dialog {
+  border-radius: var(--ma-radius-lg);
+}
+
+.el-loading-mask {
+  background-color: color-mix(in srgb, var(--ma-color-canvas) 72%, transparent);
+}
+
+/* ---------- 认证页：登录 / 注册共用 ---------- */
+
+.auth {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 32px 16px 12vh;
+  background: var(--ma-color-canvas);
+}
+
+.auth__card {
+  width: 100%;
+  max-width: 400px;
+  padding: 32px;
+  background: var(--ma-color-surface);
+  border: 1px solid var(--ma-color-line);
+  border-radius: var(--ma-radius-lg);
+  box-shadow: 0 1px 2px rgb(28 27 24 / 4%);
+}
+
+.auth__brand {
   display: flex;
+  gap: 10px;
   align-items: center;
-  gap: var(--pa-space-3);
+  margin-bottom: 24px;
 }
 
-.panel__body {
-  padding: 0 var(--pa-space-6);
+.auth__logo {
+  border-radius: 8px;
+}
+
+.auth__name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.auth__title {
+  font-family: var(--ma-font-serif);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+.auth__subtitle {
+  margin: 6px 0 24px;
+  font-size: 13px;
+  color: var(--ma-color-muted);
+}
+
+.auth__submit {
+  width: 100%;
+  height: 40px;
+  margin-top: 4px;
+}
+
+.auth__switch {
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--ma-color-muted);
+  text-align: center;
+}
+
+.auth__switch a {
+  font-weight: 500;
+  color: var(--ma-color-accent);
+  text-decoration: none;
+}
+
+.auth__switch a:hover {
+  text-decoration: underline;
+}
+
+/* el-form 自带 18px 的 item 间距，这里收一档跟设计稿对齐 */
+.auth__card .el-form-item {
+  margin-bottom: 16px;
+}
+
+@media (width < 960px) {
+  .auth {
+    padding-bottom: 6vh;
+  }
 }

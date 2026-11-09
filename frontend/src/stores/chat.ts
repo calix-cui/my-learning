@@ -1,0 +1,217 @@
+import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
+import { ElMessage, ElMessageBox } from 'element-plus'
+
+import {
+  createConversation,
+  deleteConversation,
+  getConversation,
+  listConversations,
+  renameConversation,
+  sendMessageStream,
+} from '@/api/chat'
+import type { ChatConversationListItem, ChatMessage } from '@/types/api'
+
+/**
+ * 会话状态提升到 store：侧边栏（会话列表）与对话页（消息区）要同时读写，
+ * 放在视图里就得靠 props/emit 来回传，反而更难维护。
+ */
+export const useChatStore = defineStore('chat', () => {
+  const conversations = ref<ChatConversationListItem[]>([])
+  /** 当前打开的会话；null 表示还没选（空态） */
+  const activeId = ref<number | null>(null)
+  const messages = ref<ChatMessage[]>([])
+  const loadingList = ref(false)
+  const loadingMessages = ref(false)
+  const sending = ref(false)
+  /** 流式过程中已收到的文本；空字符串表示还在等第一个字符 */
+  const streamingText = ref('')
+
+  const activeConversation = computed(
+    () => conversations.value.find((item) => item.id === activeId.value) ?? null,
+  )
+  const activeTitle = computed(() => activeConversation.value?.title ?? '')
+
+  /** 顶栏标签显示真正回话的模型（流式与非流式都会写进 assistant 消息） */
+  const modelLabel = computed(() => {
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const model = messages.value[i].model
+      if (model) return model
+    }
+    return ''
+  })
+
+  /** 列表里替换某条会话的本地状态，避免整表重拉 */
+  function patchConversation(id: number, patch: Partial<ChatConversationListItem>) {
+    conversations.value = conversations.value.map((item) =>
+      item.id === id ? { ...item, ...patch } : item,
+    )
+  }
+
+  /** 最近活动时间倒序：发完消息把会话顶到第一位 */
+  function sortByRecent() {
+    conversations.value = [...conversations.value].sort((a, b) =>
+      b.update_time.localeCompare(a.update_time),
+    )
+  }
+
+  async function loadConversations() {
+    loadingList.value = true
+    try {
+      const page = await listConversations()
+      conversations.value = page.items
+    } finally {
+      loadingList.value = false
+    }
+  }
+
+  async function openConversation(id: number) {
+    activeId.value = id
+    loadingMessages.value = true
+    messages.value = []
+    try {
+      const detail = await getConversation(id)
+      messages.value = detail.messages
+      patchConversation(id, { title: detail.title })
+    } catch {
+      // 会话可能已被别处删除：退回空态并刷新列表
+      activeId.value = null
+      messages.value = []
+      await loadConversations()
+    } finally {
+      loadingMessages.value = false
+    }
+  }
+
+  async function createNew(): Promise<number | null> {
+    const created = await createConversation()
+    conversations.value = [{ ...created, message_count: 0 }, ...conversations.value]
+    activeId.value = created.id
+    messages.value = []
+    return created.id
+  }
+
+  async function rename(item: ChatConversationListItem) {
+    try {
+      const { value } = await ElMessageBox.prompt('输入新的会话名称', '重命名会话', {
+        inputValue: item.title,
+        inputValidator: (input) => (input.trim() ? true : '名称不能只包含空白'),
+        confirmButtonText: '保存',
+        cancelButtonText: '取消',
+      })
+      const updated = await renameConversation(item.id, value)
+      patchConversation(item.id, { title: updated.title })
+      ElMessage.success('会话名称已更新')
+    } catch {
+      // 取消或接口失败（失败已由拦截器提示）
+    }
+  }
+
+  async function remove(item: ChatConversationListItem) {
+    try {
+      await ElMessageBox.confirm(`删除会话「${item.title}」及其全部消息？`, '删除会话', {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+    await deleteConversation(item.id)
+    ElMessage.success('删除成功')
+    conversations.value = conversations.value.filter((row) => row.id !== item.id)
+    if (activeId.value === item.id) {
+      const next = conversations.value[0]
+      if (next) {
+        await openConversation(next.id)
+      } else {
+        activeId.value = null
+        messages.value = []
+      }
+    }
+  }
+
+  /** 发送一条消息；返回是否成功（失败时由调用方决定输入框保留内容） */
+  async function send(content: string): Promise<boolean> {
+    const id = activeId.value
+    const text = content.trim()
+    if (!id || !text || sending.value) return false
+
+    // 乐观插入用户消息：等服务端 meta 回来再换成正身（带真实 id 与时间）
+    const optimisticId = -Date.now()
+    messages.value = [
+      ...messages.value,
+      {
+        id: optimisticId,
+        conversation_id: id,
+        role: 'user',
+        content: text,
+        model: null,
+        create_time: '',
+      },
+    ]
+    streamingText.value = ''
+    sending.value = true
+
+    let currentUserId = optimisticId
+    try {
+      await sendMessageStream(id, text, {
+        onMeta: (message) => {
+          currentUserId = message.id
+          messages.value = messages.value.map((m) => (m.id === optimisticId ? message : m))
+        },
+        onDelta: (delta) => {
+          streamingText.value += delta
+        },
+        onDone: (event) => {
+          streamingText.value = ''
+          messages.value = [...messages.value, event.assistant_message]
+          patchConversation(id, {
+            title: event.conversation_title,
+            message_count: event.message_count,
+            update_time: event.assistant_message.create_time,
+          })
+          sortByRecent()
+        },
+      })
+      return true
+    } catch (error) {
+      // 后端已回滚这次提问，前端也要撤掉乐观消息
+      messages.value = messages.value.filter((m) => m.id !== currentUserId)
+      streamingText.value = ''
+      ElMessage.error(error instanceof Error ? error.message : '发送失败，请稍后重试')
+      return false
+    } finally {
+      sending.value = false
+    }
+  }
+
+  /** 退出登录时清空，避免下一个账号看到上一个人的会话 */
+  function reset() {
+    conversations.value = []
+    activeId.value = null
+    messages.value = []
+    streamingText.value = ''
+    sending.value = false
+  }
+
+  return {
+    conversations,
+    activeId,
+    messages,
+    loadingList,
+    loadingMessages,
+    sending,
+    streamingText,
+    activeConversation,
+    activeTitle,
+    modelLabel,
+    loadConversations,
+    openConversation,
+    createNew,
+    rename,
+    remove,
+    send,
+    reset,
+  }
+})

@@ -9,7 +9,7 @@
 | # | 任务 | 负责角色 | 状态 | 前置 |
 |---|---|---|---|---|
 | T-UI-01 | 设计体系推翻重建（DESIGN.md + 全部页面设计稿） | UI 设计师 | DONE（待用户确认） | 已产出 PRODUCT.md / DESIGN.md / 5 张稿 |
-| T-FE-01 | 按新设计重构全部页面 | Vue 前端 | TODO | T-UI-01 |
+| T-FE-01 | 按新设计重构全部页面 | Vue 前端 | DONE | 提交见 `docs/plan/TASKS.md` §T-FE-01 记录 |
 | T-FE-02 | 新增【设置】模块 | Vue 前端（+ 后端按需） | IN_PROGRESS（外观已完成） | T-UI-01；口径见 [`../setting design.md`](../setting%20design.md) |
 | T-FE-03 | 主题系统（4 套主题 + 明暗/跟随系统） | Vue 前端 | DONE | — |
 | T-FE-04 | 状态管理迁到 Pinia（setup store） | Vue 前端 | DONE | 用户 m06333 |
@@ -30,8 +30,11 @@
 - **已交付（2026-11-09）**：根目录 `PRODUCT.md`（impeccable 产品上下文）+ `DESIGN.md`（YAML token + 8 节规范）；`docs/design/mockups/{01-login,02-register,03-chat,04-settings,05-settings-model}.html` 与 `docs/images/design-*.png`（1440×900 @2x）；`docs/design/README.md` 索引与「与现有实现的差异」清单。
 - **验收（草稿，待用户确认后定稿）**：一套可复用的设计 token + 组件规格；每个页面一张 1440×900 设计稿；与现有 Element Plus 组件能对上（不引入第二套 UI 库）；对比度、焦点态、空/错/载三态齐备。
 
-## T-FE-01 · 按新设计重构全部页面
+## T-FE-01 · 按新设计重构全部页面（DONE）
 
+- **落地（2026-11-09）**：外壳（264px 侧栏 + 48px 顶栏 + 1080 内容区）、对话页（720 阅读列 + 气泡 + 输入盒）、登录/注册（400 卡片 + 衬线标题 + logo）、设置页（200 导航 + 560 表单）全部按 `DESIGN.md` 与 `docs/design/mockups/` 重写；会话状态提升到 `stores/chat.ts` 供侧栏与页面共用；`styles/index.css` 从 `--pa-*` 兼容层收敛为「token 兜底 + reset + el 映射 + 认证页共用样式」。
+- **顺带完成**：品牌资产接入（`frontend/public/` 的 logo 与 favicon 全套、`site.webmanifest`、`index.html` 的 icon/theme-color）；组件拆分 `components/chat/{ThreadList,ChatMessage,ChatComposer}.vue`。
+- **验证**：`pnpm type-check` / `lint` / `format:check` / `build` 通过；`pnpm test` 50 passed；`pnpm acceptance:auth` 13/13、`pnpm acceptance:chat` 10/10；实体截图见 `docs/images/ui-0*.png`。
 - **用户原话（m06047）**：「@Vue 前端：商品管理后台实现。请你同样根据本地安装的 vue 和前端开发相关的 skill 更新自己的提示词，并在第一步 UI 设计师更新设计之后，根据最新设计，重构当前全部页面」。
 - **内容**：先把 `docs/agents/vue-frontend-dev.md` 按本地 Vue 相关 Skill（`vue-best-practices`、`vue-router-best-practices`、`vue-pinia-best-practices`、`vue-testing-best-practices`、`vue-debug-guides`、`frontend-ui-engineering`）更新角色卡，再按 T-UI-01 的产出重构页面。
 - **依赖**：T-UI-01 完成并确认。**不得自行改设计**；实现与设计稿不符时报给 Lead。

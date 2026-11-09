@@ -13,7 +13,7 @@ My Agent 的聊天界面，基于 Vue 3 + TypeScript + Vite + Element Plus 实�
 | UI | Element Plus 2.x + @element-plus/icons-vue（中文语言包 zh-cn） |
 | 请求 | axios（统一响应拦截器）+ 原生 `fetch`（SSE 流式） |
 | 路由 | vue-router 4（HTML5 history 模式，每个页面路由级懒加载） |
-| 状态 | Pinia 4（setup store 写法：`stores/session.ts`、`stores/theme.ts`） |
+| 状态 | Pinia 4（setup store 写法：`stores/session.ts`、`stores/theme.ts`、`stores/chat.ts`） |
 | Markdown | markdown-it 15 + DOMPurify 3（只用于助手消息渲染） |
 | 主题 | 自研 `src/theme/`（18 个语义色 × light/dark，4 套主题，运行时可切） |
 
@@ -93,7 +93,8 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 | --- | --- | --- |
 | `/login` | 登录（公开） | `views/LoginView.vue`、`stores/session.ts` |
 | `/register` | 注册（公开，注册即登录） | `views/RegisterView.vue` |
-| `/chat` | 对话（左会话列表 + 右消息区，SSE 逐字渲染，助手消息按 Markdown 渲染） | `views/ChatView.vue`、`api/chat.ts`、`utils/markdown.ts` |
+| `/chat` | 对话（左会话列表 + 右消息区，SSE 逐字渲染，助手消息按 Markdown 渲染） | `views/ChatView.vue`、`components/chat/*`、`stores/chat.ts`、`api/chat.ts`、`utils/markdown.ts` |
+| `/settings` | 设置（左侧二级导航 200px + 右侧 560px 表单；外观已实现，其余分节占位） | `views/SettingsView.vue`、`components/settings/AppearancePanel.vue`、`components/theme/*` |
 | `/` / 其他 | 重定向到 `/chat`；未登录时守卫改送 `/login?redirect=...` | `src/router/index.ts` |
 
 未登录只剩登录/注册两个页面可达：`router.beforeEach` 先向后端确认一次登录态（`GET /api/auth/me`），再决定放行或跳转。
@@ -103,7 +104,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 
 ### 对话页行为
 
-- 左栏：会话列表按 `update_time` 倒序，hover 显示「改名 / 删除」两个内联按钮；空态提示「还没有会话，点「新建会话」开始」。
+- 左栏：会话列表按 `update_time` 倒序，hover 显示「改名 / 删除」两个内联按钮；空态提示「还没有会话，点「新建」开始」。会话状态由 `stores/chat.ts` 持有，侧栏与对话页共用同一份。
 - 右栏：消息气泡，用户消息纯文本、助手消息 Markdown；流式时显示「正在输入…」，结束后落到完整消息并带模型名。
 - 输入框：Enter 发送、Shift+Enter 换行，最多 4000 字并显示计数；发送中禁用；失败保留原文并提示后端 message。
 - 首条消息自动生成会话标题（取前 30 字），并同步刷新列表。
@@ -126,6 +127,7 @@ frontend/
     ├── main.ts                # 挂载 Element Plus（zh-cn）+ router
     ├── App.vue                # 侧栏 + 顶栏 + <router-view>（登录页不套外壳）
     ├── components/
+    │   ├── chat/              # ThreadList（侧栏会话）/ ChatMessage（气泡+Markdown）/ ChatComposer（输入区）
     │   ├── theme/             # ThemeCard / ModeSwitch
     │   └── settings/          # AppearancePanel
 
@@ -138,6 +140,7 @@ frontend/
     │   └── unauthorized.ts    # 401 回调注册（避免 client 与 store 互相 import）
     ├── stores/
     │   ├── session.ts         # Pinia：登录态（user / loaded / 登录登出清除）
+    │   ├── chat.ts            # Pinia：会话列表 + 当前会话 + 流式发送（侧栏与对话页共用）
     │   └── theme.ts           # Pinia：主题（themeId / mode / 跟随系统 / 落盘）
     ├── theme/
     │   ├── types.ts           # 18 个语义色 schema + 静态 token 类型
@@ -153,8 +156,10 @@ frontend/
     │   ├── LoginView.vue      # 登录页
     │   ├── RegisterView.vue   # 注册页
     │   └── SettingsView.vue   # 设置页（外观已实现，其余分节待建）
-    └── styles/index.css       # 设计 token CSS 变量 + 全局基础样式
+    └── styles/index.css       # 设计 token 兜底 + reset + Element Plus 令牌映射 + 认证页共用样式
 ```
+
+`public/` 放品牌资产：`logo.png`（侧栏与登录页，256×256）、`favicon.ico`、`favicon-16/32.png`、`apple-touch-icon.png`、`android-chrome-192/512.png`、`site.webmanifest`。图标源文件在仓库根 `images/`，改图后重新 `sips -Z 256 images/logo.png --out frontend/public/logo.png` 并覆盖同名文件即可。
 
 ## 设计说明
 
@@ -167,8 +172,8 @@ frontend/
 ## 已知限制
 
 - 主题选择只存 `localStorage`，**不随账号同步**（换设备要重选；等设置读写接口时补 `user_settings`）。
-- 设置页只实现了「外观」，「模型接入 / 账号资料 / 登录设备 / 数据管理」四个分节还是占位。
+- 设置页只实现了「外观」，「模型接入 / 账号资料 / 登录设备 / 数据管理」四个分节还是占位（T-FE-02）。
 - 未实现多 Agent 切换（后端已预留 `agent_key` 字段，界面暂无入口）。
 - 会话列表一次性拉 50 条，没有分页器（数量级小，够用）。
 - 没有「停止生成」按钮：流式过程中只能等它结束或切走会话。
-- 没有移动端适配。
+- 移动端只保证不崩（`<960px` 侧栏收窄到 220px），没有为小屏重排对话布局。

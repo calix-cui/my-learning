@@ -2,22 +2,43 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ChatDotRound, Setting } from '@element-plus/icons-vue'
+import { ArrowDown, Setting } from '@element-plus/icons-vue'
 
+import ThreadList from '@/components/chat/ThreadList.vue'
+import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
 
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
+const chat = useChatStore()
 
 /** 登录/注册页不套应用外壳（没有侧边栏和顶栏） */
 const isAuthPage = computed(() => route.meta.public === true)
 
-/** 头像里显示邮箱或显示名的首字 */
-const userLabel = computed(() => session.displayName)
+const pageTitle = computed(() => (route.meta.title as string | undefined) ?? 'My Agent')
+const isChatPage = computed(() => route.name === 'chat')
+
+/** 后端联通状态：null 表示检测中，仅用于顶栏状态点 */
+const backendOnline = ref<boolean | null>(null)
+
+onMounted(async () => {
+  try {
+    const response = await fetch('/healthz')
+    backendOnline.value = response.ok
+  } catch {
+    backendOnline.value = false
+  }
+})
+
+const statusText = computed(() => {
+  if (backendOnline.value === null) return '检测中'
+  return backendOnline.value ? '已连接' : '未连接'
+})
 
 async function handleLogout() {
   await session.logout()
+  chat.reset()
   ElMessage.success('已退出登录')
   await router.replace({ name: 'login' })
 }
@@ -31,295 +52,299 @@ async function handleUserCommand(command: string) {
     await router.push({ name: 'settings' })
   }
 }
-
-/** 当前高亮菜单项，与路由路径保持一致 */
-const activeMenu = computed(() => route.path)
-
-/** 当前页面标题，来自路由 meta */
-const pageTitle = computed(() => (route.meta.title as string | undefined) ?? 'My Agent')
-
-/** 后端联通状态：null 表示检测中，仅用于顶栏与侧边栏状态提示 */
-const backendOnline = ref<boolean | null>(null)
-
-onMounted(async () => {
-  try {
-    const response = await fetch('/healthz')
-    backendOnline.value = response.ok
-  } catch {
-    backendOnline.value = false
-  }
-})
-
-const backendStatusText = computed(() => {
-  if (backendOnline.value === null) {
-    return '正在检测后端'
-  }
-  // 容器部署时前后端同源，写死 127.0.0.1:8000 会误导，这里只报可达性
-  return backendOnline.value ? '已连接后端' : '后端未连接'
-})
-
-const sidebarStatusText = computed(() => {
-  if (backendOnline.value === null) {
-    return '正在检测接口'
-  }
-  return backendOnline.value ? '接口服务正常' : '接口服务异常'
-})
 </script>
 
 <template>
   <router-view v-if="isAuthPage" />
-  <el-container v-else class="layout">
-    <el-aside width="200px" class="layout__aside">
+
+  <div v-else class="layout">
+    <aside class="layout__aside">
       <div class="layout__brand">
-        <span class="layout__brand-mark">AI</span>
+        <img class="layout__logo" src="/logo.png" alt="" width="28" height="28" />
         <span class="layout__brand-text">My Agent</span>
       </div>
 
-      <p class="layout__menu-label">功能菜单</p>
-      <el-menu :default-active="activeMenu" router class="layout__menu">
-        <el-menu-item index="/chat">
-          <el-icon><ChatDotRound /></el-icon>
-          <span>对话</span>
-        </el-menu-item>
-        <el-menu-item index="/settings">
-          <el-icon><Setting /></el-icon>
-          <span>设置</span>
-        </el-menu-item>
-      </el-menu>
+      <ThreadList class="layout__threads" />
 
       <div class="layout__aside-footer">
-        <p class="layout__version">版本 v1.0 · 2026-11</p>
-        <p class="layout__status">
-          <span
-            class="layout__status-dot"
-            :class="{ 'layout__status-dot--offline': backendOnline === false }"
-          />
-          {{ sidebarStatusText }}
-        </p>
-      </div>
-    </el-aside>
+        <el-dropdown trigger="click" placement="top-start" @command="handleUserCommand">
+          <button type="button" class="layout__user-trigger">
+            <span class="layout__avatar">{{ session.avatarText }}</span>
+            <span class="layout__user-text">
+              <span class="layout__user-name">{{ session.displayName }}</span>
+              <!-- 没填显示名时 displayName 就是邮箱，避免同一行重复两次 -->
+              <span v-if="session.user?.display_name" class="layout__user-mail">
+                {{ session.user?.email }}
+              </span>
+            </span>
+            <el-icon class="layout__user-arrow"><ArrowDown /></el-icon>
+          </button>
 
-    <el-container class="layout__body">
-      <el-header height="56px" class="layout__topbar">
-        <div class="layout__topbar-left">
-          <h1 class="layout__title">{{ pageTitle }}</h1>
-          <span class="layout__divider" />
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ path: '/chat' }">首页</el-breadcrumb-item>
-            <el-breadcrumb-item>{{ pageTitle }}</el-breadcrumb-item>
-          </el-breadcrumb>
-        </div>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="settings">
+                <el-icon><Setting /></el-icon>
+                设置
+              </el-dropdown-item>
+              <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+
+        <el-button
+          link
+          class="layout__settings-link"
+          :icon="Setting"
+          title="设置"
+          @click="router.push({ name: 'settings' })"
+        />
+      </div>
+    </aside>
+
+    <main class="layout__main">
+      <header class="layout__topbar">
+        <nav class="layout__crumbs" aria-label="面包屑">
+          <RouterLink to="/chat" class="layout__crumb-link">首页</RouterLink>
+          <span class="layout__crumb-sep">/</span>
+          <span class="layout__crumb-current">{{ pageTitle }}</span>
+        </nav>
 
         <div class="layout__topbar-right">
-          <span class="layout__backend">
-            <span
-              class="layout__status-dot"
-              :class="{ 'layout__status-dot--offline': backendOnline === false }"
-            />
-            {{ backendStatusText }}
+          <span class="layout__status" :title="statusText">
+            <i class="layout__status-dot" :class="{ 'is-offline': backendOnline === false }" />
+            {{ statusText }}
           </span>
-          <span class="layout__divider" />
-          <el-dropdown trigger="click" @command="handleUserCommand">
-            <span class="layout__user-trigger">
-              <el-avatar :size="28" class="layout__avatar">{{ session.avatarText }}</el-avatar>
-              <span class="layout__user">{{ userLabel }}</span>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item disabled>{{ session.user?.email }}</el-dropdown-item>
-                <el-dropdown-item divided command="settings">设置</el-dropdown-item>
-                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <span v-if="isChatPage && chat.modelLabel" class="layout__model">{{
+            chat.modelLabel
+          }}</span>
         </div>
-      </el-header>
+      </header>
 
-      <el-main class="layout__main">
+      <div class="layout__content">
         <router-view />
-      </el-main>
-    </el-container>
-  </el-container>
+      </div>
+    </main>
+  </div>
 </template>
 
 <style scoped>
 .layout {
-  height: 100%;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--ma-color-canvas);
 }
 
 .layout__aside {
   display: flex;
+  flex: none;
   flex-direction: column;
-  background-color: var(--pa-color-bg-card);
-  border-right: 1px solid var(--pa-color-border);
+  width: var(--ma-sidebar-width);
+  padding: 14px 12px 10px;
+  background: var(--ma-color-sunken);
+  border-right: 1px solid var(--ma-color-line);
 }
 
 .layout__brand {
   display: flex;
-  flex: none;
-  align-items: center;
   gap: 10px;
-  height: var(--pa-topbar-height);
-  padding: 0 var(--pa-space-4);
-  border-bottom: 1px solid var(--pa-color-border-light);
+  align-items: center;
+  padding: 2px 10px 16px;
 }
 
-.layout__brand-mark {
+.layout__logo {
+  border-radius: 8px;
+}
+
+.layout__brand-text {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.layout__threads {
+  flex: 1;
+  min-height: 0;
+}
+
+.layout__aside-footer {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  padding-top: 10px;
+  margin-top: 8px;
+  border-top: 1px solid var(--ma-color-line);
+}
+
+.layout__user-trigger {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px 8px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: var(--ma-radius-sm);
+}
+
+.layout__user-trigger:hover {
+  background: color-mix(in srgb, var(--ma-color-ink) 4%, transparent);
+}
+
+.layout__user-trigger:focus-visible {
+  outline: 2px solid var(--ma-color-accent);
+  outline-offset: -2px;
+}
+
+.layout__avatar {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  color: #ffffff;
-  font-size: var(--pa-font-size-body);
+  font-size: 13px;
   font-weight: 600;
-  background: linear-gradient(135deg, #60a5fa, #2563eb);
-  border-radius: var(--pa-radius);
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.28);
+  color: var(--ma-color-accent);
+  background: var(--ma-color-accent-soft);
+  border-radius: 999px;
 }
 
-.layout__brand-text {
-  color: var(--pa-color-text-primary);
-  font-size: var(--pa-font-size-body);
-  font-weight: 600;
-}
-
-.layout__menu-label {
-  margin: 0;
-  padding: 6px 12px;
-  color: var(--pa-color-text-muted);
-  font-size: var(--pa-font-size-caption);
-  letter-spacing: 0.4px;
-}
-
-.layout__menu {
-  flex: 1;
-  padding: var(--pa-space-3);
-  border-right: none;
-}
-
-.layout__menu :deep(.el-menu-item) {
-  position: relative;
-  height: 44px;
-  margin-bottom: var(--pa-space-1);
-  color: var(--pa-color-text-regular);
-  border-radius: var(--pa-radius-sm);
-}
-
-.layout__menu :deep(.el-menu-item.is-active) {
-  color: var(--pa-color-primary);
-  font-weight: 600;
-  background-color: var(--pa-color-primary-soft);
-}
-
-.layout__menu :deep(.el-menu-item.is-active)::before {
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: -12px;
-  width: 3px;
-  background-color: var(--pa-color-primary);
-  border-radius: 0 3px 3px 0;
-  content: '';
-}
-
-.layout__aside-footer {
-  padding: var(--pa-space-3) var(--pa-space-4);
-  border-top: 1px solid var(--pa-color-border-light);
-}
-
-.layout__version,
-.layout__status {
-  margin: 0;
-  color: var(--pa-color-text-muted);
-  font-size: var(--pa-font-size-caption);
-  line-height: 20px;
-}
-
-.layout__status {
+.layout__user-text {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: var(--pa-space-1);
-  color: var(--pa-color-text-secondary);
-}
-
-.layout__status-dot {
-  display: inline-block;
-  flex: none;
-  width: 6px;
-  height: 6px;
-  background-color: var(--pa-color-success-500);
-  border-radius: 50%;
-}
-
-.layout__status-dot--offline {
-  background-color: var(--pa-color-danger);
-}
-
-.layout__body {
+  flex: 1;
+  flex-direction: column;
   min-width: 0;
+  line-height: 1.4;
+}
+
+.layout__user-name {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout__user-mail {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--ma-color-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout__user-arrow {
+  flex: none;
+  font-size: 12px;
+  color: var(--ma-color-faint);
+}
+
+.layout__settings-link {
+  flex: none;
+  color: var(--ma-color-muted);
+}
+
+.layout__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
 .layout__topbar {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
-  gap: var(--pa-space-4);
-  padding: 0 var(--pa-space-6);
-  background-color: var(--pa-color-bg-card);
-  border-bottom: 1px solid var(--pa-color-border);
+  height: 48px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--ma-color-line);
 }
 
-.layout__topbar-left,
-.layout__user-trigger {
-  display: inline-flex;
+.layout__crumbs {
+  display: flex;
+  gap: 8px;
   align-items: center;
-  gap: var(--pa-space-2);
-  cursor: pointer;
+  font-size: 13px;
+  color: var(--ma-color-muted);
+}
+
+.layout__crumb-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.layout__crumb-link:hover {
+  color: var(--ma-color-ink);
+}
+
+.layout__crumb-sep {
+  color: var(--ma-color-faint);
+}
+
+.layout__crumb-current {
+  font-weight: 600;
+  color: var(--ma-color-ink);
 }
 
 .layout__topbar-right {
   display: flex;
+  gap: 12px;
   align-items: center;
-  gap: var(--pa-space-3);
+  font-size: 12px;
+  color: var(--ma-color-muted);
 }
 
-.layout__title {
-  margin: 0;
-  color: var(--pa-color-text-primary);
-  font-size: var(--pa-font-size-title);
-  font-weight: 600;
-}
-
-.layout__divider {
-  width: 1px;
-  height: 14px;
-  background-color: var(--pa-color-border);
-}
-
-.layout__backend {
+.layout__status {
   display: inline-flex;
-  align-items: center;
   gap: 6px;
-  color: var(--pa-color-text-secondary);
-  font-size: var(--pa-font-size-caption);
+  align-items: center;
 }
 
-.layout__avatar {
-  color: var(--pa-color-primary-dark);
-  font-size: var(--pa-font-size-caption);
-  font-weight: 600;
-  background-color: var(--pa-color-primary-100);
+.layout__status-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--ma-color-success);
+  border-radius: 999px;
 }
 
-.layout__user {
-  color: var(--pa-color-text-regular);
-  font-size: 13px;
+.layout__status-dot.is-offline {
+  background: var(--ma-color-danger);
 }
 
-.layout__main {
-  padding: var(--pa-content-padding);
-  overflow-y: auto;
+.layout__model {
+  padding: 2px 10px;
+  font-size: 12px;
+  color: var(--ma-color-accent);
+  background: var(--ma-color-accent-soft);
+  border-radius: 999px;
+}
+
+/* 主区内容最大 1080，超出居中；页面自己决定是否再收窄（对话页 720） */
+.layout__content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout__content > * {
+  width: 100%;
+  max-width: var(--ma-content-width);
+  margin: 0 auto;
+}
+
+@media (width < 960px) {
+  .layout__aside {
+    width: 220px;
+  }
 }
 </style>

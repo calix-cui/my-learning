@@ -23,14 +23,21 @@
 
 设置其余分节（账号资料 / 登录设备 / 外观 / 数据管理）共用 04 与 05 的版式：左侧二级导航 + 右侧单列卡片，不重复出稿。
 
-## 与现有实现的差异（前端按此改造）
+## 实现状态（T-FE-01，2026-11-09 完成）
 
-1. **配色**：Element Plus 主色从蓝改为 `--pine #1F4D46`；页面底色由 `#F5F7FA` 改为 `--canvas #FAF8F4`。
-2. **侧边栏**：264px、`surface-sunken` 底、选中项用 `pine-soft` 底 + 3px 左竖条（不再整块反白）。
-3. **对话**：消息列 720px 居中；用户气泡 `pine` 实底右对齐；助手气泡白底 1px 描边、无尾巴；时间戳 12px `ink-muted` 置于气泡外。
-4. **输入区**：白底描边盒子 + 独立发送按钮（不再整条悬浮工具栏），字数计数在左下。
-5. **新增设置页**：`/settings` 下六个分节，见 `docs/setting design.md`。
-6. **字体**：登录/注册标题使用衬线（`Songti SC`），其余全部无衬线；正文 15px/1.75。
+设计稿已按 1:1 落进代码，逐条对照：
+
+| 设计点 | 实现位置 |
+|---|---|
+| 配色改为 `--ma-*` 语义 token，主色深松绿 | `frontend/src/theme/` + `frontend/src/styles/index.css` |
+| 侧栏 264px、`sunken` 底、选中项 `accent-soft` + 3px 左竖条 | `frontend/src/App.vue`、`components/chat/ThreadList.vue` |
+| 对话阅读列 720px 居中、用户气泡实底右对齐、助手气泡白底描边、时间在气泡外 | `views/ChatView.vue`、`components/chat/ChatMessage.vue` |
+| 输入区白底描边盒 + 独立发送按钮 + 左下计数 | `components/chat/ChatComposer.vue` |
+| 设置页 200px 二级导航 + 560px 表单 | `views/SettingsView.vue` |
+| 登录/注册 400px 卡片、衬线标题、距顶 12vh | `styles/index.css` 的 `.auth*`、`views/LoginView.vue`、`views/RegisterView.vue` |
+| 品牌资产（logo / favicon / manifest） | `frontend/public/*`、`frontend/index.html`（源图在仓库根 `images/`） |
+
+实体截图见下方「实现截图」，与 `design-*.png` 同尺寸（1440×900 @2x），可直接叠对比。
 
 ## 怎么预览
 
@@ -49,11 +56,11 @@ open docs/design/mockups/03-chat.html
   "file://$PWD/docs/design/mockups/03-chat.html"
 ```
 
-## 待确认
+## 已定口径
 
-- 设置页是否保留「外观」（明暗主题会牵动整套 token 的暗色映射）。
-- 「数据管理」里的导出格式（JSON / Markdown 二选一还是都给）。
-- 是否要「关于」分节（版本与健康状态）。
+- 设置页保留「外观」（明暗主题牵动整套 token 的暗色映射，已实现）。
+- 「数据管理」的导出：**JSON 与 Markdown 都给**（T-FE-02 实现时落）。
+- **不做**「关于」分节（2026-11-09 裁决）。
 
 ## 主题系统（2026-11-09 落地）
 
@@ -92,6 +99,20 @@ export const themes = [pineTheme, sandTheme, indigoTheme, graphiteTheme, sakuraT
 |---|---|
 | ![浅色](../images/theme-settings-light.png) | ![深色](../images/theme-settings-dark.png) |
 
-| 浅色 · 暖砂 | 深色 · 靛蓝（对话页） |
-|---|---|
-| ![暖砂](../images/theme-settings-sand.png) | ![对话](../images/theme-chat-dark.png) |
+## 实现截图（1440×900 @2x，2026-11-09）
+
+| # | 页面 | 截图 |
+|---|---|---|
+| 01 | 登录 | [ui-01-login.png](../images/ui-01-login.png) |
+| 02 | 注册 | [ui-02-register.png](../images/ui-02-register.png) |
+| 03 | 对话（真实模型回答） | [ui-03-chat.png](../images/ui-03-chat.png) |
+| 04 | 设置 · 外观（浅色） | [ui-04-settings.png](../images/ui-04-settings.png) |
+| 05 | 设置 · 外观（深色） | [ui-05-settings-dark.png](../images/ui-05-settings-dark.png) |
+
+重出命令（需要后端 8000 与 dev 5173 在跑）：
+
+```bash
+cd frontend && node .shots-light.mjs /tmp/ui-shots   # 临时脚本，出浅色四张
+```
+
+> `theme-*.png` 是主题系统落地时的专项截图（含暖砂与深色对话页），保留作主题回归基线。

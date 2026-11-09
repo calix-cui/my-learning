@@ -41,7 +41,7 @@ async function handleSubmit() {
   <div class="auth">
     <div class="auth__card">
       <div class="auth__brand">
-        <span class="auth__mark">AI</span>
+        <img class="auth__logo" src="/logo.png" alt="" width="28" height="28" />
         <span class="auth__name">My Agent</span>
       </div>
 
@@ -89,82 +89,3 @@ async function handleSubmit() {
     </div>
   </div>
 </template>
-
-<style scoped>
-.auth {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 32px 16px;
-  background: linear-gradient(160deg, #eef2ff 0%, #f8fafc 55%, #f1f5f9 100%);
-}
-
-.auth__card {
-  width: 100%;
-  max-width: 400px;
-  padding: 32px;
-  background-color: #ffffff;
-  border: 1px solid var(--pa-color-border);
-  border-radius: var(--pa-radius-lg);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-}
-
-.auth__brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 24px;
-}
-
-.auth__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
-  background: linear-gradient(135deg, #60a5fa, #2563eb);
-  border-radius: var(--pa-radius);
-}
-
-.auth__name {
-  color: var(--pa-color-text-primary);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.auth__title {
-  margin: 0 0 6px;
-  color: var(--pa-color-text-primary);
-  font-size: 22px;
-  line-height: 30px;
-}
-
-.auth__subtitle {
-  margin: 0 0 24px;
-  color: var(--pa-color-text-muted);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.auth__submit {
-  width: 100%;
-  margin-top: 4px;
-}
-
-.auth__switch {
-  margin: 20px 0 0;
-  color: var(--pa-color-text-muted);
-  font-size: 13px;
-  text-align: center;
-}
-
-.auth__switch a {
-  color: var(--pa-color-primary);
-  font-weight: 600;
-  text-decoration: none;
-}
-</style>
