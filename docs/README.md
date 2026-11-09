@@ -26,6 +26,7 @@
 
 - 要改接口 → [`api.md`](api.md)（唯一契约：对话 7 个操作 + 3 个探针）
 - 要改对话逻辑 / 接模型 → [`chat.md`](chat.md)、[ADR-0006](adr/0006-llm-client-and-chat-storage.md)
+- 要加登录 / 鉴权 / 数据隔离 → [`auth.md`](auth.md)、[ADR-0008](adr/0008-auth-and-session.md)
 - 要改界面 → [`../frontend/README.md`](../frontend/README.md) 与 `frontend/src/views/ChatView.vue`
 - 要改部署 → [`deploy.md`](deploy.md)
 - 想知道「当初为什么这么选」→ [`adr/`](adr/README.md)
@@ -41,6 +42,7 @@
 | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | 所有人 | 现在完成到哪、下一步做什么、有哪些已知问题 | 每次开工前 |
 | [`api.md`](api.md) | 前后端 | 接口契约：对话 7 个操作 + 3 个运维路径（参数/响应/错误文案） | 调接口、改接口 |
 | [`chat.md`](chat.md) | 前后端 | **对话功能设计**：表结构、接口、模型抽象、任务拆分与验收 | 要改对话、接模型时 |
+| [`auth.md`](auth.md) | 前后端 | **账号体系设计**：个人助手绑哪些数据、会话鉴权选型、隔离规则、任务拆分 | 要加登录、查数据归属时 |
 | [`deploy.md`](deploy.md) | 运维 / 部署 | 容器化部署、健康检查、备份、排障 | 要上服务器 |
 | [`adr/`](adr/README.md) | 所有人 | 架构决策记录：为什么 Electron / Alembic / Docker / 轻量前端门禁 / 模型抽象 | 想质疑或推翻某个选择 |
 | [`agents/`](agents/README.md) | AI 协作者 | 子智能体角色卡与协作协议 | 派活给 AI 时 |
