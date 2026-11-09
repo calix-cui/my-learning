@@ -15,7 +15,8 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,vue,css}\" \"scripts/*.mjs\" \"*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,vue,css}\" \"scripts/*.mjs\" \"*.ts\"",
-    "acceptance:chat": "node scripts/chat-acceptance.mjs"
+    "acceptance:chat": "node scripts/chat-acceptance.mjs",
+    "acceptance:auth": "node scripts/auth-acceptance.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

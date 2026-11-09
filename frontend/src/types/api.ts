@@ -58,3 +58,27 @@ export interface ChatExchange {
   user_message: ChatMessage
   assistant_message: ChatMessage
 }
+
+/** 当前登录用户 */
+export interface AuthUser {
+  id: number
+  email: string
+  display_name: string | null
+  /** user / admin */
+  role: string
+  is_active: boolean
+  create_time: string
+  last_login_time: string | null
+}
+
+/** 一台登录设备 */
+export interface LoginSession {
+  id: number
+  user_agent: string | null
+  ip: string | null
+  create_time: string
+  last_seen_time: string
+  expires_time: string
+  /** 是否就是当前这次请求所用的会话 */
+  is_current: boolean
+}

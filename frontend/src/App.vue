@@ -1,9 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { ChatDotRound } from '@element-plus/icons-vue'
 
+import { logout, session } from '@/stores/session'
+
 const route = useRoute()
+const router = useRouter()
+
+/** 登录/注册页不套应用外壳（没有侧边栏和顶栏） */
+const isAuthPage = computed(() => route.meta.public === true)
+
+/** 头像里显示邮箱或显示名的首字 */
+const avatarText = computed(() => {
+  const name = session.user?.display_name || session.user?.email || '?'
+  return name.slice(0, 1).toUpperCase()
+})
+
+const userLabel = computed(() => session.user?.display_name || session.user?.email || '未登录')
+
+async function handleLogout() {
+  await logout()
+  ElMessage.success('已退出登录')
+  await router.replace({ name: 'login' })
+}
 
 /** 当前高亮菜单项，与路由路径保持一致 */
 const activeMenu = computed(() => route.path)
@@ -40,7 +61,8 @@ const sidebarStatusText = computed(() => {
 </script>
 
 <template>
-  <el-container class="layout">
+  <router-view v-if="isAuthPage" />
+  <el-container v-else class="layout">
     <el-aside width="200px" class="layout__aside">
       <div class="layout__brand">
         <span class="layout__brand-mark">AI</span>
@@ -73,7 +95,7 @@ const sidebarStatusText = computed(() => {
           <h1 class="layout__title">{{ pageTitle }}</h1>
           <span class="layout__divider" />
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ path: '/products' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item :to="{ path: '/chat' }">首页</el-breadcrumb-item>
             <el-breadcrumb-item>{{ pageTitle }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
@@ -87,8 +109,18 @@ const sidebarStatusText = computed(() => {
             {{ backendStatusText }}
           </span>
           <span class="layout__divider" />
-          <el-avatar :size="28" class="layout__avatar">张</el-avatar>
-          <span class="layout__user">运营小张</span>
+          <el-dropdown trigger="click" @command="handleLogout">
+            <span class="layout__user-trigger">
+              <el-avatar :size="28" class="layout__avatar">{{ avatarText }}</el-avatar>
+              <span class="layout__user">{{ userLabel }}</span>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>{{ session.user?.email }}</el-dropdown-item>
+                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </el-header>
 
@@ -229,6 +261,13 @@ const sidebarStatusText = computed(() => {
 }
 
 .layout__topbar-left,
+.layout__user-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pa-space-2);
+  cursor: pointer;
+}
+
 .layout__topbar-right {
   display: flex;
   align-items: center;
