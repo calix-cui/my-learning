@@ -3,10 +3,11 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
-import { login } from '@/stores/session'
+import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
 const route = useRoute()
+const session = useSessionStore()
 
 const email = ref('')
 const password = ref('')
@@ -25,7 +26,7 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
-    await login(email.value.trim(), password.value)
+    await session.login(email.value.trim(), password.value)
     ElMessage.success('登录成功')
     await router.replace(redirect.value)
   } catch {

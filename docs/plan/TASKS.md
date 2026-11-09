@@ -12,6 +12,7 @@
 | T-FE-01 | 按新设计重构全部页面 | Vue 前端 | TODO | T-UI-01 |
 | T-FE-02 | 新增【设置】模块 | Vue 前端（+ 后端按需） | IN_PROGRESS（外观已完成） | T-UI-01；口径见 [`../setting design.md`](../setting%20design.md) |
 | T-FE-03 | 主题系统（4 套主题 + 明暗/跟随系统） | Vue 前端 | DONE | — |
+| T-FE-04 | 状态管理迁到 Pinia（setup store） | Vue 前端 | DONE | 用户 m06333 |
 | T-DOC-01 | 设计工具链调研（design-taste-frontend / impeccable） | Lead | IN_PROGRESS | — |
 
 阶段 5「Agent 基础执行循环」仍按 11 阶段计划排在业务队列里，被上面三条 UI/前端任务插队，尚未开始。
@@ -57,3 +58,17 @@
 - **兼容层**：`styles/index.css` 的旧 `--pa-*` 全部映射到 `--ma-*`，老页面不改代码即跟随主题。
 - **验证**：`pnpm type-check` / `lint` / `test`（39 passed，主题相关 8 例）/ `build` 全绿；4 套主题 × 明暗 × 跟随系统的实测截图见 [`docs/design/README.md`](../design/README.md#主题系统2026-11-09-落地)。
 - **已知未做**：主题只存 localStorage，**未随账号同步**（换设备要重选）；等「模型接入」一起做设置读写接口时再补 `user_settings`。
+
+---
+
+## T-FE-04 · 状态管理迁到 Pinia（2026-11-09 已完成）
+
+- **用户原话（m06333）**：「把前端改成用 pinia 进行状态管理，使用 vue-best-practices skill 和 vue-pinia-best-practices skill」。
+- **迁了什么**：`stores/session.ts`、`stores/theme.ts` 从「模块级 `reactive` + 手写 `readonly`」改成 `defineStore('<id>', () => { … })` setup store：
+  - state 一律 `ref`，派生一律 `computed`，动作就是普通函数；
+  - **所有 state 都在 `return` 里列出**（vue-pinia-best-practices：「setup store 要把 state 全部 return，否则 devtools / SSR 看不到」）；
+  - `stores/theme.ts` 不再把静态的 `themes` 注册表塞进 store——它是配置不是状态，组件直接 `import { themes }`，顺带避开 `storeToRefs` 只处理 ref 的坑（详见下）。
+- **接线**：`main.ts` 先 `app.use(createPinia())` 再 `useThemeStore().initTheme()`，最后 `app.use(router)`；路由守卫内部才 `useSessionStore()`，**不在模块顶层取 store**（否则 `getActivePinia was called with no active Pinia`）。
+- **组件侧**：`App.vue` 用 `session.displayName` / `session.avatarText`；`AppearancePanel.vue` 用 `storeToRefs(themeStore)` 取 `mode / resolvedMode / currentTheme`，action 直接 `themeStore.setMode()`（`storeToRefs` 不会把函数变成 ref）。
+- **踩到的真实坑**：第一版把 `themes` 放进 store 再 `storeToRefs` 解构，页面主题格子**直接空白**——`storeToRefs` 只转换 ref/computed，普通值不会出现在结果里。改成直接从 `@/theme/themes` 引入后恢复。
+- **验证**：`pnpm type-check` / `lint` / `format:check` 全过；`pnpm test` **39 passed**（主题 4 例 + 登录 4 例已改成 `setActivePinia(createPinia())` 写法）；`pnpm build` 通过（`index` 83.85 kB gzip 32.86）；`pnpm acceptance:auth` 13/13、`pnpm acceptance:chat` 10/10；4 套主题切换实测正常。

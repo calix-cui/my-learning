@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 
 import ModeSwitch from '@/components/theme/ModeSwitch.vue'
 import ThemeCard from '@/components/theme/ThemeCard.vue'
-import { useTheme } from '@/stores/theme'
+import { useThemeStore } from '@/stores/theme'
+import { themes } from '@/theme/themes'
 import type { ThemeModeSetting } from '@/theme/types'
 
-const { themes, state, resolvedMode, currentTheme, setTheme, setMode } = useTheme()
+const themeStore = useThemeStore()
+// 解构必须走 storeToRefs，否则拿到的是一次性快照，切主题不会重渲染
+const { mode, resolvedMode, currentTheme } = storeToRefs(themeStore)
 
-// defineModel 需要可写 ref：这里用 computed 读写 store，避免把 store 逻辑塞进模板
-const mode = computed<ThemeModeSetting>({
-  get: () => state.mode,
-  set: (value) => setMode(value),
+// defineModel 需要可写 ref：这里用 computed 转发到 store 的 action
+const modeModel = computed<ThemeModeSetting>({
+  get: () => mode.value,
+  set: (value) => themeStore.setMode(value),
 })
 </script>
 
@@ -22,13 +26,13 @@ const mode = computed<ThemeModeSetting>({
       <p class="appearance__desc">
         主题只改配色，不改布局。当前：{{ currentTheme.name }} ·
         {{ resolvedMode === 'dark' ? '深色' : '浅色'
-        }}{{ state.mode === 'system' ? '（跟随系统）' : '' }}。
+        }}{{ mode === 'system' ? '（跟随系统）' : '' }}。
       </p>
     </header>
 
     <div class="appearance__block">
       <h3 class="appearance__label">明暗模式</h3>
-      <ModeSwitch v-model="mode" />
+      <ModeSwitch v-model="modeModel" />
       <p class="appearance__hint">选择「跟随系统」时，会随操作系统的深浅色设置自动切换。</p>
     </div>
 
@@ -39,9 +43,9 @@ const mode = computed<ThemeModeSetting>({
           v-for="theme in themes"
           :key="theme.id"
           :theme="theme"
-          :active="theme.id === state.themeId"
+          :active="theme.id === themeStore.themeId"
           :mode="resolvedMode"
-          @select="setTheme"
+          @select="themeStore.setTheme"
         />
       </div>
       <p class="appearance__hint">

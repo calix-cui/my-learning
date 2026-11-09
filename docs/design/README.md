@@ -65,7 +65,7 @@ open docs/design/mockups/03-chat.html
 | `frontend/src/theme/themes/*.ts` | 每套主题一个文件：松林（默认）/ 暖砂 / 靛蓝 / 石墨 |
 | `frontend/src/theme/themes/index.ts` | 注册表：数组顺序即设置页展示顺序，第一个是默认 |
 | `frontend/src/theme/apply.ts` | `buildThemeVars()` 编译 CSS 变量；`buildElementPlusVars()` 用 `color-mix` 把 accent 派生成 Element Plus 的 6 档主色，**不需要为每个主题手写色阶** |
-| `frontend/src/stores/theme.ts` | 单例状态：`themeId` + `mode(light/dark/system)`，写 `localStorage['my-agent.theme']`，监听 `prefers-color-scheme`，挂载前写进 DOM 防闪白 |
+| `frontend/src/stores/theme.ts` | Pinia setup store：`themeId` + `mode(light/dark/system)` + `systemDark`，写 `localStorage['my-agent.theme']`，监听 `prefers-color-scheme`；`main.ts` 里 `app.use(createPinia())` 之后、挂载之前调 `initTheme()` 防闪白 |
 | `frontend/src/styles/index.css` | 兼容层：旧的 `--pa-*` 全部指向 `--ma-*`，老页面不用改就跟着换肤 |
 
 **新增一套主题（只改两处）**：

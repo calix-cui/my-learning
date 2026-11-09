@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import { isLoggedIn, loadCurrentUser, session } from '@/stores/session'
+import { useSessionStore } from '@/stores/session'
 
 // 对话页带着 markdown-it + DOMPurify（约 60KB gzip），按需加载
 const ChatView = () => import('@/views/ChatView.vue')
@@ -48,18 +48,21 @@ const router = createRouter({
  * 否则刷新页面会把已登录用户踢回登录页。
  */
 router.beforeEach(async (to) => {
+  // 守卫在导航时才执行，此时 pinia 一定装好了；不要在模块顶层取 store
+  const session = useSessionStore()
+
   if (!session.loaded) {
-    await loadCurrentUser()
+    await session.loadCurrentUser()
   }
 
   const isPublic = to.meta.public === true
 
-  if (!isLoggedIn() && !isPublic) {
+  if (!session.isLoggedIn && !isPublic) {
     return { name: 'login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
   }
 
   // 已登录还去登录/注册页，直接送进对话
-  if (isLoggedIn() && isPublic) {
+  if (session.isLoggedIn && isPublic) {
     return { name: 'chat' }
   }
 

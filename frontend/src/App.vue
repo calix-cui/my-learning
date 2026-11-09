@@ -4,24 +4,20 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound, Setting } from '@element-plus/icons-vue'
 
-import { logout, session } from '@/stores/session'
+import { useSessionStore } from '@/stores/session'
 
 const route = useRoute()
 const router = useRouter()
+const session = useSessionStore()
 
 /** 登录/注册页不套应用外壳（没有侧边栏和顶栏） */
 const isAuthPage = computed(() => route.meta.public === true)
 
 /** 头像里显示邮箱或显示名的首字 */
-const avatarText = computed(() => {
-  const name = session.user?.display_name || session.user?.email || '?'
-  return name.slice(0, 1).toUpperCase()
-})
-
-const userLabel = computed(() => session.user?.display_name || session.user?.email || '未登录')
+const userLabel = computed(() => session.displayName)
 
 async function handleLogout() {
-  await logout()
+  await session.logout()
   ElMessage.success('已退出登录')
   await router.replace({ name: 'login' })
 }
@@ -125,7 +121,7 @@ const sidebarStatusText = computed(() => {
           <span class="layout__divider" />
           <el-dropdown trigger="click" @command="handleUserCommand">
             <span class="layout__user-trigger">
-              <el-avatar :size="28" class="layout__avatar">{{ avatarText }}</el-avatar>
+              <el-avatar :size="28" class="layout__avatar">{{ session.avatarText }}</el-avatar>
               <span class="layout__user">{{ userLabel }}</span>
             </span>
             <template #dropdown>

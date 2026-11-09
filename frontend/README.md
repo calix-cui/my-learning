@@ -12,8 +12,10 @@ My Agent 的聊天界面，基于 Vue 3 + TypeScript + Vite + Element Plus 实�
 | 构建 | Vite 6 |
 | UI | Element Plus 2.x + @element-plus/icons-vue（中文语言包 zh-cn） |
 | 请求 | axios（统一响应拦截器）+ 原生 `fetch`（SSE 流式） |
-| 路由 | vue-router 4（HTML5 history 模式，对话页路由级懒加载） |
+| 路由 | vue-router 4（HTML5 history 模式，每个页面路由级懒加载） |
+| 状态 | Pinia 4（setup store 写法：`stores/session.ts`、`stores/theme.ts`） |
 | Markdown | markdown-it 15 + DOMPurify 3（只用于助手消息渲染） |
+| 主题 | 自研 `src/theme/`（18 个语义色 × light/dark，4 套主题，运行时可切） |
 
 ## 启动方式
 
@@ -46,7 +48,7 @@ pnpm lint          # ESLint 全量检查（CI 会跑，有 error 即失败）
 pnpm lint:fix      # 自动修可修的问题
 pnpm format        # Prettier 格式化（本地用，不进 CI 阻断）
 pnpm format:check  # 只检查格式，不写入
-pnpm test          # Vitest 单测（src/api + src/stores + src/utils，31 个用例，无 DOM、不连后端）
+pnpm test          # Vitest 单测（src/api + src/stores + src/theme + src/utils，39 个用例，无 DOM、不连后端）
 pnpm test:watch    # 监听模式，开发时用
 ```
 
@@ -118,7 +120,11 @@ frontend/
 │   └── auth-acceptance.mjs    # 账号端到端验收（13 项：注册→刷新→退出→再登录）
 └── src/
     ├── main.ts                # 挂载 Element Plus（zh-cn）+ router
-    ├── App.vue                # 侧栏 + 顶栏 + <router-view>
+    ├── App.vue                # 侧栏 + 顶栏 + <router-view>（登录页不套外壳）
+    ├── components/
+    │   ├── theme/             # ThemeCard / ModeSwitch
+    │   └── settings/          # AppearancePanel
+
     ├── env.d.ts               # .vue 模块类型声明
     ├── router/index.ts        # 路由 + 登录守卫（未登录只能进 /login、/register）
     ├── api/
@@ -126,7 +132,14 @@ frontend/
     │   ├── chat.ts            # 对话 6 个接口封装 + SSE 流式解析
     │   ├── auth.ts            # 账号 7 个接口封装
     │   └── unauthorized.ts    # 401 回调注册（避免 client 与 store 互相 import）
-    ├── stores/session.ts      # 全局登录态：user + loaded，登录/登出/清除
+    ├── stores/
+    │   ├── session.ts         # Pinia：登录态（user / loaded / 登录登出清除）
+    │   └── theme.ts           # Pinia：主题（themeId / mode / 跟随系统 / 落盘）
+    ├── theme/
+    │   ├── types.ts           # 18 个语义色 schema + 静态 token 类型
+    │   ├── tokens.ts          # 字体/圆角/间距/宽度
+    │   ├── apply.ts           # 编译 CSS 变量 + 派生 Element Plus 色阶
+    │   └── themes/            # pine / sand / indigo / graphite（各含 light+dark）
     ├── types/api.ts           # 与后端一一对应的 TS 类型（对话 + 账号）
     ├── utils/
     │   ├── markdown.ts        # markdown-it + DOMPurify 渲染
@@ -134,17 +147,23 @@ frontend/
     ├── views/
     │   ├── ChatView.vue       # 对话页
     │   ├── LoginView.vue      # 登录页
-    │   └── RegisterView.vue   # 注册页
+    │   ├── RegisterView.vue   # 注册页
+    │   └── SettingsView.vue   # 设置页（外观已实现，其余分节待建）
     └── styles/index.css       # 设计 token CSS 变量 + 全局基础样式
 ```
 
 ## 设计说明
 
-配色与布局沿用归档的 `archive/product-admin/docs/design/design.md`：中性蓝主色 `#2563EB`、页面底色 `#F5F7FA`、卡片白底 + `#E5E7EB` 描边、8px 圆角，全部颜色以 CSS 变量定义在 `src/styles/index.css` 的 `:root` 中。设计基准宽度 1440px，不承诺 ≤1280px 的移动端布局。
+设计规范见根目录 [`DESIGN.md`](../DESIGN.md)（颜色 / 字体 / 间距 / 组件 / 断点），页面稿见 [`docs/design/`](../docs/design/README.md)。
+
+- 颜色只有一个出口：`:root` 上的 `--ma-*` 语义变量，由 `src/theme/apply.ts` 在运行时写入；组件**不写死色值**。
+- 换主题 = 重写这批变量，不重渲染组件；Element Plus 的主色阶由 `color-mix()` 从 `accent` 派生，不必为每套主题手写。
+- 设计基准宽度 1440px，桌面优先；≤960px 只保证不崩，不做重排版。
 
 ## 已知限制
 
-- 未实现登录 / 权限，默认单角色直接进入。
+- 主题选择只存 `localStorage`，**不随账号同步**（换设备要重选；等设置读写接口时补 `user_settings`）。
+- 设置页只实现了「外观」，「模型接入 / 账号资料 / 登录设备 / 数据管理」四个分节还是占位。
 - 未实现多 Agent 切换（后端已预留 `agent_key` 字段，界面暂无入口）。
 - 会话列表一次性拉 50 条，没有分页器（数量级小，够用）。
 - 没有「停止生成」按钮：流式过程中只能等它结束或切走会话。

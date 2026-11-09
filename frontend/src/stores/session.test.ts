@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 const { fetchMe, loginApi, registerApi, logoutApi } = vi.hoisted(() => ({
   fetchMe: vi.fn(),
@@ -14,15 +15,7 @@ vi.mock('@/api/auth', () => ({
   logout: logoutApi,
 }))
 
-import {
-  clearSession,
-  isLoggedIn,
-  loadCurrentUser,
-  login,
-  logout,
-  register,
-  session,
-} from './session'
+import { useSessionStore } from './session'
 
 const alice = {
   id: 1,
@@ -36,8 +29,7 @@ const alice = {
 
 describe('stores/session', () => {
   beforeEach(() => {
-    clearSession()
-    session.loaded = false
+    setActivePinia(createPinia())
     fetchMe.mockReset()
     loginApi.mockReset()
     registerApi.mockReset()
@@ -46,43 +38,49 @@ describe('stores/session', () => {
 
   it('loadCurrentUser 成功时写入用户并标记 loaded', async () => {
     fetchMe.mockResolvedValue(alice)
+    const store = useSessionStore()
 
-    await expect(loadCurrentUser()).resolves.toEqual(alice)
+    await expect(store.loadCurrentUser()).resolves.toEqual(alice)
 
-    expect(session.user).toEqual(alice)
-    expect(session.loaded).toBe(true)
-    expect(isLoggedIn()).toBe(true)
+    expect(store.user).toEqual(alice)
+    expect(store.loaded).toBe(true)
+    expect(store.isLoggedIn).toBe(true)
+    expect(store.displayName).toBe('Alice')
   })
 
   it('loadCurrentUser 遇到 401 时静默视为未登录', async () => {
     fetchMe.mockRejectedValue(new Error('请先登录'))
+    const store = useSessionStore()
 
-    await expect(loadCurrentUser()).resolves.toBeNull()
+    await expect(store.loadCurrentUser()).resolves.toBeNull()
 
-    expect(session.user).toBeNull()
-    expect(session.loaded).toBe(true)
-    expect(isLoggedIn()).toBe(false)
+    expect(store.user).toBeNull()
+    expect(store.loaded).toBe(true)
+    expect(store.isLoggedIn).toBe(false)
   })
 
   it('login/register 都会把用户写进 store', async () => {
-    loginApi.mockResolvedValue(alice)
-    await login('alice@example.com', 'password123')
-    expect(session.user).toEqual(alice)
+    const store = useSessionStore()
 
-    clearSession()
+    loginApi.mockResolvedValue(alice)
+    await store.login('alice@example.com', 'password123')
+    expect(store.user).toEqual(alice)
+
+    store.clear()
     const bob = { ...alice, id: 2, email: 'bob@example.com' }
     registerApi.mockResolvedValue(bob)
-    await register('bob@example.com', 'password123')
-    expect(session.user).toEqual(bob)
+    await store.register('bob@example.com', 'password123')
+    expect(store.user).toEqual(bob)
     expect(registerApi).toHaveBeenCalledWith('bob@example.com', 'password123', undefined)
   })
 
   it('logout 即使后端失败也要清掉本地状态', async () => {
-    session.user = alice
+    const store = useSessionStore()
+    store.user = alice
     logoutApi.mockRejectedValue(new Error('网络异常'))
 
-    await expect(logout()).rejects.toThrow('网络异常')
+    await expect(store.logout()).rejects.toThrow('网络异常')
 
-    expect(session.user).toBeNull()
+    expect(store.user).toBeNull()
   })
 })

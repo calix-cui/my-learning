@@ -1,7 +1,8 @@
-import { computed, reactive, readonly } from 'vue'
+import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
 
 import { applyThemeToDocument, COLOR_KEYS } from '@/theme/apply'
-import { findTheme, themes } from '@/theme/themes'
+import { defaultThemeId, findTheme } from '@/theme/themes'
 import type { ThemeColors, ThemeDefinition, ThemeMode, ThemeModeSetting } from '@/theme/types'
 
 const STORAGE_KEY = 'my-agent.theme'
@@ -10,21 +11,6 @@ interface PersistedTheme {
   themeId: string
   mode: ThemeModeSetting
 }
-
-interface ThemeState {
-  themeId: string
-  mode: ThemeModeSetting
-  /** 系统是否偏好暗色，只由 matchMedia 更新 */
-  systemDark: boolean
-  ready: boolean
-}
-
-const state = reactive<ThemeState>({
-  themeId: themes[0].id,
-  mode: 'system',
-  systemDark: false,
-  ready: false,
-})
 
 function safeStorage(): Storage | null {
   try {
@@ -49,69 +35,88 @@ function readPersisted(): PersistedTheme | null {
   }
 }
 
-function persist(): void {
-  const payload: PersistedTheme = { themeId: state.themeId, mode: state.mode }
-  safeStorage()?.setItem(STORAGE_KEY, JSON.stringify(payload))
-}
-
 function mediaQuery(): MediaQueryList | null {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return null
   return window.matchMedia('(prefers-color-scheme: dark)')
 }
 
-/** 当前生效的明暗模式（把 system 解析成具体值） */
-export const resolvedMode = computed<ThemeMode>(() =>
-  state.mode === 'system' ? (state.systemDark ? 'dark' : 'light') : state.mode,
-)
+export const useThemeStore = defineStore('theme', () => {
+  const themeId = ref(defaultThemeId)
+  const mode = ref<ThemeModeSetting>('system')
+  /** 系统是否偏好暗色，只由 matchMedia 更新 */
+  const systemDark = ref(false)
+  const ready = ref(false)
 
-export const currentTheme = computed<ThemeDefinition>(() => findTheme(state.themeId))
+  const currentTheme = computed<ThemeDefinition>(() => findTheme(themeId.value))
+  /** 当前生效的明暗模式（把 system 解析成具体值） */
+  const resolvedMode = computed<ThemeMode>(() =>
+    mode.value === 'system' ? (systemDark.value ? 'dark' : 'light') : mode.value,
+  )
+  const currentColors = computed<ThemeColors>(() =>
+    resolvedMode.value === 'dark' ? currentTheme.value.dark : currentTheme.value.light,
+  )
 
-export const currentColors = computed<ThemeColors>(() =>
-  resolvedMode.value === 'dark' ? currentTheme.value.dark : currentTheme.value.light,
-)
-
-function paint(): void {
-  applyThemeToDocument(currentTheme.value, resolvedMode.value)
-}
-
-function syncSystemDark(query: MediaQueryList | null): void {
-  if (!query) return
-  state.systemDark = query.matches
-}
-
-/** 应用启动时调用一次：读本地设置 → 跟随系统 → 首次绘制前写进 DOM */
-export function initTheme(): void {
-  if (state.ready) return
-
-  const persisted = readPersisted()
-  const query = mediaQuery()
-
-  if (persisted) {
-    state.themeId = findTheme(persisted.themeId).id
-    state.mode = persisted.mode
+  function persist(): void {
+    const payload: PersistedTheme = { themeId: themeId.value, mode: mode.value }
+    safeStorage()?.setItem(STORAGE_KEY, JSON.stringify(payload))
   }
 
-  syncSystemDark(query)
-  query?.addEventListener('change', (event) => {
-    state.systemDark = event.matches
-    if (state.mode === 'system') paint()
-  })
+  function paint(): void {
+    applyThemeToDocument(currentTheme.value, resolvedMode.value)
+  }
 
-  state.ready = true
-  paint()
-}
+  /** 应用启动时调用一次：读本地设置 → 跟随系统 → 首次绘制前写进 DOM */
+  function initTheme(): void {
+    if (ready.value) return
 
-export function setTheme(themeId: string): void {
-  state.themeId = findTheme(themeId).id
-  persist()
-  paint()
-}
+    const persisted = readPersisted()
+    const query = mediaQuery()
 
-export function setMode(mode: ThemeModeSetting): void {
-  state.mode = mode
-  persist()
-  paint()
-}
+    if (persisted) {
+      themeId.value = findTheme(persisted.themeId).id
+      mode.value = persisted.mode
+    }
+
+    if (query) {
+      systemDark.value = query.matches
+      query.addEventListener('change', (event) => {
+        systemDark.value = event.matches
+        if (mode.value === 'system') paint()
+      })
+    }
+
+    ready.value = true
+    paint()
+  }
+
+  function setTheme(nextThemeId: string): void {
+    themeId.value = findTheme(nextThemeId).id
+    persist()
+    paint()
+  }
+
+  function setMode(nextMode: ThemeModeSetting): void {
+    mode.value = nextMode
+    persist()
+    paint()
+  }
+
+  return {
+    // state
+    themeId,
+    mode,
+    systemDark,
+    ready,
+    // getters
+    currentTheme,
+    resolvedMode,
+    currentColors,
+    // actions
+    initTheme,
+    setTheme,
+    setMode,
+  }
+})
 
 /**
  * 校验一套颜色是否给全：新增主题时若漏字段，这里会直接报出来，
@@ -119,19 +124,4 @@ export function setMode(mode: ThemeModeSetting): void {
  */
 export function missingColorKeys(colors: ThemeColors): string[] {
   return COLOR_KEYS.filter((key) => !colors[key])
-}
-
-/** 只读快照，组件里用 useTheme() 取值 */
-export const themeState = readonly(state)
-
-export function useTheme() {
-  return {
-    themes,
-    state: themeState,
-    resolvedMode,
-    currentTheme,
-    currentColors,
-    setTheme,
-    setMode,
-  }
 }
