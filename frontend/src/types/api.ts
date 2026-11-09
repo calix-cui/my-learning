@@ -82,3 +82,35 @@ export interface LoginSession {
   /** 是否就是当前这次请求所用的会话 */
   is_current: boolean
 }
+
+/** 当前用户生效的模型配置（Key 只有末四位） */
+export interface ModelSettings {
+  provider: 'fake' | 'openai'
+  base_url: string | null
+  model: string | null
+  timeout_seconds: number
+  has_api_key: boolean
+  api_key_hint: string | null
+  /** 服务端是否配置了 APP_SECRET_KEY，决定能不能保存自定义 Key */
+  can_store_api_key: boolean
+  /** true = 还没保存过，当前用的是环境变量那套 */
+  inherited_from_env: boolean
+  update_time: string | null
+}
+
+/** 模型配置保存请求：api_key 三态——不传=不变，空串=清除 */
+export interface ModelSettingsPayload {
+  provider?: 'fake' | 'openai'
+  base_url?: string | null
+  model?: string | null
+  timeout_seconds?: number
+  api_key?: string
+}
+
+/** 连通性自测结果 */
+export interface ModelTestResult {
+  ok: boolean
+  latency_ms: number
+  model: string | null
+  message: string
+}

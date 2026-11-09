@@ -35,7 +35,14 @@ const itemMeta = (item: ChatConversationListItem) =>
   <div class="threads">
     <div class="threads__head">
       <span class="threads__label">会话</span>
-      <el-button class="chat__new" type="primary" plain size="small" :icon="Plus" @click="handleCreate">
+      <el-button
+        class="chat__new"
+        type="primary"
+        plain
+        size="small"
+        :icon="Plus"
+        @click="handleCreate"
+      >
         新建
       </el-button>
     </div>

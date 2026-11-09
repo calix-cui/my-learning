@@ -48,7 +48,7 @@ pnpm lint          # ESLint 全量检查（CI 会跑，有 error 即失败）
 pnpm lint:fix      # 自动修可修的问题
 pnpm format        # Prettier 格式化（本地用，不进 CI 阻断）
 pnpm format:check  # 只检查格式，不写入
-pnpm test          # Vitest 单测：纯逻辑 39 例 + 组件 11 例，共 50 例，不连后端
+pnpm test          # Vitest 单测：纯逻辑 39 例 + 组件 15 例，共 54 例，不连后端
 pnpm test:coverage # 同上，额外出覆盖率报告（coverage/index.html，不设门槛）
 pnpm test:watch    # 监听模式，开发时用
 ```
@@ -68,6 +68,7 @@ pnpm test:watch    # 监听模式，开发时用
 
 单测边界：组件测**行为**（渲染出什么、点击后 emit / store 怎么变），不写快照、不断言 class 名与 DOM 结构；页面级完整流程（登录拦截、流式对话）交给 E2E 与人工验收。
 
+> 端到端脚本（都要前后端在跑）：`pnpm acceptance:chat`（对话流 10 项）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录，13 项）、`pnpm acceptance:settings`（模型接入→测试连接→改显示名→设备→导出→注销，13 项）。
 > 对话 E2E 跑前跑后都会清空会话。它默认打 5173 的 dev server；如果你刚改过前端代码（HMR 可能中途整页重载），改用 `pnpm build && pnpm preview` 后 `BASE=http://127.0.0.1:4173 pnpm acceptance:chat`，结果更稳定。
 
 ## 与后端联调
@@ -94,7 +95,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 | `/login` | 登录（公开） | `views/LoginView.vue`、`stores/session.ts` |
 | `/register` | 注册（公开，注册即登录） | `views/RegisterView.vue` |
 | `/chat` | 对话（左会话列表 + 右消息区，SSE 逐字渲染，助手消息按 Markdown 渲染） | `views/ChatView.vue`、`components/chat/*`、`stores/chat.ts`、`api/chat.ts`、`utils/markdown.ts` |
-| `/settings` | 设置（左侧二级导航 200px + 右侧 560px 表单；外观已实现，其余分节占位） | `views/SettingsView.vue`、`components/settings/AppearancePanel.vue`、`components/theme/*` |
+| `/settings` | 设置（左侧二级导航 200px + 右侧 560px 表单）：模型接入 / 账号资料 / 登录设备 / 外观 / 数据管理 | `views/SettingsView.vue`、`components/settings/*`、`stores/settings.ts`、`components/theme/*` |
 | `/` / 其他 | 重定向到 `/chat`；未登录时守卫改送 `/login?redirect=...` | `src/router/index.ts` |
 
 未登录只剩登录/注册两个页面可达：`router.beforeEach` 先向后端确认一次登录态（`GET /api/auth/me`），再决定放行或跳转。
@@ -129,7 +130,7 @@ frontend/
     ├── components/
     │   ├── chat/              # ThreadList（侧栏会话）/ ChatMessage（气泡+Markdown）/ ChatComposer（输入区）
     │   ├── theme/             # ThemeCard / ModeSwitch
-    │   └── settings/          # AppearancePanel
+    │   └── settings/          # AppearancePanel / ModelPanel / AccountPanel / DevicesPanel / DataPanel
 
     ├── env.d.ts               # .vue 模块类型声明
     ├── router/index.ts        # 路由 + 登录守卫（未登录只能进 /login、/register）
@@ -155,7 +156,7 @@ frontend/
     │   ├── ChatView.vue       # 对话页
     │   ├── LoginView.vue      # 登录页
     │   ├── RegisterView.vue   # 注册页
-    │   └── SettingsView.vue   # 设置页（外观已实现，其余分节待建）
+    │   └── SettingsView.vue   # 设置页（五节全部可用）
     └── styles/index.css       # 设计 token 兜底 + reset + Element Plus 令牌映射 + 认证页共用样式
 ```
 
@@ -172,7 +173,7 @@ frontend/
 ## 已知限制
 
 - 主题选择只存 `localStorage`，**不随账号同步**（换设备要重选；等设置读写接口时补 `user_settings`）。
-- 设置页只实现了「外观」，「模型接入 / 账号资料 / 登录设备 / 数据管理」四个分节还是占位（T-FE-02）。
+- 模型 Key 存在后端 `user_settings`（Fernet 加密），前端只拿到末四位；服务端没配 `APP_SECRET_KEY` 时只能改其他字段。
 - 未实现多 Agent 切换（后端已预留 `agent_key` 字段，界面暂无入口）。
 - 会话列表一次性拉 50 条，没有分页器（数量级小，够用）。
 - 没有「停止生成」按钮：流式过程中只能等它结束或切走会话。

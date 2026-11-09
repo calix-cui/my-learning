@@ -1,23 +1,28 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
+import AccountPanel from '@/components/settings/AccountPanel.vue'
 import AppearancePanel from '@/components/settings/AppearancePanel.vue'
+import DataPanel from '@/components/settings/DataPanel.vue'
+import DevicesPanel from '@/components/settings/DevicesPanel.vue'
+import ModelPanel from '@/components/settings/ModelPanel.vue'
 
-/** 设置页分节：本期只交付「外观」，其余分节占位，避免点进去是空白 */
+/** 设置页分节；五个都实现了，加新分节时往这里加一项并补组件即可 */
 const sections = [
-  { key: 'appearance', label: '外观', ready: true },
-  { key: 'model', label: '模型接入', ready: false },
-  { key: 'account', label: '账号资料', ready: false },
-  { key: 'devices', label: '登录设备', ready: false },
-  { key: 'data', label: '数据管理', ready: false },
+  { key: 'model', label: '模型接入', component: ModelPanel },
+  { key: 'account', label: '账号资料', component: AccountPanel },
+  { key: 'devices', label: '登录设备', component: DevicesPanel },
+  { key: 'appearance', label: '外观', component: AppearancePanel },
+  { key: 'data', label: '数据管理', component: DataPanel },
 ] as const
 
 type SectionKey = (typeof sections)[number]['key']
 
-const active = ref<SectionKey>('appearance')
+/** 默认落在「模型接入」——它是打开设置最常改的一项 */
+const active = ref<SectionKey>('model')
 
-const activeLabel = computed(
-  () => sections.find((section) => section.key === active.value)?.label ?? '设置',
+const activeComponent = computed(
+  () => sections.find((section) => section.key === active.value)?.component ?? ModelPanel,
 )
 </script>
 
@@ -34,7 +39,6 @@ const activeLabel = computed(
         @click="active = section.key"
       >
         {{ section.label }}
-        <span v-if="!section.ready" class="settings__soon">待建</span>
       </button>
     </nav>
 
@@ -45,14 +49,7 @@ const activeLabel = computed(
           <p class="settings__desc">这里的改动只影响你自己的账号，保存后立即生效。</p>
         </header>
 
-        <AppearancePanel v-if="active === 'appearance'" />
-
-        <section v-else class="settings__placeholder">
-          <h2 class="settings__placeholder-title">{{ activeLabel }}</h2>
-          <p class="settings__placeholder-desc">
-            这一节还没做。当前进度见 <code>docs/plan/TASKS.md</code> 的 T-FE-02。
-          </p>
-        </section>
+        <component :is="activeComponent" />
       </div>
     </div>
   </div>
@@ -75,19 +72,19 @@ const activeLabel = computed(
 
 .settings__item {
   display: flex;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
   padding: 8px 10px;
   margin-bottom: 2px;
+  font: inherit;
   font-size: 14px;
   color: var(--ma-color-muted);
   text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
   border-radius: var(--ma-radius-sm);
 }
 
@@ -97,24 +94,14 @@ const activeLabel = computed(
 }
 
 .settings__item.is-active {
-  color: var(--ma-color-accent);
   font-weight: 600;
+  color: var(--ma-color-accent);
   background: var(--ma-color-accent-soft);
 }
 
 .settings__item:focus-visible {
   outline: 2px solid var(--ma-color-accent);
   outline-offset: 1px;
-}
-
-.settings__soon {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--ma-color-faint);
-}
-
-.settings__item:not(.is-active):has(.settings__soon) {
-  color: var(--ma-color-faint);
 }
 
 .settings__panel {
@@ -147,25 +134,5 @@ const activeLabel = computed(
   margin-top: 4px;
   font-size: 13px;
   color: var(--ma-color-muted);
-}
-
-.settings__placeholder-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--ma-color-ink);
-}
-
-.settings__placeholder-desc {
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--ma-color-muted);
-}
-
-.settings__placeholder-desc code {
-  padding: 1px 5px;
-  font-family: var(--ma-font-mono);
-  font-size: 12px;
-  background: var(--ma-color-sunken);
-  border-radius: 4px;
 }
 </style>

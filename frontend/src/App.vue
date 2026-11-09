@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, Setting } from '@element-plus/icons-vue'
@@ -7,11 +7,13 @@ import { ArrowDown, Setting } from '@element-plus/icons-vue'
 import ThreadList from '@/components/chat/ThreadList.vue'
 import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
+import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
 const chat = useChatStore()
+const settings = useSettingsStore()
 
 /** 登录/注册页不套应用外壳（没有侧边栏和顶栏） */
 const isAuthPage = computed(() => route.meta.public === true)
@@ -31,6 +33,27 @@ onMounted(async () => {
   }
 })
 
+/**
+ * 顶栏那个模型标签用「账号里配置的模型」，拿不到就退回上一条回复的模型。
+ *
+ * 必须 watch 而不是只在 onMounted 里取：App 只在启动时挂载一次，
+ * 首屏是登录页时 onMounted 里还没登录，登录完成后要再取一次。
+ */
+watch(
+  () => session.isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn) {
+      void settings.load().catch(() => undefined)
+    }
+  },
+  { immediate: true },
+)
+
+const modelPill = computed(() => {
+  const configured = settings.modelLabel
+  return configured && configured !== '未配置' ? configured : chat.modelLabel
+})
+
 const statusText = computed(() => {
   if (backendOnline.value === null) return '检测中'
   return backendOnline.value ? '已连接' : '未连接'
@@ -39,6 +62,7 @@ const statusText = computed(() => {
 async function handleLogout() {
   await session.logout()
   chat.reset()
+  settings.reset()
   ElMessage.success('已退出登录')
   await router.replace({ name: 'login' })
 }
@@ -114,9 +138,7 @@ async function handleUserCommand(command: string) {
             <i class="layout__status-dot" :class="{ 'is-offline': backendOnline === false }" />
             {{ statusText }}
           </span>
-          <span v-if="isChatPage && chat.modelLabel" class="layout__model">{{
-            chat.modelLabel
-          }}</span>
+          <span v-if="isChatPage && modelPill" class="layout__model">{{ modelPill }}</span>
         </div>
       </header>
 

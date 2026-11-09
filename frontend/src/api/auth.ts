@@ -56,3 +56,20 @@ export async function changePassword(oldPassword: string, newPassword: string): 
     new_password: newPassword,
   })
 }
+
+/** 修改显示名；传空串表示清空（界面回落到邮箱） */
+export async function updateProfile(displayName: string): Promise<AuthUser> {
+  const { data } = await client.patch<ApiResponse<AuthUser>>('/auth/me', {
+    display_name: displayName,
+  })
+  return data.data
+}
+
+/** 注销账号：需要再输一次密码，成功后后端已清 Cookie */
+export async function deleteAccount(password: string): Promise<void> {
+  await client.request<ApiResponse<null>>({
+    url: '/auth/me',
+    method: 'delete',
+    data: { password },
+  })
+}
