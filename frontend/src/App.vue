@@ -6,6 +6,8 @@ import { ElMessage } from 'element-plus'
 import ThreadList from '@/components/chat/ThreadList.vue'
 import SettingsDialog from '@/components/settings/SettingsDialog.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
+import MyDropdownMenu, { type MenuItem } from '@/components/ui/MyDropdownMenu.vue'
+import MyMessageBox from '@/components/ui/MyMessageBox.vue'
 import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
 import { useSettingsStore } from '@/stores/settings'
@@ -66,6 +68,11 @@ async function handleLogout() {
   await router.replace({ name: 'login' })
 }
 
+const userMenuItems: MenuItem[] = [
+  { key: 'settings', label: '系统设置', icon: 'settings' },
+  { key: 'logout', label: '退出登录', icon: 'logout', divided: true },
+]
+
 async function handleUserCommand(command: string) {
   if (command === 'logout') {
     await handleLogout()
@@ -79,6 +86,8 @@ async function handleUserCommand(command: string) {
 </script>
 
 <template>
+  <MyMessageBox />
+
   <router-view v-if="isAuthPage" />
 
   <div v-else class="layout">
@@ -91,26 +100,15 @@ async function handleUserCommand(command: string) {
       <ThreadList class="layout__threads" />
 
       <div class="layout__aside-footer">
-        <el-dropdown trigger="click" placement="top-start" @command="handleUserCommand">
-          <button type="button" class="layout__user-trigger">
-            <span class="layout__avatar">{{ session.avatarText }}</span>
-            <span class="layout__user-name">{{ session.displayName }}</span>
-            <AppIcon name="more" :size="16" class="layout__user-more" />
-          </button>
-
-          <template #dropdown>
-            <el-dropdown-menu class="user-menu">
-              <el-dropdown-item command="settings">
-                <AppIcon name="settings" :size="16" />
-                系统设置
-              </el-dropdown-item>
-              <el-dropdown-item command="logout" divided>
-                <AppIcon name="logout" :size="16" />
-                退出登录
-              </el-dropdown-item>
-            </el-dropdown-menu>
+        <MyDropdownMenu :items="userMenuItems" align="start" @select="handleUserCommand">
+          <template #default="{ toggle }">
+            <button type="button" class="layout__user-trigger" @click="toggle">
+              <span class="layout__avatar">{{ session.avatarText }}</span>
+              <span class="layout__user-name">{{ session.displayName }}</span>
+              <AppIcon name="more" :size="16" class="layout__user-more" />
+            </button>
           </template>
-        </el-dropdown>
+        </MyDropdownMenu>
       </div>
     </aside>
 

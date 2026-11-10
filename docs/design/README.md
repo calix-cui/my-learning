@@ -153,7 +153,13 @@ cd frontend && node .shots-light.mjs /tmp/ui-shots   # 临时脚本，出浅色�
 | 顶栏冗余 | 删除 `layout__topbar`，模型标签与分享移到对话区右上角的工具栏（`ChatToolbar.vue`） |
 | 小模块之间的边界太多 | 侧栏 footer、设置导航去掉 1px 分隔线；按钮与输入盒用**阴影**表达「浮起」，不再画边框 |
 | 会话项操作太重 | 右侧改为 26px 圆形「…」（`IconButton.vue`），hover 才出现；菜单只留「重命名 / 删除」，选中态只靠背景色 |
-| 一个文件写完整个页面 | 抽出组件库：`ui/AppIcon.vue`（内联 SVG）、`ui/IconButton.vue`、`ui/SoftButton.vue`、`chat/ThreadItem.vue`、`chat/ChatToolbar.vue`、`chat/ChatEmpty.vue` |
+| 一个文件写完整个页面 | 抽出组件库：`ui/AppIcon.vue`（内联 SVG）、`ui/IconButton.vue`、`ui/SoftButton.vue`、`ui/MyDropdownMenu.vue`、`ui/MyMessageBox.vue`、`chat/ThreadItem.vue`、`chat/ChatToolbar.vue`、`chat/ChatEmpty.vue` |
+
+菜单与确认框不再用 Element Plus 的 `el-dropdown-menu` / `el-message-box`：
+
+- `MyDropdownMenu.vue`：面板 fixed 定位（不受 `overflow` 裁切）、点外部/Esc 关闭、`items` 描述项，`variant: 'danger'` 渲染红色；hover 用一层很淡的渐变而不是整块灰。
+- `MyMessageBox.vue` + `ui/messageBox.ts`：命令式 API `confirmDialog()` / `promptDialog()`，宿主在 `App.vue` 挂一次；标题 + 一行说明 + 右侧「取消 / 危险操作」两个胶囊按钮。
+- 选中态：`chat__item--active:hover` 保持选中色，不再随 hover 变化。
 
 界面上的文字只保留必要信息：删掉了「助手」标签、消息条数、字数计数、空态的长说明。
 
@@ -164,3 +170,4 @@ cd frontend && node .shots-light.mjs /tmp/ui-shots   # 临时脚本，出浅色�
 - 登录页：![登录页](../images/ui-08-login.png)
 - 设置悬浮窗：![设置悬浮窗](../images/ui-09-settings-dialog.png)
 - 会话项菜单：![会话项菜单](../images/ui-10-thread-menu.png)
+- 删除确认（自绘）：![删除确认](../images/ui-11-message-box.png)

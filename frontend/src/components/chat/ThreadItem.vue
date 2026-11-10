@@ -5,14 +5,18 @@
  * 交互约定：整行可点进入会话；hover 才出现「...」；「...」打开菜单（重命名 / 删除）。
  * 选中态只靠背景色，不加左侧竖条——竖条属于「多余的边界」。
  */
-import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus'
-
 import type { ChatConversationListItem } from '@/types/api'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import MyDropdownMenu, { type MenuItem } from '@/components/ui/MyDropdownMenu.vue'
 
 defineProps<{ item: ChatConversationListItem; active: boolean }>()
 const emit = defineEmits<{ open: []; rename: []; remove: [] }>()
+
+const menuItems: MenuItem[] = [
+  { key: 'rename', label: '重命名', icon: 'edit' },
+  { key: 'remove', label: '删除', icon: 'trash', variant: 'danger', divided: true },
+]
 
 function handleCommand(command: string) {
   if (command === 'rename') emit('rename')
@@ -32,23 +36,13 @@ function handleCommand(command: string) {
     </button>
 
     <span class="chat__item-actions">
-      <ElDropdown trigger="click" placement="bottom-end" @command="handleCommand">
-        <IconButton label="更多操作" :size="26">
-          <AppIcon name="more" :size="16" />
-        </IconButton>
-        <template #dropdown>
-          <ElDropdownMenu>
-            <ElDropdownItem command="rename">
-              <AppIcon name="edit" :size="16" />
-              重命名
-            </ElDropdownItem>
-            <ElDropdownItem command="remove" divided>
-              <AppIcon name="trash" :size="16" />
-              删除
-            </ElDropdownItem>
-          </ElDropdownMenu>
+      <MyDropdownMenu :items="menuItems" @select="handleCommand">
+        <template #default="{ toggle }">
+          <IconButton label="更多操作" :size="26" @click="toggle">
+            <AppIcon name="more" :size="16" />
+          </IconButton>
         </template>
-      </ElDropdown>
+      </MyDropdownMenu>
     </span>
   </div>
 </template>
@@ -64,6 +58,11 @@ function handleCommand(command: string) {
 
 .chat__item:hover {
   background: color-mix(in srgb, var(--ma-color-ink) 5%, transparent);
+}
+
+/* 选中项 hover 时保持选中色，避免鼠标一划过就「看起来被取消选中」 */
+.chat__item--active:hover {
+  background: var(--ma-color-accent-soft);
 }
 
 .chat__item--active {

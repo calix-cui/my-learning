@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 
 import {
   createConversation,
@@ -11,6 +11,7 @@ import {
   sendMessageStream,
 } from '@/api/chat'
 import { listAgentRuns, sendAgentStream, type AgentStreamEvent } from '@/api/agent'
+import { confirmDialog, promptDialog } from '@/components/ui/messageBox'
 import type { AgentStep, ChatConversationListItem, ChatMessage } from '@/types/api'
 
 const AGENT_MODE_KEY = 'my-agent.agent-mode'
@@ -117,11 +118,15 @@ export const useChatStore = defineStore('chat', () => {
 
   async function rename(item: ChatConversationListItem) {
     try {
-      const { value } = await ElMessageBox.prompt('输入新的会话名称', '重命名会话', {
-        inputValue: item.title,
-        inputValidator: (input) => (input.trim() ? true : '名称不能只包含空白'),
-        confirmButtonText: '保存',
-        cancelButtonText: '取消',
+      const value = await promptDialog({
+        title: '重命名会话',
+        confirmText: '保存',
+        input: {
+          label: '会话名称',
+          value: item.title,
+          placeholder: '给这个会话起个名字',
+          validator: (next: string) => (next.trim() ? true : '名称不能只包含空白'),
+        },
       })
       const updated = await renameConversation(item.id, value)
       patchConversation(item.id, { title: updated.title })
@@ -133,10 +138,11 @@ export const useChatStore = defineStore('chat', () => {
 
   async function remove(item: ChatConversationListItem) {
     try {
-      await ElMessageBox.confirm(`删除会话「${item.title}」及其全部消息？`, '删除会话', {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-        type: 'warning',
+      await confirmDialog({
+        title: '删除后，该会话将不可恢复',
+        description: '这个会话里的消息会一起删除。',
+        confirmText: '删除该会话',
+        danger: true,
       })
     } catch {
       return

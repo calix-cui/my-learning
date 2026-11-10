@@ -142,13 +142,14 @@ try {
 
   // 6. 退出登录 → 回登录页，且再访问 /chat 进不去
   await page.click('.layout__user-trigger')
-  await page.waitForSelector('.el-dropdown-menu__item', { timeout: 5000 })
+  await page.waitForSelector('.my-menu__item', { timeout: 5000 })
   await page.evaluate(() => {
-    const items = [...document.querySelectorAll('.el-dropdown-menu__item')]
+    const items = [...document.querySelectorAll('.my-menu__item')]
     const target = items.find((el) => el.textContent?.includes('退出登录'))
     target?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
-  await waitText(page, '登录', 10000)
+  // 菜单里也有「退出登录」四个字，等文字会立刻命中；直接等路由
+  await page.waitForFunction(() => location.pathname === '/login', { timeout: 10000 })
   check('退出登录后回到登录页', (await currentPath(page)) === '/login', await currentPath(page))
 
   await gotoPage(`${BASE}/chat`)

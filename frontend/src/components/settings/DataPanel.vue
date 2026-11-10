@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { confirmDialog } from '@/components/ui/messageBox'
+import { ElMessage } from 'element-plus'
 
 import { deleteAccount } from '@/api/auth'
 import { exportUrl } from '@/api/settings'
@@ -45,11 +46,12 @@ async function handleDelete() {
     return
   }
   try {
-    await ElMessageBox.confirm(
-      '账号下的会话、设置与登录设备会一起删除，且无法恢复。',
-      '确定注销账号？',
-      { confirmButtonText: '注销', cancelButtonText: '取消', type: 'warning' },
-    )
+    await confirmDialog({
+      title: '注销后，账号将不可恢复',
+      description: '账号下的会话、设置与登录设备会一起删除。',
+      confirmText: '注销账号',
+      danger: true,
+    })
   } catch {
     return
   }

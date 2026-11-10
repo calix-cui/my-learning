@@ -233,9 +233,9 @@ async function main() {
     )
     button?.click()
   })
-  await page.waitForSelector('.el-message-box', { timeout: 8000 })
+  await page.waitForSelector('.my-box', { timeout: 8000 })
   await page.evaluate(() => {
-    const button = [...document.querySelectorAll('.el-message-box__btns button')].find((item) =>
+    const button = [...document.querySelectorAll('.my-box__actions button')].find((item) =>
       item.textContent?.includes('注销'),
     )
     button?.click()

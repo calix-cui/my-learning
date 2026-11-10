@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { confirmDialog } from '@/components/ui/messageBox'
+import { ElMessage } from 'element-plus'
 
 import { listSessions, revokeSession } from '@/api/auth'
 import type { LoginSession } from '@/types/api'
@@ -46,11 +47,12 @@ function deviceName(ua: string | null): string {
 
 async function handleRevoke(item: LoginSession) {
   try {
-    await ElMessageBox.confirm(
-      `撤销后，「${deviceName(item.user_agent)}」需要重新登录。`,
-      '撤销这台设备？',
-      { confirmButtonText: '撤销', cancelButtonText: '取消', type: 'warning' },
-    )
+    await confirmDialog({
+      title: '撤销这台设备？',
+      description: `撤销后，「${deviceName(item.user_agent)}」需要重新登录。`,
+      confirmText: '撤销',
+      danger: true,
+    })
   } catch {
     return
   }

@@ -226,7 +226,7 @@ await step('UI-09 会话删除需二次确认', async () => {
 
   // 每个会话项都有自己的「...」菜单，关着的那几个也在 DOM 里；
   // 只对当前可见的那一项动手，否则会点到隐藏菜单上。
-  const targets = await page.$$('.el-dropdown-menu__item')
+  const targets = await page.$$('.my-menu__item')
   let clicked = false
   for (const item of targets) {
     const text = (await item.evaluate((el) => el.textContent?.trim())) ?? ''
@@ -238,8 +238,8 @@ await step('UI-09 会话删除需二次确认', async () => {
   }
   if (!clicked) throw new Error('没找到可见的「删除」菜单项')
 
-  await page.waitForSelector('.el-message-box', { visible: true })
-  await page.click('.el-message-box .el-button--primary')
+  await page.waitForSelector('.my-box', { visible: true })
+  await page.click('.my-box .my-box__btn--primary')
   await page.waitForFunction(() => document.querySelectorAll('.chat__item').length === 1, {
     timeout: 5000,
   })
