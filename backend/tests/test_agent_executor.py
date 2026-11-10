@@ -61,7 +61,8 @@ def test_plain_answer_without_tools(db_session: Session):
     messages_rows = db_session.query(Message).filter_by(conversation_id=conversation.id).all()
     assert [row.role for row in messages_rows] == ["user", "assistant"]
     # 首条消息自动命名
-    assert db_session.get(Conversation, conversation.id).title.startswith("[fake] 收到")
+    # 标题取用户那句话，不是助手答复（否则侧栏会显示答案碎片）
+    assert db_session.get(Conversation, conversation.id).title.startswith("你好")
 
 
 def test_single_tool_round_trip(db_session: Session):
@@ -262,12 +263,13 @@ def test_missing_conversation_and_empty_content(db_session: Session):
     # 不存在或不属于当前用户的会话一律 404
     with pytest.raises(BusinessError):
         prepare_run(db_session, user_id=user.id, conversation_id=99999, content="你好")
-    with pytest.raises(ValueError):
+    with pytest.raises(BusinessError):
         prepare_run(db_session, user_id=user.id, conversation_id=1, content="   ")
 
 
 def test_busy_conversation_rejected(db_session: Session):
     user, conversation = _setup(db_session, email="exec-busy@example.com")
     prepare_run(db_session, user_id=user.id, conversation_id=conversation.id, content="第一次")
-    with pytest.raises(RuntimeError):
+    with pytest.raises(BusinessError) as busy:
         prepare_run(db_session, user_id=user.id, conversation_id=conversation.id, content="第二次")
+    assert busy.value.code == 409

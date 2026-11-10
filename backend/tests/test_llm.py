@@ -385,3 +385,30 @@ def test_openai_chat_with_tools_maps_timeout():
 
     with pytest.raises(LLMTimeoutError):
         _client(handler).chat_with_tools([{"role": "user", "content": "你好"}], [])
+
+
+def test_row_without_model_configured_falls_back_to_env():
+    """只改过外观的账号（有 user_settings 行但 model_configured=False）不能顶掉 env 配置。
+
+    这里故意把行里的 provider 写成 openai 且字段齐全：只要 model_configured 是假，
+    就必须忽略整行——这正是「存过主题就把 env 里的 DeepSeek 顶成 fake」的根因。
+    """
+    from types import SimpleNamespace
+
+    from app.llm import config_from_env, config_from_row
+
+    row = SimpleNamespace(
+        model_provider="openai",
+        model_base_url="https://example.invalid/v1",
+        model_name="m",
+        model_timeout_seconds=99,
+        model_api_key_ciphertext=None,
+        model_api_key_hint=None,
+        model_configured=0,
+    )
+
+    assert config_from_row(row) == config_from_env()
+
+    row.model_configured = 1
+    assert config_from_row(row).provider == "openai"
+    assert config_from_row(row).base_url == "https://example.invalid/v1"

@@ -146,6 +146,7 @@ def stream_run(
                     content=final,
                     model=reply["model"],
                     is_first_message=is_first_message,
+                    title_source=last_user_text(messages),
                 )
                 run.status = RUN_COMPLETED
                 run.finished_time = datetime.now()  # noqa: DTZ005
@@ -277,6 +278,14 @@ def _add_step(
     return step
 
 
+def last_user_text(messages: list[LLMMessage]) -> str:
+    """上下文里最后一条用户消息——会话标题用它，而不是助手答复。"""
+    for message in reversed(messages):
+        if message["role"] == "user" and message.get("content"):
+            return str(message["content"])
+    return ""
+
+
 def _save_final_message(
     db: Session,
     *,
@@ -284,11 +293,15 @@ def _save_final_message(
     content: str,
     model: str | None,
     is_first_message: bool,
+    title_source: str,
 ) -> None:
     db.add(Message(conversation_id=conversation.id, role="assistant", content=content, model=model))
     conversation.update_time = datetime.now()  # noqa: DTZ005
     if is_first_message:
-        conversation.title = content[: chat_service.TITLE_MAX_LENGTH]
+        conversation.title = (
+            title_source[: chat_service.TITLE_MAX_LENGTH]
+            or content[: chat_service.TITLE_MAX_LENGTH]
+        )
 
 
 def _fail(db: Session, run: AgentRun, message: str) -> None:

@@ -64,7 +64,9 @@ def config_from_row(row: object | None) -> ModelConfig:
     解密失败（换了 APP_SECRET_KEY）按「没有 key」处理，由调用方报出可读错误，
     不让解密异常一路冒到 500。
     """
-    if row is None:
+    # 只存过外观/账号设置的账号也有一行 user_settings，但 model_configured 为假，
+    # 此时必须继续用环境变量，否则会把 env 里的真实模型顶成默认的 fake。
+    if row is None or not getattr(row, "model_configured", False):
         return config_from_env()
 
     from app.common import crypto
