@@ -16,6 +16,7 @@
 | [ADR-0008](./0008-auth-and-session.md) | 个人助手的账号体系：服务端会话 + 行级归属隔离 | 提议 | 2026-11-09 |
 | [ADR-0009](./0009-per-user-model-settings.md) | 每用户模型配置与密钥加密 | 已接受 | 2026-11-09 |
 | [0010](0010-agent-execution-loop.md) | Agent 执行循环用自研最小实现，不引编排框架 | 提议（待确认） |
+| [0011](0011-tool-permissions-and-approvals.md) | 工具权限分级与人工审批 | 提议 | 2026-11-10 |
 
 ## 什么时候写 ADR
 
