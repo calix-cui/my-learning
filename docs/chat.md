@@ -187,3 +187,12 @@ class LLMClient(Protocol):
 | `openai` 兼容层各家字段不同（如 `reasoning_content`） | 只依赖 `choices[0].message.content`；解析失败按 502 处理 |
 | 开发机没 key 就无法联调 | 默认 `fake`，CI 永远不依赖外部网络 |
 | 消息表增长快 | 现在不分区不归档；数据量成为问题在阶段 11 处理 |
+
+## 7. 前端「新会话」是草稿态（2026-11-11 补充）
+
+后端接口不变，但前端不再「点新建就落库」：
+
+- 点「新建会话」只把界面切到**空白草稿态**（`chat.startNew()`），不发请求、不产生 `conversations` 记录；用户在输入框里写、改、清空都不影响数据库。
+- 第一条消息发出去时才 `POST /api/conversations` 建会话，紧接着走原来的 `/messages/stream`（或 `/agent/stream`）。
+- 删掉当前正在看的会话、或刷新后没有任何会话，都回到这个草稿态，而不是「空页面」。
+- 因此「有一个打开的会话」不再等于「后端有一行记录」：判断界面状态看 `chat.draft` / `chat.activeId`（`draft` 为真时 `activeId` 必为 null）。

@@ -172,3 +172,4 @@ cd frontend && node .shots-light.mjs /tmp/ui-shots   # 临时脚本，出浅色�
 - 设置悬浮窗：![设置悬浮窗](../images/ui-09-settings-dialog.png)
 - 会话项菜单：![会话项菜单](../images/ui-10-thread-menu.png)
 - 删除确认（自绘）：![删除确认](../images/ui-11-message-box.png)
+- 新会话草稿态（点「新建会话」不落库，首条消息才建会话）：![新会话草稿态](../images/ui-12-new-chat-draft.png)

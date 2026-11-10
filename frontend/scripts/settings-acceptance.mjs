@@ -101,7 +101,7 @@ async function main() {
 
   // 内置演示下发消息，应拿到 [fake] 回复
   await page.click('.chat__new')
-  await page.waitForSelector('.chat__item', { timeout: 10000 })
+  await page.waitForSelector('.chat__empty-title', { timeout: 10000 })
   await page.type('.chat__composer textarea', '设置验收：内置演示')
   await page.click('.chat__composer .el-button--primary')
   await page.waitForFunction(

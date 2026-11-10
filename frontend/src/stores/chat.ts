@@ -40,6 +40,13 @@ export const useChatStore = defineStore('chat', () => {
   const conversations = ref<ChatConversationListItem[]>([])
   /** 当前打开的会话；null 表示还没选（空态） */
   const activeId = ref<number | null>(null)
+  /**
+   * 「新会话草稿」态：界面已经是一个空白会话，但后端还没有对应记录。
+   * 点「新建会话」只进这个状态，等第一条消息真正发出去才落库。
+   */
+  const draft = ref(false)
+  /** 每次点「新建会话」自增：视图据此清空输入框里的草稿文字 */
+  const newChatTick = ref(0)
   const messages = ref<ChatMessage[]>([])
   const loadingList = ref(false)
   const loadingMessages = ref(false)
@@ -91,6 +98,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function openConversation(id: number) {
+    draft.value = false
     activeId.value = id
     loadingMessages.value = true
     messages.value = []
@@ -108,11 +116,23 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function createNew(): Promise<number | null> {
+  /** 进入新会话草稿态：不发任何请求，界面先空着，等第一条消息再建 */
+  function startNew() {
+    draft.value = true
+    newChatTick.value += 1
+    activeId.value = null
+    messages.value = []
+    agentSteps.value = []
+    streamingText.value = ''
+  }
+
+  /** 草稿态发出第一条消息时才真正建会话；失败返回 null */
+  async function ensureConversation(): Promise<number | null> {
+    if (activeId.value !== null) return activeId.value
     const created = await createConversation()
     conversations.value = [{ ...created, message_count: 0 }, ...conversations.value]
     activeId.value = created.id
-    messages.value = []
+    draft.value = false
     return created.id
   }
 
@@ -151,21 +171,21 @@ export const useChatStore = defineStore('chat', () => {
     ElMessage.success('删除成功')
     conversations.value = conversations.value.filter((row) => row.id !== item.id)
     if (activeId.value === item.id) {
-      const next = conversations.value[0]
-      if (next) {
-        await openConversation(next.id)
-      } else {
-        activeId.value = null
-        messages.value = []
-      }
+      // 删掉的正是当前会话：回到空白会话，而不是硬跳去别的会话
+      startNew()
     }
   }
 
   /** 发送一条消息；返回是否成功（失败时由调用方决定输入框保留内容） */
   async function send(content: string): Promise<boolean> {
-    const id = activeId.value
     const text = content.trim()
-    if (!id || !text || sending.value) return false
+    if (!text || sending.value) return false
+
+    let id = activeId.value
+    if (id === null) {
+      id = await ensureConversation()
+      if (id === null) return false
+    }
 
     // 乐观插入用户消息：等服务端 meta 回来再换成正身（带真实 id 与时间）
     const optimisticId = -Date.now()
@@ -233,7 +253,7 @@ export const useChatStore = defineStore('chat', () => {
 
     let conversationId = activeId.value
     if (conversationId === null) {
-      conversationId = await createNew()
+      conversationId = await ensureConversation()
     }
     if (conversationId === null) return false
 
@@ -354,6 +374,8 @@ export const useChatStore = defineStore('chat', () => {
     agentSteps,
     conversations,
     activeId,
+    draft,
+    newChatTick,
     messages,
     loadingList,
     loadingMessages,
@@ -364,7 +386,8 @@ export const useChatStore = defineStore('chat', () => {
     modelLabel,
     loadConversations,
     openConversation,
-    createNew,
+    startNew,
+    ensureConversation,
     rename,
     remove,
     send,

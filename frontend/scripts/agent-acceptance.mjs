@@ -124,9 +124,11 @@ await step('A-02 打开「深度回答」', async () => {
 
 await step('A-03 新建会话并发送需要工具的问题', async () => {
   await page.click('.chat__new')
-  await page.waitForSelector('.chat__item', { timeout: 5000 })
+  await page.waitForSelector('.chat__empty-title', { timeout: 5000 })
   await page.type('.chat__composer textarea', '用工具算 3 的 5 次方，然后用一句话告诉我结果')
   await page.click('.chat__composer .el-button--primary')
+  // 会话在第一条消息发出时才创建
+  await page.waitForSelector('.chat__item', { timeout: 10000 })
 })
 
 await step('A-04 请求走的是 agent 流式接口', async () => {

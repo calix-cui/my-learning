@@ -98,11 +98,12 @@ await step('UI-01 空态可见', async () => {
   if (!t) throw new Error('无空态标题')
 })
 
-await step('UI-02 新建会话', async () => {
+await step('UI-02 新建会话只进草稿态（不落库）', async () => {
   await page.click('.chat__new')
-  await page.waitForSelector('.chat__item', { timeout: 5000 })
+  // 只切到「空白新会话」，后端还不该有记录：列表里仍是 0 条
+  await page.waitForSelector('.chat__empty-title', { timeout: 5000 })
   const n = await page.$$eval('.chat__item', (els) => els.length)
-  if (n < 1) throw new Error('列表无会话')
+  if (n !== 0) throw new Error('草稿态不该建会话，实际=' + n)
 })
 
 await step('UI-03 发送消息并收到回复', async () => {
@@ -118,6 +119,8 @@ await step('UI-03 发送消息并收到回复', async () => {
     (el.textContent ?? '').trim(),
   )
   if (!reply) throw new Error('助手回复为空')
+  // 第一条消息发出去之后才真正建会话
+  await page.waitForSelector('.chat__item', { timeout: 10000 })
   console.log('   回复首段:', reply.slice(0, 40).replace(/\n/g, ' '))
 })
 
@@ -207,11 +210,19 @@ await page.screenshot({ path: '.acceptance/chat-page.png' })
 // 新建第二个会话，验证切换与排序
 await step('UI-07 新建第二个会话后列表排序', async () => {
   await page.click('.chat__new')
-  await page.waitForFunction(() => document.querySelectorAll('.chat__item').length === 2, {
-    timeout: 5000,
-  })
-  const first = await page.$eval('.chat__item-title', (el) => el.textContent.trim())
-  if (first !== '新会话') throw new Error('首位=' + first)
+  await page.waitForSelector('.chat__empty-title', { timeout: 5000 })
+  const before = await page.$$eval('.chat__item', (els) => els.length)
+  if (before !== 1) throw new Error('草稿态不该新增会话，实际=' + before)
+
+  await page.type('.chat__composer textarea', '第二段对话')
+  await page.click('.chat__composer .el-button--primary')
+  // 列表项是在服务端建会话后才有，标题要等 done 事件回来才更新，两个条件一起等
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll('.chat__item').length === 2 &&
+      (document.querySelector('.chat__item-title')?.textContent ?? '').includes('第二段对话'),
+    { timeout: 30000 },
+  )
 })
 
 // 用页面上的删除按钮清掉当前会话（顺带验证删除交互），其余交给接口清理

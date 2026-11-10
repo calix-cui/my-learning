@@ -116,7 +116,7 @@ try {
 
   // 5. 新建会话并发一条消息，拿到回复
   await page.click('.chat__new')
-  await page.waitForSelector('.chat__item', { timeout: 8000 })
+  await page.waitForSelector('.chat__empty-title', { timeout: 8000 })
   const box = await page.$('.chat__composer textarea')
   await box.type('你好，我是端到端测试')
   await page.keyboard.press('Enter')

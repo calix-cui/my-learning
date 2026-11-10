@@ -28,6 +28,14 @@ const showEmptyState = computed(
   () => !chat.loadingMessages && chat.messages.length === 0 && !chat.streamingText,
 )
 
+/** 点「新建会话」时把输入框里的残留文字清掉（草稿态与已有会话都要清） */
+watch(
+  () => chat.newChatTick,
+  () => {
+    draft.value = ''
+  },
+)
+
 /** 时间线跟着「这一次运行」走：有步骤或正在跑才显示 */
 const showTimeline = computed(() => chat.agentSteps.length > 0 || chat.agentRunning)
 
@@ -77,9 +85,10 @@ onMounted(async () => {
   if (!chat.conversations.length) {
     await chat.loadConversations()
   }
-  // 直接刷新页面时带回最后一个会话；没有就留在空态
-  if (chat.activeId === null && chat.conversations.length) {
-    await chat.openConversation(chat.conversations[0].id)
+  // 直接刷新页面时带回最后一个会话；没有就进草稿态（新会话界面）
+  if (chat.activeId === null) {
+    if (chat.conversations.length) await chat.openConversation(chat.conversations[0].id)
+    else chat.startNew()
   }
   // 刷新回来时把上一次的工具过程也带回来
   if (chat.activeId !== null) {
@@ -132,7 +141,7 @@ onMounted(async () => {
       ref="composer"
       v-model="draft"
       :sending="chat.sending"
-      :disabled="!hasConversation"
+      :disabled="false"
       :max-length="MAX_LENGTH"
       :agent-mode="chat.agentMode"
       @send="handleSend"

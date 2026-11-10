@@ -52,15 +52,19 @@ pnpm type-check
 - 反例：`<div class="wrap"><div class="inner"><span class="text">…</span></div></div>` → 正例：`<div class="wrap">…</div>`。
 - 例外：`<Teleport>`、`<Transition>`、`<template v-for>` 这类框架必需的结构不算嵌套。
 
-### 2. 交互反馈统一用渐变
+### 2. 新建会话是「草稿态」
+
+点「新建会话」只调 `chat.startNew()`：界面切到空白会话，**不发请求**；第一条消息发出时才建会话（`ensureConversation()`）。删掉当前会话或刷新后无会话，也回到草稿态。判断界面状态用 `chat.draft` / `chat.activeId`，不要假设「打开着会话 = 后端有记录」。
+
+### 3. 交互反馈统一用渐变
 
 hover 用 `linear-gradient(90deg, ink 7%, ink 3%)`，按下 `12% → 7%`，危险操作用红色渐变；禁止整块纯色 hover，也不做位移/放大（详见 `DESIGN.md`「交互反馈」）。
 
-### 3. 不要轻易加分割线
+### 4. 不要轻易加分割线
 
 小模块之间用间距、底色与阴影分组；只有 Markdown 语义（表格、引用块）、输入框聚焦态、低对比度退化三种例外（详见 `DESIGN.md`「边界规则」）。
 
-### 4. 可点元素必须可键盘访问
+### 5. 可点元素必须可键盘访问
 
 用真实 `<button>`；确实需要 `div` 时，补 `role="button"` + `tabindex="0"` + `@keydown.enter` / `@keydown.space`，否则 ESLint 的 a11y 规则会拦。
 
