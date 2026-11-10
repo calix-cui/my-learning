@@ -118,7 +118,7 @@ def delete_conversation(db: Session, user_id: int, conversation_id: int) -> None
         raise
 
 
-def _build_context(db: Session, conversation_id: int) -> list[ChatMessage]:
+def build_context(db: Session, conversation_id: int) -> list[ChatMessage]:
     """拼上下文：system 消息始终带上，其余取最近 CONTEXT_LIMIT 条，按时间正序。"""
     system_rows = db.scalars(
         select(Message)
@@ -160,7 +160,7 @@ def send_message(
         # flush 而不是 commit：先拿到 id，让本次提问进入上下文，同时保持一个事务
         db.flush()
 
-        reply = llm.chat(_build_context(db, conversation_id))
+        reply = llm.chat(build_context(db, conversation_id))
 
         assistant_message = Message(
             conversation_id=conversation_id,
@@ -216,7 +216,7 @@ def prepare_stream(
         db.add(user_message)
         db.flush()
         # 上下文先在内存里拼好，流式过程中不再查库，也不依赖 session 的迭代状态
-        context = _build_context(db, conversation_id)
+        context = build_context(db, conversation_id)
     except SQLAlchemyError:
         db.rollback()
         logger.exception("准备流式回复失败")
