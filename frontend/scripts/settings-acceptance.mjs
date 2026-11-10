@@ -38,13 +38,21 @@ async function main() {
   })
   page.on('pageerror', (error) => consoleErrors.push(String(error)))
 
+  // vue-devtools 的悬浮面板固定在页面中央，headless 下会挡住按钮的鼠标点击；
+  // 每次导航后移除它（插件本身只在 dev 注入，不影响产物）。
+  const gotoPage = async (url) => {
+    await page.goto(url, { waitUntil: 'networkidle2' })
+    await page
+      .evaluate(() => document.getElementById('__vue-devtools-container__')?.remove())
+      .catch(() => undefined)
+  }
   const hideDevtools = () =>
     page.evaluate(() => document.getElementById('__vue-devtools-container__')?.remove())
 
   const email = `settings-${Date.now()}@example.com`
 
   // ---- 注册 ----
-  await page.goto(`${BASE}/register`, { waitUntil: 'networkidle2' })
+  await gotoPage(`${BASE}/register`)
   const inputs = await page.$$('.auth__card input')
   await inputs[0].type(email)
   await inputs[1].type('password123')
@@ -54,7 +62,7 @@ async function main() {
   record('注册后进入对话页', true)
 
   // ---- 模型接入：默认继承环境变量 ----
-  await page.goto(`${BASE}/settings`, { waitUntil: 'networkidle2' })
+  await gotoPage(`${BASE}/settings`)
   await hideDevtools()
   await page.waitForSelector('.model__seg', { timeout: 10000 })
   const inheritedNote = await page.$eval('.model__notice', (el) => el.textContent ?? '')
@@ -84,7 +92,7 @@ async function main() {
   await page.screenshot({ path: `${OUT}/settings-01-model.png` })
 
   // 顶栏模型标签跟随设置
-  await page.goto(`${BASE}/chat`, { waitUntil: 'networkidle2' })
+  await gotoPage(`${BASE}/chat`)
   await page.waitForFunction(
     () => document.querySelector('.layout__model')?.textContent?.includes('fake'),
     { timeout: 10000 },
@@ -106,7 +114,7 @@ async function main() {
   record('内置演示回复带 [fake] 前缀', true)
 
   // ---- 账号资料：改显示名 ----
-  await page.goto(`${BASE}/settings`, { waitUntil: 'networkidle2' })
+  await gotoPage(`${BASE}/settings`)
   await hideDevtools()
   await page.evaluate(() => {
     const items = [...document.querySelectorAll('.settings__item')]
@@ -126,6 +134,49 @@ async function main() {
   )
   record('显示名保存后侧栏同步', true)
   await page.screenshot({ path: `${OUT}/settings-02-account.png` })
+
+  // ---- 外观：切主题并验证「换设备后从账号恢复」 ----
+  await page.evaluate(() => {
+    const items = [...document.querySelectorAll('.settings__item')]
+    items.find((item) => item.textContent?.includes('外观'))?.click()
+  })
+  await page.waitForSelector('.theme-card', { timeout: 10000 })
+  await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.theme-card')]
+    cards.find((card) => card.textContent?.includes('暖砂'))?.click()
+  })
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'sand', {
+    timeout: 10000,
+  })
+  // 写库是异步的（切换主题不阻塞 UI），这里轮询到生效为止
+  let storedAppearance = { theme_id: null }
+  for (let i = 0; i < 20; i++) {
+    storedAppearance = await page.evaluate(async () => {
+      const response = await fetch('/api/settings/appearance')
+      return (await response.json()).data
+    })
+    if (storedAppearance.theme_id === 'sand') break
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  record(
+    '切换主题后写回账号',
+    storedAppearance.theme_id === 'sand',
+    `theme_id=${storedAppearance.theme_id}`,
+  )
+
+  // 清掉本机缓存 + 重新加载 = 模拟换设备
+  await page.evaluate(() => localStorage.clear())
+  await gotoPage(`${BASE}/settings`)
+  await page.evaluate(() => {
+    const items = [...document.querySelectorAll('.settings__item')]
+    items.find((item) => item.textContent?.includes('外观'))?.click()
+  })
+  await page.waitForSelector('.theme-card', { timeout: 10000 })
+  await page
+    .waitForFunction(() => document.documentElement.dataset.theme === 'sand', { timeout: 10000 })
+    .catch(() => undefined)
+  const restoredTheme = await page.evaluate(() => document.documentElement.dataset.theme)
+  record('清空本机缓存后主题从账号恢复', restoredTheme === 'sand', `theme=${restoredTheme}`)
 
   // ---- 登录设备 ----
   await page.evaluate(() => {

@@ -47,6 +47,16 @@ const browser = await puppeteer.launch({
 try {
   fs.mkdirSync(OUT, { recursive: true })
   const page = await browser.newPage()
+
+  // vue-devtools 的悬浮面板固定在页面中央，headless 下会挡住按钮的鼠标点击；
+  // 每次导航后移除它（插件本身只在 dev 注入，不影响产物）。
+  const gotoPage = async (url) => {
+    await page.goto(url, { waitUntil: 'networkidle2' })
+    await page
+      .evaluate(() => document.getElementById('__vue-devtools-container__')?.remove())
+      .catch(() => undefined)
+  }
+
   const consoleErrors = []
   page.on('console', (msg) => {
     // 浏览器会把 404/401 的资源加载失败也记为 console error，下面的 response 监听已单独统计
@@ -65,7 +75,7 @@ try {
   })
 
   // 1. 未登录访问根路径 → 登录页
-  await page.goto(`${BASE}/`, { waitUntil: 'networkidle2' })
+  await gotoPage(`${BASE}/`)
   await waitText(page, '登录')
   check(
     '未登录访问 / 会被送到登录页',
@@ -74,7 +84,7 @@ try {
   )
 
   // 2. 未登录直接访问 /chat → 也回登录页，并带上 redirect
-  await page.goto(`${BASE}/chat`, { waitUntil: 'networkidle2' })
+  await gotoPage(`${BASE}/chat`)
   await waitText(page, '登录')
   const loginUrl = page.url()
   check(
@@ -141,7 +151,7 @@ try {
   await waitText(page, '登录', 10000)
   check('退出登录后回到登录页', (await currentPath(page)) === '/login', await currentPath(page))
 
-  await page.goto(`${BASE}/chat`, { waitUntil: 'networkidle2' })
+  await gotoPage(`${BASE}/chat`)
   await waitText(page, '登录')
   check('退出后无法再访问 /chat', (await currentPath(page)) === '/login', await currentPath(page))
 

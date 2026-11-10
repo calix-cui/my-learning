@@ -8,12 +8,14 @@ import ThreadList from '@/components/chat/ThreadList.vue'
 import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
 import { useSettingsStore } from '@/stores/settings'
+import { useThemeStore } from '@/stores/theme'
 
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
 const chat = useChatStore()
 const settings = useSettingsStore()
+const theme = useThemeStore()
 
 /** 登录/注册页不套应用外壳（没有侧边栏和顶栏） */
 const isAuthPage = computed(() => route.meta.public === true)
@@ -44,6 +46,8 @@ watch(
   (loggedIn) => {
     if (loggedIn) {
       void settings.load().catch(() => undefined)
+      // 账号存过外观就以账号为准；没存过会把本机偏好写上去
+      void theme.syncFromAccount()
     }
   },
   { immediate: true },

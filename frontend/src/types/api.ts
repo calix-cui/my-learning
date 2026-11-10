@@ -114,3 +114,10 @@ export interface ModelTestResult {
   model: string | null
   message: string
 }
+
+/** 账号里保存的外观（跨设备同步主题） */
+export interface AppearanceSettings {
+  theme_id: string | null
+  theme_mode: 'light' | 'dark' | 'system' | null
+  update_time: string | null
+}

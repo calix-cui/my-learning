@@ -113,6 +113,8 @@ onMounted(async () => {
           <div class="chat__bubble chat__bubble--streaming">
             <span class="chat__dots"><i /><i /><i /></span>
           </div>
+          <!-- 首字之前也要给一句状态，否则用户只看到三个点在跳 -->
+          <span class="chat__meta">正在输入…</span>
         </div>
       </div>
     </div>

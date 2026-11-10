@@ -11,6 +11,16 @@ const browser = await puppeteer.launch({
   args: ['--no-sandbox', '--disable-gpu', '--user-data-dir=/tmp/cp-chat'],
 })
 const page = await browser.newPage()
+
+// vue-devtools 的悬浮面板固定在页面中央，headless 下会挡住按钮的鼠标点击；
+// 每次导航后移除它（插件本身只在 dev 注入，不影响产物）。
+const gotoPage = async (url) => {
+  await page.goto(url, { waitUntil: 'networkidle2' })
+  await page
+    .evaluate(() => document.getElementById('__vue-devtools-container__')?.remove())
+    .catch(() => undefined)
+}
+
 await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 })
 const errors = []
 const streamCalls = []
@@ -79,7 +89,7 @@ await page.setCookie({
   path: '/',
   httpOnly: true,
 })
-await page.goto(`${BASE}/chat`, { waitUntil: 'networkidle2' })
+await gotoPage(`${BASE}/chat`)
 await page.waitForSelector('.chat', { timeout: 10000 })
 console.log('title:', await page.title())
 
@@ -137,25 +147,57 @@ await step('UI-06 输入框发送后清空', async () => {
 })
 
 // 流式中间态：再发一条，抓「正在输入…」与逐字渲染
-await step('UI-08 流式过程中显示增量文本', async () => {
-  await page.type('.chat__composer textarea', '第二个问题看看流式')
-  await page.click('.chat__composer .el-button--primary')
-  await page.waitForFunction(
-    () => {
-      const rows = [...document.querySelectorAll('.chat__row')]
-      const last = rows[rows.length - 1]
-      return last?.innerText.includes('正在输入')
-    },
-    { timeout: 8000, polling: 20 },
-  )
-  const mid = await page.$$eval('.chat__row', (els) => els[els.length - 1].innerText)
-  // 此刻应是半截文本 + 「正在输入…」，证明是逐块渲染而不是一次性替换；
-  // 不比对具体文案——fake 与真实模型的输出完全不同，只看「已有内容但还没结束」
-  const streamed = mid.replace('正在输入…', '').trim()
-  if (!streamed) throw new Error('增量里还没出现内容: ' + mid)
-  await page.waitForFunction(() => !document.body.innerText.includes('正在输入'), {
-    timeout: 15000,
+await step('UI-08 流式回复确实是分块到达', async () => {
+  // 真实模型的首字可能几百毫秒就结束，靠轮询 DOM 抓「半截文本」必然偶发失败；
+  // 这里在 fetch 层数 SSE 的 delta 帧——它同时说明「链路上没有被整段缓冲」。
+  await page.evaluate(() => {
+    window.__deltaCount = 0
+    const originalFetch = window.fetch.bind(window)
+    window.fetch = async (...args) => {
+      const response = await originalFetch(...args)
+      const url = String(args[0])
+      if (url.includes('/messages/stream')) {
+        const clone = response.clone()
+        void (async () => {
+          const reader = clone.body?.getReader()
+          if (!reader) return
+          const decoder = new TextDecoder()
+          let buffer = ''
+          for (;;) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const frames = buffer.split('\n\n')
+            buffer = frames.pop() ?? ''
+            for (const frame of frames) {
+              if (frame.includes('"type": "delta"') || frame.includes('"type":"delta"')) {
+                window.__deltaCount += 1
+              }
+            }
+          }
+        })()
+      }
+      return response
+    }
   })
+
+  await page.type('.chat__composer textarea', '第二个问题看看流式，请多说两句')
+  await page.click('.chat__composer .el-button--primary')
+
+  // 点下发送后立刻要有状态提示（等待首字时也不该静默）
+  await page.waitForFunction(() => document.body.innerText.includes('正在输入'), {
+    timeout: 5000,
+    polling: 20,
+  })
+
+  await page.waitForFunction(() => !document.body.innerText.includes('正在输入'), {
+    timeout: 60000,
+  })
+  await new Promise((resolve) => setTimeout(resolve, 500))
+
+  const deltas = await page.evaluate(() => window.__deltaCount)
+  if (deltas < 2) throw new Error('delta 帧数=' + deltas + '，说明被整段返回了')
+
   const rows = await page.$$eval('.chat__row', (els) => els.length)
   if (rows !== 4) throw new Error('第二条消息后行数=' + rows)
 })

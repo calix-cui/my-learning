@@ -1,8 +1,9 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { fetchAppearance, saveAppearance } from '@/api/settings'
 import { applyThemeToDocument, COLOR_KEYS } from '@/theme/apply'
-import { defaultThemeId, findTheme } from '@/theme/themes'
+import { defaultThemeId, findTheme, themes } from '@/theme/themes'
 import type { ThemeColors, ThemeDefinition, ThemeMode, ThemeModeSetting } from '@/theme/types'
 
 const STORAGE_KEY = 'my-agent.theme'
@@ -93,12 +94,63 @@ export const useThemeStore = defineStore('theme', () => {
     themeId.value = findTheme(nextThemeId).id
     persist()
     paint()
+    void pushToAccount()
   }
 
   function setMode(nextMode: ThemeModeSetting): void {
     mode.value = nextMode
     persist()
     paint()
+    void pushToAccount()
+  }
+
+  /**
+   * 把当前外观写到账号上（跨设备同步）。
+   *
+   * 失败一律吞掉：没登录、离线、后端没起来都不该影响切换主题这个动作，
+   * 本机 localStorage 已经存了，等下次登录再补。
+   */
+  async function pushToAccount(): Promise<void> {
+    try {
+      await saveAppearance({ theme_id: themeId.value, theme_mode: mode.value })
+    } catch {
+      // 忽略：本机偏好已经生效
+    }
+  }
+
+  /**
+   * 登录后调用：账号存过外观就以账号为准，没存过则把本机偏好写上去。
+   *
+   * 优先级（写进 docs/design/README.md）：账号 > localStorage。
+   * 只在登录时拉一次，避免和用户切换主题互相打架。
+   */
+  async function syncFromAccount(): Promise<void> {
+    try {
+      const remote = await fetchAppearance()
+      const remoteTheme = themes.find((item) => item.id === remote.theme_id)
+
+      if (!remoteTheme && !remote.theme_mode) {
+        // 账号里没有：把本机这套写上去，下次换设备就能拿到
+        await pushToAccount()
+        return
+      }
+
+      let changed = false
+      if (remoteTheme && remoteTheme.id !== themeId.value) {
+        themeId.value = remoteTheme.id
+        changed = true
+      }
+      if (remote.theme_mode && remote.theme_mode !== mode.value) {
+        mode.value = remote.theme_mode
+        changed = true
+      }
+      if (changed) {
+        persist()
+        paint()
+      }
+    } catch {
+      // 未登录或接口不可用：保持本机偏好
+    }
   }
 
   return {
@@ -113,6 +165,8 @@ export const useThemeStore = defineStore('theme', () => {
     currentColors,
     // actions
     initTheme,
+    pushToAccount,
+    syncFromAccount,
     setTheme,
     setMode,
   }

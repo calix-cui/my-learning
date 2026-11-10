@@ -48,7 +48,7 @@ pnpm lint          # ESLint 全量检查（CI 会跑，有 error 即失败）
 pnpm lint:fix      # 自动修可修的问题
 pnpm format        # Prettier 格式化（本地用，不进 CI 阻断）
 pnpm format:check  # 只检查格式，不写入
-pnpm test          # Vitest 单测：纯逻辑 39 例 + 组件 15 例，共 54 例，不连后端
+pnpm test          # Vitest 单测：纯逻辑 44 例 + 组件 15 例，共 59 例，不连后端
 pnpm test:coverage # 同上，额外出覆盖率报告（coverage/index.html，不设门槛）
 pnpm test:watch    # 监听模式，开发时用
 ```
@@ -68,7 +68,7 @@ pnpm test:watch    # 监听模式，开发时用
 
 单测边界：组件测**行为**（渲染出什么、点击后 emit / store 怎么变），不写快照、不断言 class 名与 DOM 结构；页面级完整流程（登录拦截、流式对话）交给 E2E 与人工验收。
 
-> 端到端脚本（都要前后端在跑）：`pnpm acceptance:chat`（对话流 10 项）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录，13 项）、`pnpm acceptance:settings`（模型接入→测试连接→改显示名→设备→导出→注销，13 项）。
+> 端到端脚本（都要前后端在跑）：`pnpm acceptance:chat`（对话流 10 项）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录，13 项）、`pnpm acceptance:settings`（模型接入→测试连接→改显示名→设备→导出→注销→主题同步，15 项）。
 > 对话 E2E 跑前跑后都会清空会话。它默认打 5173 的 dev server；如果你刚改过前端代码（HMR 可能中途整页重载），改用 `pnpm build && pnpm preview` 后 `BASE=http://127.0.0.1:4173 pnpm acceptance:chat`，结果更稳定。
 
 ## 与后端联调
@@ -172,7 +172,7 @@ frontend/
 
 ## 已知限制
 
-- 主题选择只存 `localStorage`，**不随账号同步**（换设备要重选；等设置读写接口时补 `user_settings`）。
+- 主题的优先级是「账号 > 本机 `localStorage`」：登录后从 `/api/settings/appearance` 拉取，切换时本地立即生效、异步写回账号。
 - 模型 Key 存在后端 `user_settings`（Fernet 加密），前端只拿到末四位；服务端没配 `APP_SECRET_KEY` 时只能改其他字段。
 - 未实现多 Agent 切换（后端已预留 `agent_key` 字段，界面暂无入口）。
 - 会话列表一次性拉 50 条，没有分页器（数量级小，够用）。
