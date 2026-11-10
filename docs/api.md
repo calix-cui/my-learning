@@ -433,8 +433,36 @@ data: {"type":"run_finished","run_id":1,"content":"3 的 5 次方等于 243。",
 | `calculator` | `expression` | 四则/幂/括号，`^` 按幂处理（模型爱写 `3^5`）；拒绝 `__import__`、`9**9**9` 这类越界表达式 |
 | `now` | `timezone?` | 当前时间，默认 `Asia/Shanghai`，输出「2026-11-10 22:55:38 CST（星期二）」 |
 | `search_conversations` | `keyword`、`limit?` （1–10） | 在自己历史会话标题里检索，只返回自己的数据 |
+| `rename_conversation` | `title`、`conversation_id?` | **写工具**，必须用户批准才执行；省略 `conversation_id` 表示当前会话 |
 
-## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages` / `agent_runs` / `agent_steps`）
+### 6.4 工具治理与审批
+
+写操作（`level=write`）不会直接执行：执行器把 run 置为 `waiting_approval`，把这次调用写成一行 `agent_approvals(pending)`，事件流吐出 `approval_required` 后**结束这一帧**。用户点批准或拒绝后调决策接口，服务端从 `agent_steps` 重放上下文，用同一个循环接着跑。
+
+`GET /api/settings/tools`
+
+```json
+{ "code": 200, "message": "请求成功", "data": {
+  "items": [
+    { "name": "rename_conversation", "description": "把一个会话改名…", "level": "write",
+      "enabled": true, "requires_approval": true, "calls_today": 2 }
+  ],
+  "daily_tool_budget": 500, "used_today": 2 } }
+```
+
+关掉的工具仍在清单里（`enabled=false`），只是注册表不再向模型暴露、也执行不了——这样用户还能再打开。
+
+`PUT /api/settings/tools`：`{ "disabled": ["calculator"], "daily_tool_budget": 300 }`，未知工具名返回 400。
+
+`GET /api/settings/tools/stats?days=7`：`{ "days": 7, "items": [{"tool_name":"calculator","calls":12,"failures":0}], "total": 12 }`。
+
+`GET /api/agent/runs/{run_id}/approvals`：返回这次运行的全部审批（`status` 为 `pending|approved|rejected|expired`）。越权 404。
+
+`POST /api/agent/runs/{run_id}/approvals/{approval_id}`：`{ "decision": "approve" }` 或 `{ "decision": "reject", "note": "标题我自己改" }`。成功时返回 **SSE 流**（和 `/agent/stream` 同一套事件，开头直接是 `tool_result`）；审批已决定或 run 不处于等待态返回 409，开流前的错误仍是普通 JSON。
+
+限制：单次运行最多 5 次审批、同一工具被拒 2 次后本次运行直接失败（403）；每天所有工具调用合计不超过 `daily_tool_budget`。
+
+## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages` / `agent_runs` / `agent_steps` / `agent_approvals`）
 
 ```
 users
@@ -460,6 +488,8 @@ sessions
 user_settings
   id                        int  pk
   user_id                   int  FK → users.id ON DELETE CASCADE，unique
+  tools_disabled            json          默认 []
+  daily_tool_budget         int           默认 500
   model_provider            varchar(20)   默认 fake
   theme_id                  varchar(32)   nullable（主题 id，如 pine/sand）
   theme_mode                varchar(10)   nullable（light/dark/system）
@@ -509,7 +539,21 @@ agent_steps
   ok           tinyint(1)     nullable（仅工具步骤有值）
   duration_ms  int            nullable
   create_time  datetime
+
+agent_approvals
+  id           int  pk autoincrement
+  run_id       int  FK → agent_runs.id  ON DELETE CASCADE，有索引
+  user_id      int  FK → users.id       ON DELETE CASCADE，有索引
+  seq          int            对应哪一步 tool_call
+  tool_name    varchar(64)
+  tool_args    json           nullable（原样回放给用户看）
+  status       varchar(16)    pending | approved | rejected | expired
+  note         varchar(200)   nullable（拒绝理由）
+  decided_time datetime       nullable
+  create_time  datetime
 ```
+
+审批不设过期时间：写操作挂多久都等用户决定，避免「去泡杯咖啡回来发现要重跑」。真正约束的是次数（单 run ≤5 次审批、同工具被拒 ≤2 次），以及 30 天仍未决定的记录由清理任务标 `expired`。
 
 `agent_steps` 是「过程」，`messages` 是「对话」：一次运行只把最终答复写进 `messages`，中间的工具往返全留在 `agent_steps`，这样聊天记录不会被工具日志污染，又能在需要时完整回放。
 
@@ -519,5 +563,5 @@ agent_steps
 
 - 起服务：项目根 `./scripts/dev.sh`（推荐）或 `cd backend && make run` + `cd frontend && pnpm dev`。
 - 自检：`cd backend && make check`；`cd frontend && pnpm lint && pnpm test && pnpm build`。
-- 端到端（需前后端在跑）：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录）、`pnpm acceptance:settings`（模型设置→测试连接→改显示名→导出→注销）。
+- 端到端（需前后端在跑）：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:agent`（深度回答与工具时间线）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录）、`pnpm acceptance:settings`（模型设置→测试连接→改显示名→导出→注销）、`pnpm acceptance:tools`（工具启停→审批拒绝→审批批准→刷新复原）。
 - 第一个管理员：`cd backend && ADMIN_EMAIL=... ADMIN_PASSWORD='至少8位' uv run python -m app.create_admin`（存在则重置密码并升权）。

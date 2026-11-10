@@ -1,11 +1,11 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-10 · 阶段 5 已落地；阶段 6「工具生态与权限治理」设计已出，待确认 · `main` 与 `origin/main` 同步（见 `git log -1`）
+> 最近更新：2026-11-11 · 阶段 6「工具生态与权限治理」已落地（T1–T7） · `main` 与 `origin/main` 同步（见 `git log -1`）
 
 ## 1. 现在在哪
 
-**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–5 已完成（阶段 4.5「账号体系」作为前置补强也已落地），当前进入阶段 6「工具生态与权限治理」，设计见 [`tools.md`](tools.md)，等确认后按 T1–T7 实现。**
+**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–6 已完成（阶段 4.5「账号体系」作为前置补强也已落地）；下一步是阶段 7「MCP 客户端与工具生态扩展」。**
 
 阶段口径只以该文件为准。此前本文件里出现的「阶段 2 = MCP client / Agent PoC / Electron 骨架」是我自行归纳的临时说法（源自 `archive/REUSE_CANDIDATES.md` 的「MCP 建议尽早」与 ADR-0001 的 Electron 结论），**与 11 阶段计划无对应关系，已废弃**，勿再引用。
 
@@ -22,6 +22,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-11 | **阶段 6：工具生态与权限治理（T1–T7）**：`ToolMeta`/`ToolLevel`/`ToolRegistry` + `ToolPolicy`（参数规则、日预算）、`agent_approvals` 四态审批与迁移 `2c0c6e7b3613`、执行器挂起与 `resume_run` 重放、写工具 `rename_conversation`、6 个接口、前端 `ApprovalCard` 与设置页「工具」节、`acceptance:tools` 8 项；后端 230 例 / 93.37%，前端 64 例 | [tools.md](tools.md)、[ADR-0011](adr/0011-tool-permissions-and-approvals.md)、[api.md](api.md) §6.4 |
 | 11-10 | **阶段 5：Agent 执行循环 + Tool Calling（T1–T7）**：模型层原生 `tools`/`tool_calls`（Fake 剧本可重放）、两表 `agent_runs`/`agent_steps`、只读工具层与注册表、执行器（8 步 / 2s 工具超时 / 连续 3 次失败中止 / 断流回滚）、`POST /agent/stream` + `GET /agent/runs`、前端「深度回答」开关与执行时间线（刷新可回放）；后端 204 例 / 93.22%，前端 59 例，Agent E2E 10 项 | [agent.md](agent.md)、[ADR-0010](adr/0010-agent-execution-loop.md)、[api.md](api.md) §6；截图 `docs/images/agent-timeline.png` |
 | 11-10 | **主题随账号同步（T-FE-03 收尾）**：`user_settings` 加 `theme_id` / `theme_mode` + `GET|PUT /api/settings/appearance`；登录后账号优先、切换时本地先生效再异步写回；顺带用 `model_configured` 列修掉「只存主题被当成配过模型」的问题 | [ADR-0009](adr/0009-per-user-model-settings.md)、[api.md](api.md) §4.5；后端 159 例 / 94.42%，前端 59 例，设置 E2E 15 项 |
 | 11-09 | **设置模块（T-FE-02）**：模型接入（Key Fernet 加密存 `user_settings`、界面只显示末四位、可测试连接）/ 账号资料（改显示名、改密码踢其他设备）/ 登录设备（撤销）/ 外观 / 数据管理（导出 JSON·Markdown、注销账号）；聊天按账号取模型，未配置回落环境变量 | [ADR-0009](adr/0009-per-user-model-settings.md)、[api.md](api.md) §3.8–3.9、§4；后端 148 例 / 94.22%，前端 54 例，设置 E2E 13 项 |
@@ -54,7 +55,7 @@
 | 4 | **LLM 接入与基础对话** | ✅ | [chat.md](chat.md)：T1 表结构 / T2 模型抽象 / T3 会话 CRUD / T4 同步发消息 / T4b SSE 流式 / T5 `/chat` 页面 / T6 文档；已接 DeepSeek 实测 |
 | 4.5 | 账号体系（补强） | ✅ | [auth.md](auth.md)：users/sessions 两表 + Argon2id + 服务端会话 + 用户级数据隔离 + 登录页/守卫 |
 | 5 | **Agent 基础执行循环 + Tool Calling** | ✅ | [agent.md](agent.md) + [ADR-0010](adr/0010-agent-execution-loop.md)：T1 原生工具调用 / T2 两表 / T3 工具层 / T4 执行器 / T5 流式接口 / T6 前端时间线 / T7 文档与 E2E；后端 204 例 / 93.22%，Agent E2E 10 项 |
-| 6 | **工具生态与权限治理** | 🟡 设计待确认 | [tools.md](tools.md) + [ADR-0011](adr/0011-tool-permissions-and-approvals.md)：工具注册表（`ToolSource`）、只读/写入/外网三级、四态审批（pending/approved/rejected/expired）、统计接口、MCP 适配层；T1–T7 待你确认后开工 |
+| 6 | **工具生态与权限治理** | ✅ | [tools.md](tools.md) + [ADR-0011](adr/0011-tool-permissions-and-approvals.md)：注册表（`ToolSource`）、三级权限、审批暂停/恢复、工具设置与统计接口、前端审批卡片与「工具」节；后端 230 例 / 93.37%，前端 64 例，`acceptance:tools` 8 项 |
 | 7 | Skill 和 MCP | ⬜ | 依赖 6；MCP client 在此阶段做（不自造协议，用官方 SDK） |
 | 8 | RAG 和 Memory | ⬜ | 依赖 7 |
 | 9 | Agent 应用功能完善 | ⬜ | 依赖 8 |

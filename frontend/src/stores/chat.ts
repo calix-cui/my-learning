@@ -10,7 +10,13 @@ import {
   renameConversation,
   sendMessageStream,
 } from '@/api/chat'
-import { listAgentRuns, sendAgentStream, type AgentStreamEvent } from '@/api/agent'
+import {
+  decideApprovalStream,
+  listAgentRuns,
+  listApprovals,
+  sendAgentStream,
+  type AgentStreamEvent,
+} from '@/api/agent'
 import { confirmDialog, promptDialog } from '@/components/ui/messageBox'
 import type { AgentStep, ChatConversationListItem, ChatMessage } from '@/types/api'
 
@@ -39,6 +45,17 @@ interface ChatThread {
   runningAgent: boolean
   /** 是否已经从服务端拉过消息（避免每次切换都重复请求） */
   loaded: boolean
+  /** 等待用户决定的工具调用；null 表示没有挂起的审批 */
+  approval: PendingApproval | null
+}
+
+/** 一次待审批的工具调用（服务端已暂停，等用户点） */
+export interface PendingApproval {
+  runId: number
+  approvalId: number
+  tool: string
+  args: Record<string, unknown> | null
+  reason: string
 }
 
 function emptyThread(): ChatThread {
@@ -50,6 +67,7 @@ function emptyThread(): ChatThread {
     sending: false,
     runningAgent: false,
     loaded: false,
+    approval: null,
   }
 }
 
@@ -108,6 +126,8 @@ export const useChatStore = defineStore('chat', () => {
   const streamingText = computed(() => activeThread.value.streamingText)
   const agentSteps = computed(() => activeThread.value.steps)
   const sending = computed(() => activeThread.value.sending)
+  const pendingApproval = computed(() => activeThread.value.approval)
+
   const agentRunning = computed(() => activeThread.value.runningAgent)
 
   /** 输入框内容也是会话状态的一部分：每个会话各存各的草稿 */
@@ -324,6 +344,82 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /** 用 agent 循环发一条消息：过程进时间线，最终答复进 messages */
+  /** 把一条流式事件并进它所属会话的时间线（绝不写别的会话） */
+  function applyAgentEvent(thread: ChatThread, event: AgentStreamEvent) {
+    const base = {
+      seq: 0,
+      content: null,
+      tool_name: null,
+      tool_args: null,
+      ok: null,
+      duration_ms: null,
+      create_time: formatNow(),
+    }
+    if (event.type === 'tool_call') {
+      thread.steps = [
+        ...thread.steps,
+        {
+          ...base,
+          seq: event.seq,
+          kind: 'tool_call',
+          tool_name: event.tool,
+          tool_args: event.args,
+        },
+      ]
+    } else if (event.type === 'tool_result') {
+      thread.steps = [
+        ...thread.steps,
+        {
+          ...base,
+          seq: event.seq,
+          kind: 'tool_result',
+          tool_name: event.tool,
+          content: event.content,
+          ok: event.ok,
+          duration_ms: event.duration_ms,
+        },
+      ]
+    } else if (event.type === 'assistant_text') {
+      thread.steps = [
+        ...thread.steps,
+        { ...base, seq: event.seq, kind: 'assistant_text', content: event.content },
+      ]
+    } else if (event.type === 'approval_required') {
+      thread.approval = {
+        runId: event.run_id,
+        approvalId: event.approval_id,
+        tool: event.tool,
+        args: event.args,
+        reason: event.reason,
+      }
+    }
+  }
+
+  /** 最终答复落进消息列表，并更新会话列表里的条数与时间 */
+  function appendAssistantMessage(
+    thread: ChatThread,
+    conversationId: number,
+    event: Extract<AgentStreamEvent, { type: 'run_finished' }>,
+  ) {
+    thread.messages = [
+      ...thread.messages,
+      {
+        id: -Date.now() - 1,
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: event.content,
+        model: event.model,
+        create_time: formatNow(),
+      },
+    ]
+    const row = conversations.value.find((item) => item.id === conversationId)
+    patchConversation(conversationId, {
+      message_count: (row?.message_count ?? 0) + 2,
+      update_time: formatNow(),
+    })
+    sortByRecent()
+  }
+
   async function sendWithAgent(content: string): Promise<boolean> {
     const text = content.trim()
     if (!text || activeThread.value.runningAgent) return false
@@ -355,66 +451,12 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       await sendAgentStream(conversationId, text, {
-        onEvent: (event: AgentStreamEvent) => {
-          const base = {
-            seq: 0,
-            content: null,
-            tool_name: null,
-            tool_args: null,
-            ok: null,
-            duration_ms: null,
-            create_time: formatNow(),
-          }
-          if (event.type === 'tool_call') {
-            thread.steps = [
-              ...thread.steps,
-              {
-                ...base,
-                seq: event.seq,
-                kind: 'tool_call',
-                tool_name: event.tool,
-                tool_args: event.args,
-              },
-            ]
-          } else if (event.type === 'tool_result') {
-            thread.steps = [
-              ...thread.steps,
-              {
-                ...base,
-                seq: event.seq,
-                kind: 'tool_result',
-                tool_name: event.tool,
-                content: event.content,
-                ok: event.ok,
-                duration_ms: event.duration_ms,
-              },
-            ]
-          } else if (event.type === 'assistant_text') {
-            thread.steps = [
-              ...thread.steps,
-              { ...base, seq: event.seq, kind: 'assistant_text', content: event.content },
-            ]
-          }
+        onEvent: (event: AgentStreamEvent) => applyAgentEvent(thread, event),
+        onApproval: () => {
+          // 服务端已经暂停：流结束，等用户点批准/拒绝
+          thread.runningAgent = false
         },
-        onFinished: (event) => {
-          thread.messages = [
-            ...thread.messages,
-            {
-              id: -Date.now() - 1,
-              conversation_id: conversationId,
-              role: 'assistant',
-              content: event.content,
-              model: event.model,
-              create_time: formatNow(),
-            },
-          ]
-          const row = conversations.value.find((item) => item.id === conversationId)
-          patchConversation(conversationId, {
-            message_count: (row?.message_count ?? 0) + 2,
-            update_time: formatNow(),
-          })
-          sortByRecent()
-        },
+        onFinished: (event) => appendAssistantMessage(thread, conversationId, event),
       })
       // 用服务端的真实 id / 时间覆盖乐观数据（写回它自己的 thread）
       const detail = await getConversation(conversationId)
@@ -437,9 +479,71 @@ export const useChatStore = defineStore('chat', () => {
   async function loadAgentRuns(conversationId: number) {
     const data = await listAgentRuns(conversationId)
     const latest = data.items[0]
-    threadOf(conversationId).steps = latest
-      ? latest.steps.filter((step) => step.kind !== 'final_answer')
-      : []
+    const thread = threadOf(conversationId)
+    thread.steps = latest ? latest.steps.filter((step) => step.kind !== 'final_answer') : []
+
+    // 刷新前挂起的审批要能复原，否则用户永远点不到那张卡片
+    if (latest?.status === 'waiting_approval') {
+      const pending = await listApprovals(latest.id)
+      const waiting = pending.find((item) => item.status === 'pending')
+      thread.approval = waiting
+        ? {
+            runId: waiting.run_id,
+            approvalId: waiting.id,
+            tool: waiting.tool_name,
+            args: waiting.tool_args,
+            reason: waiting.note ?? '',
+          }
+        : null
+    } else {
+      thread.approval = null
+    }
+  }
+
+  /** 批准或拒绝当前会话的挂起审批；服务端会接着跑完这次运行 */
+  async function decideApproval(decision: 'approve' | 'reject', note?: string): Promise<boolean> {
+    const conversationId = activeId.value
+    const pending = activeThread.value.approval
+    if (conversationId === null || pending === null) return false
+
+    const thread = threadOf(conversationId)
+    thread.approval = null
+    thread.runningAgent = true
+    thread.sending = true
+    try {
+      await decideApprovalStream(
+        pending.runId,
+        pending.approvalId,
+        decision,
+        {
+          onEvent: (event: AgentStreamEvent) => applyAgentEvent(thread, event),
+          onApproval: () => {
+            thread.runningAgent = false
+          },
+          onFinished: (event) => appendAssistantMessage(thread, conversationId, event),
+        },
+        note,
+      )
+      const detail = await getConversation(conversationId)
+      thread.messages = detail.messages
+      thread.loaded = true
+      patchConversation(conversationId, { title: detail.title })
+      return true
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '处理审批失败')
+      return false
+    } finally {
+      thread.runningAgent = false
+      thread.sending = false
+    }
+  }
+
+  function approveApproval(note?: string) {
+    return decideApproval('approve', note)
+  }
+
+  function rejectApproval(note?: string) {
+    return decideApproval('reject', note)
   }
 
   /** 退出登录时清空，避免下一个账号看到上一个人的会话 */
@@ -453,6 +557,7 @@ export const useChatStore = defineStore('chat', () => {
   return {
     agentMode,
     agentRunning,
+    pendingApproval,
     agentSteps,
     conversations,
     activeId,
@@ -476,6 +581,9 @@ export const useChatStore = defineStore('chat', () => {
     send,
     reset,
     sendWithAgent,
+    approveApproval,
+    rejectApproval,
+    decideApproval,
     loadAgentRuns,
     toggleAgentMode,
   }

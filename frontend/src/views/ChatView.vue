@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AgentTimeline from '@/components/chat/AgentTimeline.vue'
+import ApprovalCard from '@/components/chat/ApprovalCard.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmpty from '@/components/chat/ChatEmpty.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
@@ -46,6 +47,12 @@ function scrollToBottom() {
       if (el) el.scrollTop = el.scrollHeight
     })
   })
+}
+
+async function handleApproval(decision: 'approve' | 'reject', note?: string) {
+  const ok =
+    decision === 'approve' ? await chat.approveApproval(note) : await chat.rejectApproval(note)
+  if (ok) scrollToBottom()
 }
 
 async function handleSend() {
@@ -124,6 +131,14 @@ onMounted(async () => {
           <!-- 首字之前也要给一句状态，否则用户只看到三个点在跳 -->
           <span class="chat__meta">正在输入…</span>
         </div>
+
+        <!-- 写操作挂起时服务端已暂停，卡片插在消息列末尾等用户决定 -->
+        <ApprovalCard
+          v-if="chat.pendingApproval"
+          :approval="chat.pendingApproval"
+          :busy="chat.sending"
+          @decide="handleApproval"
+        />
       </div>
     </div>
 

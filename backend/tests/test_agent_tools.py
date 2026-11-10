@@ -121,3 +121,23 @@ def test_specs_are_json_schemas(db_session: Session):
     specs = {spec["name"]: spec for spec in registry.specs()}
     assert specs["calculator"]["parameters"]["required"] == ["expression"]
     assert specs["search_conversations"]["parameters"]["properties"]["limit"]["maximum"] == 10
+
+
+def test_rename_tool_defaults_to_current_conversation(db_session: Session):
+    """模型通常只说「把当前会话改名」，不给 id；注册表里的上下文要能补上。"""
+    from app.models import Conversation
+
+    conversation = Conversation(user_id=1, title="旧标题")
+    db_session.add(conversation)
+    db_session.commit()
+
+    registry = build_registry(db_session, conversation_id=conversation.id)
+    result = registry.execute("rename_conversation", '{"title": "周报"}', user_id=1)
+    assert result["ok"] is True
+    db_session.refresh(conversation)
+    assert conversation.title == "周报"
+
+    # 别的账号的会话不能被改
+    other = build_registry(db_session, conversation_id=conversation.id)
+    denied = other.execute("rename_conversation", '{"title": "黑掉"}', user_id=2)
+    assert denied["ok"] is False

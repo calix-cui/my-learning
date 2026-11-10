@@ -138,7 +138,7 @@ export interface AgentStep {
 /** 一次 agent 运行（含步骤，用于刷新后回放时间线） */
 export interface AgentRun {
   id: number
-  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled'
   step_count: number
   model: string | null
   started_time: string

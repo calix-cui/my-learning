@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from app.agent.tools import ToolRegistry
+from app.agent.tools.base import ToolLevel, ToolMeta
 
 # 单次运行的审批总量与「同一工具被拒次数」上限：防模型换个参数接着试
 MAX_APPROVALS_PER_RUN = 5
@@ -111,7 +112,7 @@ class ToolPolicy:
                     f"工具 {name} 已被拒绝 {MAX_REJECTS_PER_TOOL} 次，已中止",
                     fatal=True,
                 )
-            return Decision("approve", f"{name} 是 {meta.level} 级工具，需要你确认")
+            return Decision("approve", _approval_reason(meta))
         return Decision("allow")
 
     def _match_rule(self, name: str, arguments: dict[str, Any] | None) -> str | None:
@@ -137,3 +138,12 @@ __all__ = [
     "ParamRule",
     "ToolPolicy",
 ]
+
+
+def _approval_reason(meta: ToolMeta) -> str:
+    """给用户看的一句话：别把工具名重复一遍，卡片上已经有 chip 了。"""
+    return {
+        ToolLevel.WRITE: "这会改动你的数据，确认后才执行",
+        ToolLevel.EXTERNAL: "这会请求外部服务，确认后才执行",
+        ToolLevel.READ: "这次调用需要你确认",
+    }[meta.level]

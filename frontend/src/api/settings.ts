@@ -57,3 +57,52 @@ export async function saveAppearance(
   )
   return data.data
 }
+
+/** 工具清单：设置页要能逐个启停，并看到今日用量 */
+export interface ToolItem {
+  name: string
+  description: string
+  level: 'read' | 'write' | 'external'
+  enabled: boolean
+  requires_approval: boolean
+  calls_today: number
+}
+
+export interface ToolSettings {
+  items: ToolItem[]
+  daily_tool_budget: number
+  used_today: number
+}
+
+export interface ToolStatItem {
+  tool_name: string
+  calls: number
+  failures: number
+}
+
+export interface ToolStats {
+  days: number
+  items: ToolStatItem[]
+  total: number
+}
+
+export async function fetchToolSettings(): Promise<ToolSettings> {
+  const { data } = await client.get<ApiResponse<ToolSettings>>('/settings/tools')
+  return data.data
+}
+
+/** 整体替换「关掉的工具」列表；daily_tool_budget 不传表示不改 */
+export async function saveToolSettings(payload: {
+  disabled: string[]
+  daily_tool_budget?: number
+}): Promise<ToolSettings> {
+  const { data } = await client.put<ApiResponse<ToolSettings>>('/settings/tools', payload)
+  return data.data
+}
+
+export async function fetchToolStats(days = 7): Promise<ToolStats> {
+  const { data } = await client.get<ApiResponse<ToolStats>>('/settings/tools/stats', {
+    params: { days },
+  })
+  return data.data
+}

@@ -61,7 +61,7 @@ def stream_agent_run(
     conversation, run, messages, is_first = prepare_run(
         db, user_id=user.id, conversation_id=conversation_id, content=payload.content
     )
-    registry = registry_for(db, user.id)
+    registry = registry_for(db, user.id, conversation.id)
     events = stream_run(
         db,
         run=run,
@@ -149,7 +149,7 @@ def decide(
         approved=payload.decision == "approve",
         note=payload.note,
     )
-    registry = registry_for(db, user.id)
+    registry = registry_for(db, user.id, run.conversation_id)
     events = resume_run(
         db,
         run=run,

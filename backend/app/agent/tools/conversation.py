@@ -17,7 +17,9 @@ MAX_TITLE_LENGTH = 30
 
 
 class RenameArgs(BaseModel):
-    conversation_id: int = Field(ge=1, description="要改名的会话ID（必须是自己的会话）")
+    conversation_id: int | None = Field(
+        default=None, ge=1, description="要改名的会话ID；省略表示当前会话"
+    )
     title: str = Field(
         min_length=1,
         max_length=MAX_TITLE_LENGTH,
@@ -31,8 +33,10 @@ class RenameConversationTool:
     args_model = RenameArgs
     level = ToolLevel.WRITE
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, conversation_id: int | None = None) -> None:
         self._session = session
+        # 当前会话的 id：模型往往只给标题，不给 id，工具自己补上更符合「改这个会话」的语义
+        self._conversation_id = conversation_id
 
     def spec(self) -> dict[str, Any]:
         return spec_of(self)
@@ -43,9 +47,13 @@ class RenameConversationTool:
         if not title:
             raise ToolError("标题不能为空")
 
+        conversation_id = args.conversation_id or self._conversation_id
+        if conversation_id is None:
+            raise ToolError("没有指定要改名的会话")
+
         conversation = self._session.scalar(
             select(Conversation).where(
-                Conversation.id == args.conversation_id,
+                Conversation.id == conversation_id,
                 Conversation.user_id == user_id,
             )
         )

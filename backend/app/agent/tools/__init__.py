@@ -64,21 +64,30 @@ class BuiltinSource:
 
     name = "builtin"
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, conversation_id: int | None = None) -> None:
         self._session = session
+        # 会话 id 只用于「改当前会话」这类工具补默认参数，其他工具用不到
+        self._conversation_id = conversation_id
 
     def list(self) -> list[Tool]:
         return [
             CalculatorTool(),
             NowTool(),
             SearchConversationsTool(self._session),
-            RenameConversationTool(self._session),
+            RenameConversationTool(self._session, self._conversation_id),
         ]
 
 
-def build_registry(session: Session, *, disabled: Iterable[str] = ()) -> "ToolRegistry":
+def build_registry(
+    session: Session,
+    *,
+    disabled: Iterable[str] = (),
+    conversation_id: int | None = None,
+) -> "ToolRegistry":
     """按当前请求构造注册表；`disabled` 来自用户设置，被关掉的工具既不展示也执行不了。"""
-    return ToolRegistry.from_sources([BuiltinSource(session)], disabled=disabled)
+    return ToolRegistry.from_sources(
+        [BuiltinSource(session, conversation_id)], disabled=disabled
+    )
 
 
 class ToolRegistry:

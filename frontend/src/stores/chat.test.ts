@@ -54,9 +54,32 @@ vi.mock('@/components/ui/messageBox', () => ({
   promptDialog: vi.fn(async () => '新标题'),
 }))
 
+let agentHandlers: {
+  onEvent?: (event: unknown) => void
+  onFinished?: (event: unknown) => void
+  onApproval?: (event: unknown) => void
+} = {}
+
+let finishAgent: (() => void) | null = null
+
 vi.mock('@/api/agent', () => ({
   listAgentRuns: vi.fn(async () => ({ items: [] })),
-  sendAgentStream: vi.fn(),
+  listApprovals: vi.fn(async () => []),
+  // 写操作会挂起：先吐 approval_required，再由测试决定批准后怎么走
+  sendAgentStream: vi.fn(
+    (_id: number, _text: string, handlers: typeof agentHandlers) =>
+      new Promise<void>((resolve) => {
+        agentHandlers = handlers
+        finishAgent = resolve
+      }),
+  ),
+  decideApprovalStream: vi.fn(
+    (_runId: number, _approvalId: number, _decision: string, handlers: typeof agentHandlers) =>
+      new Promise<void>((resolve) => {
+        agentHandlers = handlers
+        finishAgent = resolve
+      }),
+  ),
 }))
 
 function msg(
@@ -153,5 +176,81 @@ describe('chat store：会话状态按会话隔离', () => {
     expect(chat.activeId).toBeNull()
     expect(chat.draft).toBe(true)
     expect(chat.messages).toEqual([])
+  })
+})
+
+describe('chat store · 工具审批', () => {
+  it('写工具挂起后给出待审批卡片，批准后落最终答复', async () => {
+    const chat = useChatStore()
+    await chat.loadConversations()
+    chat.agentMode = true
+
+    const sending = chat.sendWithAgent('把会话改名为周报')
+    await vi.waitFor(() => expect(agentHandlers.onEvent).toBeTruthy())
+
+    // 服务端先回一个 tool_call，再挂起等审批
+    agentHandlers.onEvent?.({
+      type: 'tool_call',
+      seq: 1,
+      tool: 'rename_conversation',
+      args: { title: '周报' },
+    })
+    agentHandlers.onEvent?.({
+      type: 'approval_required',
+      run_id: 7,
+      approval_id: 9,
+      seq: 2,
+      tool: 'rename_conversation',
+      args: { title: '周报' },
+      reason: '写操作需要确认',
+    })
+    agentHandlers.onApproval?.({
+      type: 'approval_required',
+      run_id: 7,
+      approval_id: 9,
+      seq: 2,
+      tool: 'rename_conversation',
+      args: { title: '周报' },
+      reason: '写操作需要确认',
+    })
+    finishAgent?.()
+    await sending
+
+    expect(chat.pendingApproval).toMatchObject({
+      runId: 7,
+      approvalId: 9,
+      tool: 'rename_conversation',
+      reason: '写操作需要确认',
+    })
+    expect(chat.agentRunning).toBe(false)
+
+    // 批准：服务端接着跑完这次运行
+    const deciding = chat.approveApproval()
+    await vi.waitFor(() => expect(agentHandlers.onEvent).toBeTruthy())
+    agentHandlers.onEvent?.({
+      type: 'tool_result',
+      seq: 3,
+      tool: 'rename_conversation',
+      ok: true,
+      content: '已改名为周报',
+      duration_ms: 8,
+    })
+    agentHandlers.onFinished?.({
+      type: 'run_finished',
+      run_id: 7,
+      content: '已经把会话改名为「周报」。',
+      steps: 3,
+      model: 'deepseek-chat',
+    })
+    finishAgent?.()
+    await deciding
+
+    expect(chat.pendingApproval).toBeNull()
+    // 收尾会重新拉一次会话详情覆盖消息，所以这里看时间线：工具真的执行了
+    expect(chat.agentSteps.at(-1)).toMatchObject({
+      kind: 'tool_result',
+      tool_name: 'rename_conversation',
+      ok: true,
+    })
   })
 })

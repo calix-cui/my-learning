@@ -122,7 +122,7 @@ def stream_run(
     policy: policy_module.ToolPolicy | None = None,
 ) -> Iterator[dict]:
     """跑循环并逐个产出事件。生成器被关闭（客户端断流）时把 run 标成 cancelled。"""
-    tools = registry or build_registry(db)
+    tools = registry or registry_for(db, user_id, conversation.id)
     tool_policy = policy or build_policy(db, user_id=user_id, registry=tools, run=run)
 
     yield events.run_started(run.id, conversation.id)
@@ -153,7 +153,7 @@ def resume_run(
 ) -> Iterator[dict]:
     """用户做出决定后继续跑：重放上下文 → 补上这次调用的结果 → 接着循环。"""
     conversation = chat_service.get_conversation(db, user_id, run.conversation_id)
-    tools = registry or build_registry(db)
+    tools = registry or registry_for(db, user_id, conversation.id)
     tool_policy = policy or build_policy(db, user_id=user_id, registry=tools, run=run)
     messages, pending = _replay_messages(db, run)
     state = LoopState(seq=_last_seq(db, run))
@@ -409,11 +409,11 @@ def _run_loop(
                 logger.exception("标记 agent 运行中断失败")
 
 
-def registry_for(db: Session, user_id: int) -> ToolRegistry:
+def registry_for(db: Session, user_id: int, conversation_id: int | None = None) -> ToolRegistry:
     """按账号设置装配注册表：被关掉的工具既不展示也执行不了。"""
     row = db.scalar(select(UserSettings).where(UserSettings.user_id == user_id))
     disabled = tuple(row.tools_disabled or []) if row is not None else ()
-    return build_registry(db, disabled=disabled)
+    return build_registry(db, disabled=disabled, conversation_id=conversation_id)
 
 
 def build_policy(
