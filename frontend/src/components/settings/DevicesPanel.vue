@@ -123,10 +123,12 @@ async function handleRevoke(item: LoginSession) {
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
+  border-radius: var(--ma-radius-md);
+  transition: background-color 0.15s ease;
 }
 
-.devices__item + .devices__item {
-  border-top: 1px solid var(--ma-color-line);
+.devices__item:hover {
+  background: color-mix(in srgb, var(--ma-color-ink) 4%, transparent);
 }
 
 .devices__meta {

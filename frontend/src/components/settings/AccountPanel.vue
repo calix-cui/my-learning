@@ -79,7 +79,7 @@ async function savePassword() {
       <p class="account__hint">显示在左下角与助手称呼里，最多 50 个字。</p>
     </div>
 
-    <div class="account__block account__block--divided">
+    <div class="account__block">
       <h3 class="account__label">修改密码</h3>
       <div class="account__form">
         <el-input
@@ -136,12 +136,6 @@ async function savePassword() {
 
 .account__block + .account__block {
   margin-top: 20px;
-}
-
-.account__block--divided {
-  padding-top: 20px;
-  margin-top: 28px;
-  border-top: 1px solid var(--ma-color-line);
 }
 
 .account__label {

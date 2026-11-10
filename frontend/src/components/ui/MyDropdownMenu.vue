@@ -15,8 +15,6 @@ export interface MenuItem {
   icon?: 'edit' | 'trash' | 'settings' | 'logout' | 'share' | 'sparkle' | 'plus'
   /** danger 用红色文字，只给删除、退出这类不可逆动作 */
   variant?: 'normal' | 'danger'
-  /** 与前一项之间画一条淡分隔线 */
-  divided?: boolean
 }
 
 const props = withDefaults(defineProps<{ items: MenuItem[]; align?: 'start' | 'end' }>(), {
@@ -101,10 +99,7 @@ onBeforeUnmount(detach)
           <button
             type="button"
             class="my-menu__item"
-            :class="{
-              'my-menu__item--danger': item.variant === 'danger',
-              'my-menu__item--divided': item.divided,
-            }"
+            :class="{ 'my-menu__item--danger': item.variant === 'danger' }"
             role="menuitem"
             @click="pick(item)"
           >
@@ -174,20 +169,6 @@ onBeforeUnmount(detach)
     color-mix(in srgb, var(--ma-color-danger) 10%, transparent),
     color-mix(in srgb, var(--ma-color-danger) 4%, transparent)
   );
-}
-
-.my-menu__item--divided {
-  position: relative;
-}
-
-.my-menu__item--divided::before {
-  position: absolute;
-  top: -4px;
-  right: 8px;
-  left: 8px;
-  height: 1px;
-  content: '';
-  background: var(--ma-color-line);
 }
 
 .my-menu-fade-enter-active,

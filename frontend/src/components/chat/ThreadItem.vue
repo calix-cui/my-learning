@@ -15,7 +15,7 @@ const emit = defineEmits<{ open: []; rename: []; remove: [] }>()
 
 const menuItems: MenuItem[] = [
   { key: 'rename', label: '重命名', icon: 'edit' },
-  { key: 'remove', label: '删除', icon: 'trash', variant: 'danger', divided: true },
+  { key: 'remove', label: '删除', icon: 'trash', variant: 'danger' },
 ]
 
 function handleCommand(command: string) {

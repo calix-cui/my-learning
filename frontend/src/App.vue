@@ -70,7 +70,7 @@ async function handleLogout() {
 
 const userMenuItems: MenuItem[] = [
   { key: 'settings', label: '系统设置', icon: 'settings' },
-  { key: 'logout', label: '退出登录', icon: 'logout', divided: true },
+  { key: 'logout', label: '退出登录', icon: 'logout' },
 ]
 
 async function handleUserCommand(command: string) {

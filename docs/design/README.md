@@ -160,6 +160,7 @@ cd frontend && node .shots-light.mjs /tmp/ui-shots   # 临时脚本，出浅色�
 - `MyDropdownMenu.vue`：面板 fixed 定位（不受 `overflow` 裁切）、点外部/Esc 关闭、`items` 描述项，`variant: 'danger'` 渲染红色；hover 用一层很淡的渐变而不是整块灰。
 - `MyMessageBox.vue` + `ui/messageBox.ts`：命令式 API `confirmDialog()` / `promptDialog()`，宿主在 `App.vue` 挂一次；标题 + 一行说明 + 右侧「取消 / 危险操作」两个胶囊按钮。
 - 选中态：`chat__item--active:hover` 保持选中色，不再随 hover 变化。
+- 菜单、列表、设置分节**都不带分割线**（2026-11-11 起）：分组靠间距（24/32px）、底色与阴影，规则见 [`DESIGN.md`](../../DESIGN.md) 的「边界规则：不要轻易加分割线」。
 
 界面上的文字只保留必要信息：删掉了「助手」标签、消息条数、字数计数、空态的长说明。
 

@@ -323,8 +323,7 @@ async function clearKey() {
   justify-content: space-between;
   gap: 12px;
   padding-top: 20px;
-  margin-top: 24px;
-  border-top: 1px solid var(--ma-color-line);
+  margin-top: 32px;
 }
 
 .model__result {
