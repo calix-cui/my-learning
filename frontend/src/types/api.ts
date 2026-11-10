@@ -121,3 +121,32 @@ export interface AppearanceSettings {
   theme_mode: 'light' | 'dark' | 'system' | null
   update_time: string | null
 }
+
+/** Agent 运行的一步（与后端 agent_steps 对应） */
+export interface AgentStep {
+  seq: number
+  /** user_message / assistant_text / tool_call / tool_result / final_answer */
+  kind: string
+  content: string | null
+  tool_name: string | null
+  tool_args: Record<string, unknown> | null
+  ok: boolean | null
+  duration_ms: number | null
+  create_time: string
+}
+
+/** 一次 agent 运行（含步骤，用于刷新后回放时间线） */
+export interface AgentRun {
+  id: number
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  step_count: number
+  model: string | null
+  started_time: string
+  finished_time: string | null
+  error_message: string | null
+  steps: AgentStep[]
+}
+
+export interface AgentRunList {
+  items: AgentRun[]
+}

@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ChatDotRound, Plus } from '@element-plus/icons-vue'
 
+import AgentTimeline from '@/components/chat/AgentTimeline.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import { useChatStore } from '@/stores/chat'
@@ -17,6 +18,17 @@ const hasConversation = computed(() => chat.activeId !== null)
 const showEmptyState = computed(
   () => !chat.loadingMessages && chat.messages.length === 0 && !chat.streamingText,
 )
+
+/** 时间线跟着「这一次运行」走：有步骤或正在跑才显示 */
+const showTimeline = computed(() => chat.agentSteps.length > 0 || chat.agentRunning)
+
+/** 时间线插在最后一条用户消息之后，保证「问 → 过程 → 答」的阅读顺序 */
+const lastUserIndex = computed(() => {
+  for (let i = chat.messages.length - 1; i >= 0; i -= 1) {
+    if (chat.messages[i].role === 'user') return i
+  }
+  return -1
+})
 
 const subtitle = computed(() => {
   if (!hasConversation.value) return '选择或新建一个会话'
@@ -37,7 +49,7 @@ async function handleSend() {
   const content = draft.value
   if (!content.trim()) return
   // 失败时保留草稿，用户不用重打；成功才清空
-  const ok = await chat.send(content)
+  const ok = chat.agentMode ? await chat.sendWithAgent(content) : await chat.send(content)
   if (ok) {
     draft.value = ''
     composer.value?.focus()
@@ -51,6 +63,11 @@ async function handleCreate() {
 }
 
 watch(() => chat.activeId, scrollToBottom)
+// 深度回答的步骤是逐个到达的，来一步滚一次
+watch(
+  () => chat.agentSteps.length,
+  () => scrollToBottom(),
+)
 watch(() => chat.streamingText, scrollToBottom)
 watch(
   () => chat.messages.length,
@@ -65,6 +82,10 @@ onMounted(async () => {
   if (chat.activeId === null && chat.conversations.length) {
     await chat.openConversation(chat.conversations[0].id)
   }
+  // 刷新回来时把上一次的工具过程也带回来
+  if (chat.activeId !== null) {
+    await chat.loadAgentRuns(chat.activeId)
+  }
 })
 </script>
 
@@ -77,6 +98,20 @@ onMounted(async () => {
           {{ hasConversation ? chat.activeTitle : '对话' }}
         </h2>
         <p class="chat__sub">{{ subtitle }}</p>
+      </div>
+
+      <!-- 深度回答：开启后走 agent 循环（可调工具），过程在时间线里可见 -->
+      <div class="chat__mode">
+        <el-switch
+          :model-value="chat.agentMode"
+          size="small"
+          aria-label="深度回答"
+          @update:model-value="
+            (value: string | number | boolean) => chat.toggleAgentMode(value === true)
+          "
+        />
+        <span class="chat__mode-label">深度回答</span>
+        <span class="chat__mode-hint">可调用计算器、时间、历史检索</span>
       </div>
     </header>
 
@@ -98,7 +133,15 @@ onMounted(async () => {
       </div>
 
       <div v-else class="chat__col">
-        <ChatMessage v-for="message in chat.messages" :key="message.id" :message="message" />
+        <template v-for="(message, index) in chat.messages" :key="message.id">
+          <ChatMessage :message="message" />
+          <AgentTimeline
+            v-if="chat.agentMode && showTimeline && index === lastUserIndex"
+            class="chat__timeline"
+            :steps="chat.agentSteps"
+            :running="chat.agentRunning"
+          />
+        </template>
 
         <!-- 流式过程中的临时气泡：先显示已收到的半截文本，收到首字前显示三点 -->
         <div v-if="chat.streamingText" class="chat__row chat__row--assistant">
@@ -108,7 +151,10 @@ onMounted(async () => {
           </div>
           <span class="chat__meta">正在输入…</span>
         </div>
-        <div v-else-if="chat.sending" class="chat__row chat__row--assistant">
+        <div
+          v-else-if="chat.sending && !(chat.agentMode && chat.agentSteps.length)"
+          class="chat__row chat__row--assistant"
+        >
           <span class="chat__who"><i />助手</span>
           <div class="chat__bubble chat__bubble--streaming">
             <span class="chat__dots"><i /><i /><i /></span>
@@ -167,6 +213,28 @@ onMounted(async () => {
   margin: 2px 0 0;
   font-size: 13px;
   color: var(--ma-color-muted);
+}
+
+.chat__mode {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ma-color-muted);
+  cursor: pointer;
+}
+
+.chat__mode-label {
+  color: var(--ma-color-ink);
+}
+
+.chat__mode-hint {
+  color: var(--ma-color-faint);
+}
+
+.chat__timeline {
+  margin: 4px 0 16px;
 }
 
 .chat__scroll {

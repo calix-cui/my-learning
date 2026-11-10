@@ -10,7 +10,26 @@ import {
   renameConversation,
   sendMessageStream,
 } from '@/api/chat'
-import type { ChatConversationListItem, ChatMessage } from '@/types/api'
+import { listAgentRuns, sendAgentStream, type AgentStreamEvent } from '@/api/agent'
+import type { AgentStep, ChatConversationListItem, ChatMessage } from '@/types/api'
+
+const AGENT_MODE_KEY = 'my-agent.agent-mode'
+
+/** 读回上次的「深度回答」开关；读不到就当关（省 token 是默认值） */
+function readAgentMode(): boolean {
+  try {
+    return window.localStorage.getItem(AGENT_MODE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** 前端本地时间，格式与后端一致：YYYY-MM-DD HH:mm:ss */
+function formatNow(): string {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+}
 
 /**
  * 会话状态提升到 store：侧边栏（会话列表）与对话页（消息区）要同时读写，
@@ -26,6 +45,11 @@ export const useChatStore = defineStore('chat', () => {
   const sending = ref(false)
   /** 流式过程中已收到的文本；空字符串表示还在等第一个字符 */
   const streamingText = ref('')
+  /** 是否用「深度回答」（agent 循环 + 工具）代替一问一答；默认关，省 token */
+  const agentMode = ref(readAgentMode())
+  /** 当前这次运行的步骤时间线（工具往返过程） */
+  const agentSteps = ref<AgentStep[]>([])
+  const agentRunning = ref(false)
 
   const activeConversation = computed(
     () => conversations.value.find((item) => item.id === activeId.value) ?? null,
@@ -186,16 +210,142 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function toggleAgentMode(value: boolean) {
+    agentMode.value = value
+    // 记住选择：刷新后仍是同一模式（用户刚开过就说明正在用）
+    try {
+      window.localStorage.setItem(AGENT_MODE_KEY, value ? '1' : '0')
+    } catch {
+      // 隐私模式下 localStorage 可能不可写，忽略即可
+    }
+  }
+
+  /** 用 agent 循环发一条消息：过程进时间线，最终答复进 messages */
+  async function sendWithAgent(content: string): Promise<boolean> {
+    const text = content.trim()
+    if (!text || agentRunning.value) return false
+
+    let conversationId = activeId.value
+    if (conversationId === null) {
+      conversationId = await createNew()
+    }
+    if (conversationId === null) return false
+
+    const optimisticId = -Date.now()
+    messages.value = [
+      ...messages.value,
+      {
+        id: optimisticId,
+        conversation_id: conversationId,
+        role: 'user',
+        content: text,
+        model: null,
+        create_time: formatNow(),
+      },
+    ]
+    agentSteps.value = []
+    agentRunning.value = true
+    sending.value = true
+
+    try {
+      await sendAgentStream(conversationId, text, {
+        onEvent: (event: AgentStreamEvent) => {
+          const base = {
+            seq: 0,
+            content: null,
+            tool_name: null,
+            tool_args: null,
+            ok: null,
+            duration_ms: null,
+            create_time: formatNow(),
+          }
+          if (event.type === 'tool_call') {
+            agentSteps.value = [
+              ...agentSteps.value,
+              {
+                ...base,
+                seq: event.seq,
+                kind: 'tool_call',
+                tool_name: event.tool,
+                tool_args: event.args,
+              },
+            ]
+          } else if (event.type === 'tool_result') {
+            agentSteps.value = [
+              ...agentSteps.value,
+              {
+                ...base,
+                seq: event.seq,
+                kind: 'tool_result',
+                tool_name: event.tool,
+                content: event.content,
+                ok: event.ok,
+                duration_ms: event.duration_ms,
+              },
+            ]
+          } else if (event.type === 'assistant_text') {
+            agentSteps.value = [
+              ...agentSteps.value,
+              { ...base, seq: event.seq, kind: 'assistant_text', content: event.content },
+            ]
+          }
+        },
+        onFinished: (event) => {
+          messages.value = [
+            ...messages.value,
+            {
+              id: -Date.now() - 1,
+              conversation_id: conversationId,
+              role: 'assistant',
+              content: event.content,
+              model: event.model,
+              create_time: formatNow(),
+            },
+          ]
+          patchConversation(conversationId, {
+            message_count: (activeConversation.value?.message_count ?? 0) + 2,
+            update_time: formatNow(),
+          })
+          sortByRecent()
+        },
+      })
+      // 用服务端的真实 id / 时间覆盖乐观数据
+      const detail = await getConversation(conversationId)
+      messages.value = detail.messages
+      patchConversation(conversationId, { title: detail.title })
+      return true
+    } catch (error) {
+      messages.value = messages.value.filter((item) => item.id !== optimisticId)
+      ElMessage.error(error instanceof Error ? error.message : '深度回答失败')
+      return false
+    } finally {
+      agentRunning.value = false
+      sending.value = false
+    }
+  }
+
+  /** 打开会话时拉一次最近的运行，刷新后仍能看到上次的工具过程 */
+  async function loadAgentRuns(conversationId: number) {
+    const data = await listAgentRuns(conversationId)
+    const latest = data.items[0]
+    agentSteps.value = latest ? latest.steps.filter((step) => step.kind !== 'final_answer') : []
+  }
+
   /** 退出登录时清空，避免下一个账号看到上一个人的会话 */
   function reset() {
     conversations.value = []
     activeId.value = null
     messages.value = []
     streamingText.value = ''
+    agentSteps.value = []
+    agentRunning.value = false
     sending.value = false
   }
 
   return {
+    agentMode,
+    agentRunning,
+    agentSteps,
     conversations,
     activeId,
     messages,
@@ -213,5 +363,8 @@ export const useChatStore = defineStore('chat', () => {
     remove,
     send,
     reset,
+    sendWithAgent,
+    loadAgentRuns,
+    toggleAgentMode,
   }
 })
