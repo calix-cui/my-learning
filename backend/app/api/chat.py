@@ -1,11 +1,10 @@
-import json
-from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api.sse import SSE_HEADERS, encode_sse
 from app.auth.dependencies import CurrentUser
 from app.common.response import Response
 from app.dependencies import get_db
@@ -133,13 +132,6 @@ def send_message(
     )
 
 
-def _sse(events: Iterator[dict]) -> Iterator[str]:
-    """把事件字典编码成 SSE 帧：`data: {json}\n\n`。"""
-    for event in events:
-        # ensure_ascii=False：中文直接输出，不转成 \uXXXX，方便 curl 观察
-        yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-
-
 @router.post(
     "/{conversation_id}/messages/stream",
     summary="发送消息（流式）",
@@ -168,11 +160,7 @@ def stream_message(
     )
     events = chat_service.stream_reply(db, conversation, user_message, context, is_first, llm)
     return StreamingResponse(
-        _sse(events),
+        encode_sse(events),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            # 关掉 nginx 的响应缓冲，否则 delta 会被攒到最后一次性吐出
-            "X-Accel-Buffering": "no",
-        },
+        headers=SSE_HEADERS,
     )

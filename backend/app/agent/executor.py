@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.agent import events
 from app.agent.tools import ToolRegistry, build_registry
+from app.common.exceptions import BusinessError
 from app.llm import LLMClient, LLMError
 from app.llm.base import LLMMessage, ToolCall
 from app.models import AgentRun, AgentStep, Conversation, Message
@@ -52,7 +53,7 @@ def prepare_run(
     conversation = chat_service.get_conversation(db, user_id, conversation_id)
     text = content.strip()
     if not text:
-        raise ValueError("empty")
+        raise BusinessError("消息内容不能只包含空白")
 
     running = db.scalar(
         select(AgentRun.id).where(
@@ -60,7 +61,7 @@ def prepare_run(
         )
     )
     if running is not None:
-        raise RuntimeError("busy")
+        raise BusinessError("这个会话正在生成回复，请稍后再试", code=409)
 
     message_count = db.scalar(
         select(func.count(Message.id)).where(Message.conversation_id == conversation_id)
@@ -178,6 +179,8 @@ def stream_run(
                     kind=STEP_TOOL_CALL,
                     tool_name=call["name"],
                     content=None,
+                    # 参数在这里先落一份（模型给的原始 JSON），前端时间线可以「先看到要调什么」
+                    tool_args=_safe_json(call["arguments"]),
                 )
                 db.commit()
                 yield events.tool_call(seq, call["name"], _safe_json(call["arguments"]))
