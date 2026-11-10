@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.tools.base import ToolError, spec_of
+from app.agent.tools.base import ToolError, ToolLevel, spec_of
 from app.models import Conversation
 
 MAX_KEYWORD_LENGTH = 50
@@ -29,6 +29,7 @@ class SearchConversationsTool:
     name = "search_conversations"
     description = "在用户自己的历史会话标题里按关键词检索，返回最匹配的几条（只会看到自己的数据）。"
     args_model = SearchArgs
+    level = ToolLevel.READ
 
     def __init__(self, session: Session) -> None:
         self._session = session

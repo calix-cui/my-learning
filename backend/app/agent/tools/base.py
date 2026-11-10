@@ -9,9 +9,48 @@
 
 import json
 import time
+from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, ValidationError
+
+
+class ToolLevel(StrEnum):
+    """工具的风险级别。决定「能不能直接跑」，也是审批的默认依据。
+
+    - READ：只读本地数据，直接执行；
+    - WRITE：写本地数据，默认要用户点一下；
+    - EXTERNAL：出站访问外部服务，默认要用户点一下。
+    """
+
+    READ = "read"
+    WRITE = "write"
+    EXTERNAL = "external"
+
+
+# 级别 → 是否默认需要审批。READ 永远直跑，写/外网必须经人。
+DEFAULT_APPROVAL: dict[ToolLevel, bool] = {
+    ToolLevel.READ: False,
+    ToolLevel.WRITE: True,
+    ToolLevel.EXTERNAL: True,
+}
+
+
+@dataclass(frozen=True)
+class ToolMeta:
+    """工具的运行期元数据：执行器与策略层只认它，不认识具体工具。"""
+
+    name: str
+    description: str
+    level: ToolLevel
+    timeout_seconds: float = 2.0
+    source: str = "builtin"
+    requires_approval: bool = False
+
+    @property
+    def read_only(self) -> bool:
+        return self.level is ToolLevel.READ
 
 
 class ToolSpec(TypedDict):
@@ -37,7 +76,11 @@ class ToolError(Exception):
 
 
 class Tool(Protocol):
-    """一个可被模型调用的工具。"""
+    """一个可被模型调用的工具。
+
+    `level` 与 `timeout_seconds` 是可选的类属性：不声明就按只读、2 秒处理，
+    这样老工具不用改一行就能接入注册表。
+    """
 
     name: str
     description: str
@@ -48,6 +91,24 @@ class Tool(Protocol):
         ...
 
     def spec(self) -> ToolSpec: ...
+
+
+def meta_of(tool: Tool, *, source: str = "builtin") -> ToolMeta:
+    """从工具自身声明推导元数据；未声明的一律按最保守的默认值处理。"""
+    level = getattr(tool, "level", ToolLevel.READ)
+    if not isinstance(level, ToolLevel):
+        level = ToolLevel(str(level))
+    requires_approval = getattr(tool, "requires_approval", None)
+    if requires_approval is None:
+        requires_approval = DEFAULT_APPROVAL[level]
+    return ToolMeta(
+        name=tool.name,
+        description=tool.description,
+        level=level,
+        timeout_seconds=float(getattr(tool, "timeout_seconds", 2.0)),
+        source=source,
+        requires_approval=bool(requires_approval),
+    )
 
 
 def spec_of(tool: Tool) -> ToolSpec:

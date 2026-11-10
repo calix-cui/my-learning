@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field
 
-from app.agent.tools.base import ToolError, spec_of
+from app.agent.tools.base import ToolError, ToolLevel, spec_of
 
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 
@@ -28,6 +28,7 @@ class NowTool:
         "获取当前日期与时间（含星期）。用户问「现在几点/今天几号」时用它，不要凭记忆回答。"
     )
     args_model = NowArgs
+    level = ToolLevel.READ
 
     def spec(self) -> dict[str, Any]:
         return spec_of(self)

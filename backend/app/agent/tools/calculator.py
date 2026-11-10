@@ -11,7 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.agent.tools.base import ToolError
+from app.agent.tools.base import ToolError, ToolLevel
 
 MAX_EXPRESSION_LENGTH = 200
 
@@ -88,6 +88,7 @@ class CalculatorTool:
         "计算算术表达式，支持 + - * / // % 与幂（** 或 ^）。需要精确数值时用它，不要心算。"
     )
     args_model = CalculatorArgs
+    level = ToolLevel.READ
 
     def spec(self) -> dict[str, Any]:
         from app.agent.tools.base import spec_of
