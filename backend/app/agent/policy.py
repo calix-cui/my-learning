@@ -98,9 +98,7 @@ class ToolPolicy:
 
         if meta.requires_approval:
             if self.approvals_used >= MAX_APPROVALS_PER_RUN:
-                return Decision(
-                    "deny", f"本次运行审批次数已达上限（{MAX_APPROVALS_PER_RUN} 次）"
-                )
+                return Decision("deny", f"本次运行审批次数已达上限（{MAX_APPROVALS_PER_RUN} 次）")
             if self.rejects_by_tool.get(name, 0) >= MAX_REJECTS_PER_TOOL:
                 return Decision("deny", f"工具 {name} 已被拒绝 {MAX_REJECTS_PER_TOOL} 次，已中止")
             return Decision("approve", f"{name} 是 {meta.level} 级工具，需要你确认")

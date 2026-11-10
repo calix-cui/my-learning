@@ -5,7 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.service import register_user
-from app.models import AgentRun, AgentStep, Conversation
+from app.models import AgentApproval, AgentRun, AgentStep, Conversation, UserSettings
+from app.models.user_settings import DEFAULT_DAILY_TOOL_BUDGET
 
 
 def _run(session: Session, user_id: int, conversation_id: int) -> AgentRun:
@@ -104,3 +105,39 @@ def test_deleting_user_removes_runs_and_steps(db_session: Session):
 
     assert db_session.query(AgentRun).count() == 0
     assert db_session.query(AgentStep).count() == 0
+
+
+def test_approvals_belong_to_run_and_cascade(db_session: Session):
+    user = register_user(db_session, "approval-model@example.com", "password123")
+    conversation = _conversation(db_session, user.id)
+    run = _run(db_session, user.id, conversation.id)
+
+    approval = AgentApproval(
+        run_id=run.id,
+        user_id=user.id,
+        seq=2,
+        tool_name="rename_conversation",
+        tool_args={"title": "新名字"},
+    )
+    db_session.add(approval)
+    db_session.commit()
+
+    assert run.approvals[0].tool_name == "rename_conversation"
+    # 默认是 pending：审批状态在库里，进程重启也还能处理
+    assert run.approvals[0].status == "pending"
+    assert run.approvals[0].decided_time is None
+
+    db_session.delete(run)
+    db_session.commit()
+    assert db_session.query(AgentApproval).filter_by(run_id=run.id).count() == 0
+
+
+def test_user_settings_tool_columns_have_defaults(db_session: Session):
+    user = register_user(db_session, "tool-settings@example.com", "password123")
+    settings = UserSettings(user_id=user.id)
+    db_session.add(settings)
+    db_session.commit()
+    db_session.refresh(settings)
+
+    assert settings.tools_disabled == []
+    assert settings.daily_tool_budget == DEFAULT_DAILY_TOOL_BUDGET

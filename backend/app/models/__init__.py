@@ -7,6 +7,7 @@
 2. 明确本包对外的公开接口。
 """
 
+from app.models.agent_approval import AgentApproval
 from app.models.agent_run import AgentRun
 from app.models.agent_step import AgentStep
 from app.models.conversation import Conversation
@@ -16,6 +17,7 @@ from app.models.user import User
 from app.models.user_settings import UserSettings
 
 __all__ = [
+    "AgentApproval",
     "AgentRun",
     "AgentStep",
     "Conversation",

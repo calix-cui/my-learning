@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 DEFAULT_TIMEOUT_SECONDS = 30
+# 每个账号每日工具调用上限；阶段 6 先用默认值，够用再开放给用户改
+DEFAULT_DAILY_TOOL_BUDGET = 500
 DEFAULT_PROVIDER = "fake"
 
 
@@ -56,6 +58,21 @@ class UserSettings(Base):
     # 外观：为空表示「这个账号没存过」，前端用本机 localStorage 的值
     theme_id: Mapped[str | None] = mapped_column(
         String(32), nullable=True, comment="主题 id（如 pine），未同步时为 NULL"
+    )
+    # 阶段 6：被用户关掉的工具名数组；空数组表示「全开」
+    tools_disabled: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default=text("('[]')"),
+        comment="被关闭的工具名列表",
+    )
+    daily_tool_budget: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_DAILY_TOOL_BUDGET,
+        server_default=text("500"),
+        comment="每日工具调用上限",
     )
     theme_mode: Mapped[str | None] = mapped_column(
         String(10), nullable=True, comment="明暗模式：light / dark / system"

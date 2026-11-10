@@ -11,7 +11,7 @@ from app.agent.policy import (
     ToolPolicy,
 )
 from app.agent.tools import ToolLevel, ToolRegistry
-from app.agent.tools.base import ToolSpec, spec_of
+from app.agent.tools.base import spec_of
 
 
 class _EmptyArgs(BaseModel):

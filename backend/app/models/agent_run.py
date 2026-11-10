@@ -16,12 +16,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
+    from app.models.agent_approval import AgentApproval
     from app.models.agent_step import AgentStep
     from app.models.conversation import Conversation
     from app.models.user import User
 
 # 运行状态：running 是进行中，其余都是终态
 RUN_RUNNING = "running"
+# 等用户确认某次工具调用；状态持久化在库里，进程重启也能继续
+RUN_WAITING_APPROVAL = "waiting_approval"
 RUN_COMPLETED = "completed"
 RUN_FAILED = "failed"
 RUN_CANCELLED = "cancelled"
@@ -50,7 +53,7 @@ class AgentRun(Base):
         String(16),
         nullable=False,
         default=RUN_RUNNING,
-        comment="running/completed/failed/cancelled",
+        comment="running/waiting_approval/completed/failed/cancelled",
     )
     step_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, comment="已执行的步骤数"
@@ -71,8 +74,20 @@ class AgentRun(Base):
         cascade="all, delete-orphan",
         order_by="AgentStep.seq",
     )
+    approvals: Mapped[list["AgentApproval"]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="AgentApproval.id",
+    )
     conversation: Mapped["Conversation"] = relationship(back_populates="agent_runs")
     user: Mapped["User"] = relationship(back_populates="agent_runs")
 
 
-__all__ = ["AgentRun", "RUN_CANCELLED", "RUN_COMPLETED", "RUN_FAILED", "RUN_RUNNING"]
+__all__ = [
+    "AgentRun",
+    "RUN_CANCELLED",
+    "RUN_COMPLETED",
+    "RUN_FAILED",
+    "RUN_RUNNING",
+    "RUN_WAITING_APPROVAL",
+]
