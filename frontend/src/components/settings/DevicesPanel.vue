@@ -128,7 +128,11 @@ async function handleRevoke(item: LoginSession) {
 }
 
 .devices__item:hover {
-  background: color-mix(in srgb, var(--ma-color-ink) 4%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ma-color-ink) 6%, transparent),
+    color-mix(in srgb, var(--ma-color-ink) 2%, transparent)
+  );
 }
 
 .devices__meta {

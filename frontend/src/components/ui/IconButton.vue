@@ -39,18 +39,26 @@ withDefaults(
   border: 0;
   border-radius: 999px;
   transition:
-    background-color 0.15s ease,
+    background 0.15s ease,
     color 0.15s ease;
 }
 
 .icon-button:hover {
   color: var(--ma-color-ink);
-  background: color-mix(in srgb, var(--ma-color-ink) 6%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ma-color-ink) 7%, transparent),
+    color-mix(in srgb, var(--ma-color-ink) 3%, transparent)
+  );
 }
 
 .icon-button.is-active,
 .icon-button:active {
-  background: color-mix(in srgb, var(--ma-color-ink) 10%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ma-color-ink) 12%, transparent),
+    color-mix(in srgb, var(--ma-color-ink) 7%, transparent)
+  );
 }
 
 .icon-button:focus-visible {

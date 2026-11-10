@@ -84,7 +84,11 @@ const activeComponent = computed(
 
 .settings__item:hover {
   color: var(--ma-color-ink);
-  background: var(--ma-color-sunken);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ma-color-ink) 7%, transparent),
+    color-mix(in srgb, var(--ma-color-ink) 3%, transparent)
+  );
 }
 
 .settings__item.is-active {

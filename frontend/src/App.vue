@@ -102,11 +102,19 @@ async function handleUserCommand(command: string) {
       <div class="layout__aside-footer">
         <MyDropdownMenu :items="userMenuItems" align="start" @select="handleUserCommand">
           <template #default="{ toggle }">
-            <button type="button" class="layout__user-trigger" @click="toggle">
+            <div
+              class="layout__user-trigger"
+              role="button"
+              tabindex="0"
+              aria-label="账号菜单"
+              @click="toggle"
+              @keydown.enter.prevent="toggle"
+              @keydown.space.prevent="toggle"
+            >
               <span class="layout__avatar">{{ session.avatarText }}</span>
               <span class="layout__user-name">{{ session.displayName }}</span>
               <AppIcon name="more" :size="16" class="layout__user-more" />
-            </button>
+            </div>
           </template>
         </MyDropdownMenu>
       </div>
@@ -188,7 +196,11 @@ async function handleUserCommand(command: string) {
 }
 
 .layout__user-trigger:hover {
-  background: color-mix(in srgb, var(--ma-color-ink) 4%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ma-color-ink) 7%, transparent),
+    color-mix(in srgb, var(--ma-color-ink) 3%, transparent)
+  );
 }
 
 .layout__user-trigger:focus-visible {

@@ -57,7 +57,11 @@ function handleCommand(command: string) {
 }
 
 .chat__item:hover {
-  background: color-mix(in srgb, var(--ma-color-ink) 5%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ma-color-ink) 7%, transparent),
+    color-mix(in srgb, var(--ma-color-ink) 3%, transparent)
+  );
 }
 
 /* 选中项 hover 时保持选中色，避免鼠标一划过就「看起来被取消选中」 */
