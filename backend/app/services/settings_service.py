@@ -7,9 +7,10 @@
 """
 
 import time
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.common import crypto
@@ -17,7 +18,8 @@ from app.common.exceptions import BusinessError
 from app.config import settings
 from app.llm import ModelConfig, build_llm_for, config_from_env, config_from_row
 from app.llm.base import ChatMessage, LLMError, LLMTimeoutError
-from app.models import UserSettings
+from app.models import AgentRun, AgentStep, UserSettings
+from app.models.agent_step import STEP_TOOL_CALL
 from app.schemas.settings import (
     AppearanceSettingsResponse,
     AppearanceSettingsUpdateRequest,
@@ -25,10 +27,18 @@ from app.schemas.settings import (
     ModelSettingsUpdateRequest,
     ModelTestRequest,
     ModelTestResponse,
+    ToolItem,
+    ToolSettingsResponse,
+    ToolSettingsUpdateRequest,
+    ToolStatItem,
+    ToolStatsResponse,
 )
 
 # 自测发的内容尽量小：一次十几 token，不烧额度
 PING_MESSAGE = "ping"
+
+# 与策略层保持同一个默认值；这里不 import 策略模块，避免服务层依赖 agent 包
+DEFAULT_DAILY_TOOL_BUDGET = 500
 
 
 def get_settings_row(db: Session, user_id: int) -> UserSettings | None:
@@ -235,3 +245,93 @@ def update_appearance(
         theme_mode=row.theme_mode,  # type: ignore[arg-type]
         update_time=row.update_time,
     )
+
+
+def read_tool_settings(db: Session, user_id: int) -> ToolSettingsResponse:
+    """工具清单 + 今日用量。注册表按用户设置装配，所以禁用项一眼可见。"""
+    from app.agent.executor import registry_for
+
+    row = get_settings_row(db, user_id)
+    disabled = set(row.tools_disabled or []) if row is not None else set()
+    budget = (
+        row.daily_tool_budget
+        if row is not None and row.daily_tool_budget
+        else DEFAULT_DAILY_TOOL_BUDGET
+    )
+    registry = registry_for(db, user_id)
+    counts = _today_tool_counts(db, user_id)
+
+    items = [
+        ToolItem(
+            name=meta.name,
+            description=meta.description,
+            level=meta.level.value,
+            enabled=meta.name not in disabled,
+            requires_approval=meta.requires_approval,
+            calls_today=counts.get(meta.name, 0),
+        )
+        for meta in registry.metas()
+    ]
+    used = sum(counts.values())
+    return ToolSettingsResponse(items=items, daily_tool_budget=budget, used_today=used)
+
+
+def update_tool_settings(
+    db: Session, user_id: int, payload: ToolSettingsUpdateRequest
+) -> ToolSettingsResponse:
+    from app.agent.executor import registry_for
+
+    known = {meta.name for meta in registry_for(db, user_id).metas()}
+    unknown = [name for name in payload.disabled if name not in known]
+    if unknown:
+        raise BusinessError(f"没有这些工具：{'、'.join(unknown)}")
+
+    row = _get_or_create(db, user_id)
+    row.tools_disabled = list(dict.fromkeys(payload.disabled))
+    if payload.daily_tool_budget is not None:
+        row.daily_tool_budget = payload.daily_tool_budget
+    db.commit()
+    db.refresh(row)
+    return read_tool_settings(db, user_id)
+
+
+def read_tool_stats(db: Session, user_id: int, *, days: int = 7) -> ToolStatsResponse:
+    """按天回溯统计：调用次数与失败次数，给设置页一张小表。"""
+    since = datetime.now() - timedelta(days=days - 1)  # noqa: DTZ005
+    rows = db.execute(
+        select(AgentStep.tool_name, AgentStep.ok, func.count(AgentStep.id))
+        .join(AgentRun, AgentRun.id == AgentStep.run_id)
+        .where(
+            AgentRun.user_id == user_id,
+            AgentStep.kind == STEP_TOOL_CALL,
+            AgentStep.create_time >= since,
+        )
+        .group_by(AgentStep.tool_name, AgentStep.ok)
+    ).all()
+
+    stats: dict[str, ToolStatItem] = {}
+    for tool_name, ok, count in rows:
+        item = stats.setdefault(
+            str(tool_name), ToolStatItem(tool_name=str(tool_name), calls=0, failures=0)
+        )
+        item.calls += count
+        if ok is False:
+            item.failures += count
+
+    items = sorted(stats.values(), key=lambda entry: entry.calls, reverse=True)
+    return ToolStatsResponse(days=days, items=items, total=sum(entry.calls for entry in items))
+
+
+def _today_tool_counts(db: Session, user_id: int) -> dict[str, int]:
+    today = datetime.now().date()  # noqa: DTZ005
+    rows = db.execute(
+        select(AgentStep.tool_name, func.count(AgentStep.id))
+        .join(AgentRun, AgentRun.id == AgentStep.run_id)
+        .where(
+            AgentRun.user_id == user_id,
+            AgentStep.kind == STEP_TOOL_CALL,
+            func.date(AgentStep.create_time) == today,
+        )
+        .group_by(AgentStep.tool_name)
+    ).all()
+    return {str(name): count for name, count in rows}

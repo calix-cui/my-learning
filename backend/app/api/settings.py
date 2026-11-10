@@ -17,6 +17,7 @@ from app.schemas.settings import (
     AppearanceSettingsUpdateRequest,
     ModelSettingsUpdateRequest,
     ModelTestRequest,
+    ToolSettingsUpdateRequest,
 )
 from app.services import export_service, settings_service
 
@@ -78,3 +79,25 @@ def export_data(
 
 
 __all__ = ["router"]
+
+
+@router.get("/tools", response_model=Response, summary="工具清单与今日用量")
+def read_tools(db: DbSession, user: CurrentUser):
+    data = settings_service.read_tool_settings(db, user.id)
+    return Response.success(data=data.model_dump(mode="json"))
+
+
+@router.put("/tools", response_model=Response, summary="批量启停工具、调整每日上限")
+def update_tools(payload: ToolSettingsUpdateRequest, db: DbSession, user: CurrentUser):
+    data = settings_service.update_tool_settings(db, user.id, payload)
+    return Response.success(data=data.model_dump(mode="json"))
+
+
+@router.get("/tools/stats", response_model=Response, summary="最近 N 天的工具调用统计")
+def read_tool_stats(
+    db: DbSession,
+    user: CurrentUser,
+    days: Annotated[int, Query(ge=1, le=30, description="回溯天数")] = 7,
+):
+    data = settings_service.read_tool_stats(db, user.id, days=days)
+    return Response.success(data=data.model_dump(mode="json"))

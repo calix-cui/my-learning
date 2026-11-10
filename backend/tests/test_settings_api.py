@@ -8,6 +8,7 @@ import json
 
 import pytest
 from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
 
 from app.config import Settings, settings
 
@@ -226,3 +227,41 @@ def test_appearance_only_save_keeps_model_inherited(client):
     model = client.get("/api/settings/model").json()["data"]
 
     assert model["inherited_from_env"] is True
+
+
+def test_read_tool_settings_lists_builtin_tools(client: TestClient):
+    data = client.get("/api/settings/tools").json()["data"]
+    names = [item["name"] for item in data["items"]]
+    assert "calculator" in names
+    assert "rename_conversation" in names
+    write_tool = next(item for item in data["items"] if item["name"] == "rename_conversation")
+    assert write_tool["level"] == "write"
+    assert write_tool["requires_approval"] is True
+    assert data["daily_tool_budget"] == 500
+
+
+def test_update_tool_settings_disables_a_tool(client: TestClient):
+    updated = client.put(
+        "/api/settings/tools", json={"disabled": ["calculator"], "daily_tool_budget": 50}
+    ).json()["data"]
+    calculator = next(item for item in updated["items"] if item["name"] == "calculator")
+    assert calculator["enabled"] is False
+    assert updated["daily_tool_budget"] == 50
+
+    # 关掉的工具仍列在设置页（要能再打开），但状态是关
+    again = client.get("/api/settings/tools").json()["data"]
+    calculator = next(item for item in again["items"] if item["name"] == "calculator")
+    assert calculator["enabled"] is False
+
+
+def test_update_tool_settings_rejects_unknown_names(client: TestClient):
+    response = client.put("/api/settings/tools", json={"disabled": ["rm_rf"]})
+    assert response.status_code == 400
+    assert "rm_rf" in response.json()["message"]
+
+
+def test_tool_stats_returns_shape(client: TestClient):
+    data = client.get("/api/settings/tools/stats?days=3").json()["data"]
+    assert data["days"] == 3
+    assert data["total"] == 0
+    assert data["items"] == []

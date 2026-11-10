@@ -94,3 +94,37 @@ class AppearanceSettingsUpdateRequest(BaseModel):
 
     theme_id: str | None = Field(default=None, max_length=32)
     theme_mode: ThemeMode | None = None
+
+
+class ToolItem(BaseModel):
+    name: str = Field(description="工具名")
+    description: str = Field(description="给用户看的一句话说明")
+    level: Literal["read", "write", "external"] = Field(description="风险级别")
+    enabled: bool = Field(description="是否启用")
+    requires_approval: bool = Field(description="执行前是否需要确认")
+    calls_today: int = Field(default=0, description="今日调用次数")
+
+
+class ToolSettingsResponse(BaseModel):
+    items: list[ToolItem]
+    daily_tool_budget: int = Field(description="每日工具调用上限")
+    used_today: int = Field(description="今日已用次数")
+
+
+class ToolSettingsUpdateRequest(BaseModel):
+    disabled: list[str] = Field(default_factory=list, description="要关掉的工具名列表")
+    daily_tool_budget: int | None = Field(
+        default=None, ge=1, le=5000, description="每日上限，留空表示不改"
+    )
+
+
+class ToolStatItem(BaseModel):
+    tool_name: str
+    calls: int
+    failures: int
+
+
+class ToolStatsResponse(BaseModel):
+    days: int
+    items: list[ToolStatItem]
+    total: int
