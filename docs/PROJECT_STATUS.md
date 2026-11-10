@@ -1,18 +1,19 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-09 · 设置模块（模型接入/账号资料/登录设备/外观/数据管理）落地 · `main` 与 `origin/main` 同步（见 `git log -1`）
+> 最近更新：2026-11-10 · 阶段 5「Agent 执行循环 + Tool Calling」落地（T1–T7）· `main` 与 `origin/main` 同步（见 `git log -1`）
 
 ## 1. 现在在哪
 
-**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–4 已完成，阶段 4.5「账号体系」作为对话功能的前置补强也已落地，下一阶段是 5「Agent 执行循环」。**
+**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–5 已完成（阶段 4.5「账号体系」作为前置补强也已落地），下一阶段是 6「工具生态与权限治理」。**
 
 阶段口径只以该文件为准。此前本文件里出现的「阶段 2 = MCP client / Agent PoC / Electron 骨架」是我自行归纳的临时说法（源自 `archive/REUSE_CANDIDATES.md` 的「MCP 建议尽早」与 ADR-0001 的 Electron 结论），**与 11 阶段计划无对应关系，已废弃**，勿再引用。
 
 已经有一个能跑、能测、能部署的最小闭环：
 
-- 后端 FastAPI（账号 9 + 对话 7 + 设置 4 + 运维 3 个操作；会话与消息按用户隔离落库，每个账号可自带模型配置）
-- 前端 Vue 3：登录/注册页 + 聊天界面（会话列表 + 消息区 + SSE 逐字渲染 + Markdown），未登录只能进登录/注册；13 项账号 E2E + 10 项对话 E2E 全过
+- 后端 FastAPI（账号 9 + 对话 7 + 设置 4 + **Agent 2** + 运维 3 个操作；会话与消息按用户隔离落库，每个账号可自带模型配置）
+- **阶段 5 的 Agent 循环**：原生工具调用（`calculator` / `now` / `search_conversations`）、最多 8 步、过程落 `agent_runs` / `agent_steps`、SSE 逐步推送
+- 前端 Vue 3：登录/注册页 + 聊天界面（会话列表 + 消息区 + SSE 逐字渲染 + Markdown + 「深度回答」开关与执行时间线），未登录只能进登录/注册；13 项账号 + 10 项对话 + **10 项 Agent** E2E 全过
 - 数据库迁移（Alembic）、依赖锁定（uv / pnpm）、质量门禁（ruff / ESLint / pytest / Vitest / CI）、容器化（Docker Compose）
 
 > 商品 / 分类 / 概览页与对应后端接口已于 2026-11-08 整体归档到 `archive/product-admin/`（`git mv`，历史保留），应用层不再暴露这些路由。
@@ -21,6 +22,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-10 | **阶段 5：Agent 执行循环 + Tool Calling（T1–T7）**：模型层原生 `tools`/`tool_calls`（Fake 剧本可重放）、两表 `agent_runs`/`agent_steps`、只读工具层与注册表、执行器（8 步 / 2s 工具超时 / 连续 3 次失败中止 / 断流回滚）、`POST /agent/stream` + `GET /agent/runs`、前端「深度回答」开关与执行时间线（刷新可回放）；后端 204 例 / 93.22%，前端 59 例，Agent E2E 10 项 | [agent.md](agent.md)、[ADR-0010](adr/0010-agent-execution-loop.md)、[api.md](api.md) §6；截图 `docs/images/agent-timeline.png` |
 | 11-10 | **主题随账号同步（T-FE-03 收尾）**：`user_settings` 加 `theme_id` / `theme_mode` + `GET|PUT /api/settings/appearance`；登录后账号优先、切换时本地先生效再异步写回；顺带用 `model_configured` 列修掉「只存主题被当成配过模型」的问题 | [ADR-0009](adr/0009-per-user-model-settings.md)、[api.md](api.md) §4.5；后端 159 例 / 94.42%，前端 59 例，设置 E2E 15 项 |
 | 11-09 | **设置模块（T-FE-02）**：模型接入（Key Fernet 加密存 `user_settings`、界面只显示末四位、可测试连接）/ 账号资料（改显示名、改密码踢其他设备）/ 登录设备（撤销）/ 外观 / 数据管理（导出 JSON·Markdown、注销账号）；聊天按账号取模型，未配置回落环境变量 | [ADR-0009](adr/0009-per-user-model-settings.md)、[api.md](api.md) §3.8–3.9、§4；后端 148 例 / 94.22%，前端 54 例，设置 E2E 13 项 |
 | 11-09 | **前端按 `DESIGN.md` 重构全部页面**：外壳（264 侧栏 + 48 顶栏 + 1080 内容区）、对话（720 阅读列 + 气泡 + 输入盒）、登录/注册（400 卡片 + 衬线标题 + logo）、设置（200 导航 + 560 表单）；会话状态提升到 `stores/chat.ts`；`styles/index.css` 收敛为 token 兜底 + reset + Element Plus 映射；接入 logo/favicon/manifest | `DESIGN.md`、[design/README.md](design/README.md)、截图 `docs/images/ui-0*.png`；前端 50 例、E2E 13+10 全过 |
@@ -51,7 +53,7 @@
 | 3 | 基础 API 和数据库 | ✅ | 对话 7 个操作 + 3 个探针、Alembic 迁移、MySQL（商品/分类接口已归档） |
 | 4 | **LLM 接入与基础对话** | ✅ | [chat.md](chat.md)：T1 表结构 / T2 模型抽象 / T3 会话 CRUD / T4 同步发消息 / T4b SSE 流式 / T5 `/chat` 页面 / T6 文档；已接 DeepSeek 实测 |
 | 4.5 | 账号体系（补强） | ✅ | [auth.md](auth.md)：users/sessions 两表 + Argon2id + 服务端会话 + 用户级数据隔离 + 登录页/守卫 |
-| 5 | Agent 基础执行循环 + Tool Calling | 🟡 设计待确认 | [agent.md](agent.md) + [ADR-0010](adr/0010-agent-execution-loop.md)：单 agent 工具循环、8 步预算、T1–T7 拆分；**尚未写实现代码** |
+| 5 | **Agent 基础执行循环 + Tool Calling** | ✅ | [agent.md](agent.md) + [ADR-0010](adr/0010-agent-execution-loop.md)：T1 原生工具调用 / T2 两表 / T3 工具层 / T4 执行器 / T5 流式接口 / T6 前端时间线 / T7 文档与 E2E；后端 204 例 / 93.22%，Agent E2E 10 项 |
 | 6 | 工具生态与权限治理 | ⬜ | 依赖 5：工具注册表、只读/写入/外部分级、人工审批流、可观测性、MCP 适配层 |
 | 7 | Skill 和 MCP | ⬜ | 依赖 6；MCP client 在此阶段做（不自造协议，用官方 SDK） |
 | 8 | RAG 和 Memory | ⬜ | 依赖 7 |
@@ -59,12 +61,17 @@
 | 10 | 桌面端集成 | ⬜ | 按 [ADR-0001](adr/0001-desktop-shell-electron.md)（Electron + PyInstaller onedir） |
 | 11 | 部署、测试和发布 | ⚠️ 部分 | 容器化 ✅、测试基线 ✅、CI ✅；**发布流程（版本号/镜像归档/回滚）未做** |
 
-### 3.2 阶段 5 的形状（待确认，设计见 [`agent.md`](agent.md)）
+### 3.2 阶段 5 的形状（已落地，设计见 [`agent.md`](agent.md)）
 
-调研了四种主流运行架构（单 agent 工具循环 / 图状状态机 / SDK Runner / 多 agent 编排），结论是**只实现第一种**：
+四种主流运行架构（单 agent 工具循环 / 图状状态机 / SDK Runner / 多 agent 编排）里**只实现第一种**：
 模型 ↔ 工具往返，没有 `tool_calls` 即收尾。护栏固定为最大 8 步、单工具 2s、连续 3 次同类失败中止。
 状态落 `agent_runs` + `agent_steps` 两张表，前端时间线可回放；工具 v1 只有 `calculator` / `now` / `search_conversations`，全部只读。
 不引 LangGraph / OpenAI Agents SDK / CrewAI，理由与被否方案见 [ADR-0010](adr/0010-agent-execution-loop.md)。
+
+**为什么不是「直接用 ReAct」**：ReAct 是提示词范式（Action 是自由文本，靠正则解析），原生工具调用是它的生产级实现——
+动作变成结构化 JSON、参数由 pydantic 校验、错误用 `ok:false` 回灌、终止由 `tool_calls` 是否为空判定。对照表见 [agent.md](agent.md) §2.1。
+
+**执行进度**：T1 模型层 ✅（`chat_with_tools` + Fake 剧本）；T2 两表 ✅（`d8812afe7ea7`）；T3 工具层 ✅（3 个只读工具 + 注册表）；T4 执行器 ✅（`executor.py`，事件流见 api.md §6.1）；T5 接口 ✅（`POST /agent/stream`、`GET /agent/runs`）；T6 前端 ✅（「深度回答」开关 + 执行时间线，刷新回放）；T7 文档与 E2E ✅（`pnpm acceptance:agent` 10 项）。
 
 ### 3.2b 阶段 4 的接入方式（已定，设计见 [`chat.md`](chat.md)）
 

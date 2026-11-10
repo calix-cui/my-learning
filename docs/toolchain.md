@@ -72,7 +72,7 @@ flowchart TB
 | **vite-plugin-vue-devtools** | 开发期组件树 / Pinia 状态 / 路由面板 | `pnpm dev` 后打开浏览器面板 | `vite.config.ts` |
 | **Pinia** | 全局状态（登录态、主题）；setup store 写法，卸载手写单例 | 组件里 `useSessionStore()` / `useThemeStore()` | `src/stores/` |
 | **markdown-it + DOMPurify** | 把模型回复的 Markdown 渲染成 HTML；原文 HTML 当文本、渲染结果再消毒，外链强制 `_blank` | 页面内自动生效（`/chat`） | `frontend/src/utils/markdown.ts` |
-| **puppeteer-core** | 真浏览器跑端到端验收：对话 10 项（可选，需先起前后端） | `pnpm acceptance:chat` | `scripts/chat-acceptance.mjs` |
+| **puppeteer-core** | 真浏览器跑端到端验收：对话 10 项 / Agent 10 项（可选，需先起前后端） | `pnpm acceptance:chat`、`pnpm acceptance:agent` | `scripts/{chat,agent}-acceptance.mjs` |
 
 ## 3. 提交与 CI
 
@@ -124,16 +124,21 @@ flowchart LR
 | 后端账号服务 | `tests/test_auth_service.py` | 29 | `make test` | 否（内存 SQLite） | 密码规则与哈希、重复邮箱、停用账号、会话签发/过期/撤销、滑动续期、改密踢其他设备；拦不住真实 Argon2 参数调优 |
 | 后端账号接口 | `tests/test_auth_api.py` | 19 | `make test` | 否（`dependency_overrides`） | 注册/登录/登出/me/设备/改密、HttpOnly Cookie、未登录一律 401、**A/B 用户数据隔离（越权一律 404）** |
 | 后端对话服务 | `tests/test_chat_service.py` | 30 | `make test` | 否（内存 SQLite） | 会话 CRUD、上下文截断与顺序、事务回滚、SSE 事件序列、断开即回滚 |
+| 后端 agent 模型 | `tests/test_agent_models.py` | 5 | `make test` | 否（内存 SQLite） | 两表映射、按 seq 排序、`(run_id,seq)` 唯一、删会话/删用户级联 |
+| 后端工具层 | `tests/test_agent_tools.py` | 16 | `make test` | 否 | 三个只读工具的成功/失败路径：`^` 当幂、越界表达式拒绝、未知工具不抛错、历史检索按用户隔离 |
+| 后端执行器 | `tests/test_agent_executor.py` | 9 | `make test` | 否（Fake 剧本） | 无工具直答、单次工具往返、失败回灌、连续 3 次失败中止、8 步预算、402/502、404/400/409 守卫 |
+| 后端 agent 接口 | `tests/test_agent_api.py` | 7 | `make test` | 否 | SSE 事件序列、空白 400、越权 404、运行回放含步骤、并发 409 |
 | 后端对话接口 | `tests/test_chat_api.py` | 20 | `make test` | 否（`dependency_overrides`） | 会话与消息端点、`text/event-stream`、400/404/502/504 |
 | 后端设置 | `tests/test_settings_service.py`(16)、`test_settings_api.py`(20) | 36 | `make test` | 否 | 配置回落环境变量、Key 加密与末四位、无主密钥拒绝存 Key、连通性自测、导出 JSON/Markdown、改显示名、注销（含级联删会话）、外观读写与「只存外观不算配过模型」|
 | 前端工具函数 | `frontend/src/utils/markdown.test.ts` | 6 | `pnpm test` | 否（纯字符串） | 加粗/列表/代码块/自动换行、原文 HTML 不当标签、外链 rel；拦不住真实 DOM 消毒 |
 | 前端 api 层 | `frontend/src/api/client.test.ts`(8)、`chat.test.ts`(9) | 17 | `pnpm test` | 否（假 adapter） | 错误码到提示语的映射、请求封装、SSE 分帧解析、流式超时 35s；拦不住组件渲染与交互 |
 | 前端组件 | `ThemeCard.test.ts`(4)、`ModeSwitch.test.ts`(3)、`AppearancePanel.test.ts`(4)、`ModelPanel.test.ts`(4) | 15 | `pnpm test` | 否（happy-dom + 假 store） | 色块是否取对模式、`aria-pressed` 与徽标、v-model 双向绑定、点主题走 store 并落盘、设置表单回填与 Key 掩码；拦不住真实浏览器布局 |
+| 端到端 | `frontend/scripts/agent-acceptance.mjs` | 10 项 | `pnpm acceptance:agent` | **是**（真实后端 + 真实模型） | 深度回答开关、工具调用与结果出现在时间线、最终答复含正确数字、刷新后回放、关掉开关回到普通对话、后端运行记录完整 |
 | 端到端 | `frontend/scripts/chat-acceptance.mjs` | 10 项 | `pnpm acceptance:chat` | **是**（真实后端 + 真实库） | 对话页：空态、新建、流式逐字、自动命名、刷新保留、排序、删除；跑前跑后清空会话 |
 | 端到端 | `frontend/scripts/auth-acceptance.mjs` | 13 项 | `pnpm acceptance:auth` | **是** | 未登录拦截与 redirect、注册即登录、刷新保持、发消息、退出后再也进不去、重新登录数据仍在、Cookie 不可被 JS 读到 |
 | 端到端 | `frontend/scripts/settings-acceptance.mjs` | 15 项 | `pnpm acceptance:settings` | **是** | 模型接入（继承提示→存 fake→测试连接→顶栏标签→fake 回复）、改显示名、设备列表、导出 JSON/Markdown 可解析、注销后无法登录、主题写回账号与换设备恢复 |
 
-门禁口径：后端 `--cov-fail-under=80`（当前 159 passed / 94.42%）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`。
+门禁口径：后端 `--cov-fail-under=80`（当前 204 passed / 93.22%）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`。
 
 怎么加测试：改服务层就在 `tests/test_chat_service.py` 里用 `db_session` 夹具（内存 SQLite）写一条；改前端 api 封装就在对应 `*.test.ts` 里用 `client.defaults.adapter` 造假响应。
 

@@ -94,7 +94,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 | --- | --- | --- |
 | `/login` | 登录（公开） | `views/LoginView.vue`、`stores/session.ts` |
 | `/register` | 注册（公开，注册即登录） | `views/RegisterView.vue` |
-| `/chat` | 对话（左会话列表 + 右消息区，SSE 逐字渲染，助手消息按 Markdown 渲染） | `views/ChatView.vue`、`components/chat/*`、`stores/chat.ts`、`api/chat.ts`、`utils/markdown.ts` |
+| `/chat` | 对话（左会话列表 + 右消息区，SSE 逐字渲染，助手消息按 Markdown 渲染；头部「深度回答」开关可切到 agent 循环并展开执行时间线） | `views/ChatView.vue`、`components/chat/*`、`stores/chat.ts`、`api/chat.ts`、`api/agent.ts`、`utils/markdown.ts` |
 | `/settings` | 设置（左侧二级导航 200px + 右侧 560px 表单）：模型接入 / 账号资料 / 登录设备 / 外观 / 数据管理 | `views/SettingsView.vue`、`components/settings/*`、`stores/settings.ts`、`components/theme/*` |
 | `/` / 其他 | 重定向到 `/chat`；未登录时守卫改送 `/login?redirect=...` | `src/router/index.ts` |
 
@@ -128,6 +128,7 @@ frontend/
     ├── main.ts                # 挂载 Element Plus（zh-cn）+ router
     ├── App.vue                # 侧栏 + 顶栏 + <router-view>（登录页不套外壳）
     ├── components/
+    │   ├── chat/              # ThreadList / ChatMessage / ChatComposer / AgentTimeline
     │   ├── chat/              # ThreadList（侧栏会话）/ ChatMessage（气泡+Markdown）/ ChatComposer（输入区）
     │   ├── theme/             # ThemeCard / ModeSwitch
     │   └── settings/          # AppearancePanel / ModelPanel / AccountPanel / DevicesPanel / DataPanel
@@ -137,11 +138,12 @@ frontend/
     ├── api/
     │   ├── client.ts          # axios 实例 + 统一响应/错误拦截 + 401 跳登录
     │   ├── chat.ts            # 对话 6 个接口封装 + SSE 流式解析
+    │   ├── agent.ts           # agent 流式（工具循环）+ 运行回放
     │   ├── auth.ts            # 账号 7 个接口封装
     │   └── unauthorized.ts    # 401 回调注册（避免 client 与 store 互相 import）
     ├── stores/
     │   ├── session.ts         # Pinia：登录态（user / loaded / 登录登出清除）
-    │   ├── chat.ts            # Pinia：会话列表 + 当前会话 + 流式发送（侧栏与对话页共用）
+    │   ├── chat.ts            # Pinia：会话列表 + 当前会话 + 流式发送 + 深度回答（侧栏与对话页共用）
     │   └── theme.ts           # Pinia：主题（themeId / mode / 跟随系统 / 落盘）
     ├── theme/
     │   ├── types.ts           # 18 个语义色 schema + 静态 token 类型

@@ -15,7 +15,7 @@
 | T-FE-04 | 状态管理迁到 Pinia（setup store） | Vue 前端 | DONE | 用户 m06333 |
 | T-DOC-01 | 设计工具链调研（design-taste-frontend / impeccable） | Lead | DONE | 交付 `docs/design/toolchain.md` |
 
-阶段 5「Agent 基础执行循环」仍按 11 阶段计划排在业务队列里，被上面三条 UI/前端任务插队，尚未开始。
+阶段 5「Agent 基础执行循环 + Tool Calling」已按 11 阶段计划完成（2026-11-10，T1–T7），见本文末「阶段 5」一节与 [`../agent.md`](../agent.md)。
 
 ---
 
@@ -93,3 +93,19 @@
 - **组件侧**：`App.vue` 用 `session.displayName` / `session.avatarText`；`AppearancePanel.vue` 用 `storeToRefs(themeStore)` 取 `mode / resolvedMode / currentTheme`，action 直接 `themeStore.setMode()`（`storeToRefs` 不会把函数变成 ref）。
 - **踩到的真实坑**：第一版把 `themes` 放进 store 再 `storeToRefs` 解构，页面主题格子**直接空白**——`storeToRefs` 只转换 ref/computed，普通值不会出现在结果里。改成直接从 `@/theme/themes` 引入后恢复。
 - **验证**：`pnpm type-check` / `lint` / `format:check` 全过；`pnpm test` **39 passed**（主题 4 例 + 登录 4 例已改成 `setActivePinia(createPinia())` 写法）；`pnpm build` 通过（`index` 83.85 kB gzip 32.86）；`pnpm acceptance:auth` 13/13、`pnpm acceptance:chat` 10/10；4 套主题切换实测正常。
+
+## 阶段 5 · Agent 执行循环（2026-11-10 已完成）
+
+- **用户原话（m07755）**：「按 T1 → T7 顺序做吧。」设计见 [`../agent.md`](../agent.md)，决策见 [ADR-0010](../adr/0010-agent-execution-loop.md)。
+- **T1 模型层**（`51bd80d`）：`LLMClient.chat_with_tools()`；Fake 支持剧本重放；OpenAI 兼容实现上送 `tools` + `tool_choice=auto`、原样带回 `tool_calls`。真实 DeepSeek 实测 `finish_reason: tool_calls`。
+- **T2 两表**（`0dfe0eb`）：`agent_runs`（状态/步数/模型/起止时间）+ `agent_steps`（seq/kind/工具名/参数/ok/耗时），`(run_id,seq)` 唯一；迁移 `d8812afe7ea7`。
+- **T3 工具层**（`f7360d8`）：`calculator`（ast 白名单，`^` 当幂）、`now`、`search_conversations`（按用户隔离）+ 注册表；未知工具返回 `ok=false` 而不是抛错。
+- **T4 执行器**（`c79941d`）：8 步预算、单工具 2s、连续 3 次失败中止；每步先落库再推事件；断流时 `finally` 把 run 标 failed。
+- **T5 接口**（`1f6d336`）：`POST /api/conversations/{id}/agent/stream`（SSE）+ `GET .../agent/runs`（回放），开流前的 404/400/409 仍是普通 JSON。
+- **T6 前端**：`stores/chat.ts` 增 `agentMode`（持久化）/`agentSteps`/`sendWithAgent()`/`loadAgentRuns()`；`AgentTimeline.vue` 渲染过程；时间线插在**最后一条用户消息之后**，保证「问 → 过程 → 答」顺序。
+- **T7 文档与 E2E**：`docs/api.md` §6、`docs/how-it-works.md` §4.5、`pnpm acceptance:agent` 10 项（含刷新回放、关掉开关走普通对话、后端运行记录）。
+- **过程中修掉的真问题**：
+  1. `assistant_text` 曾对「最终答复」也发一次，导致同内容出现两条步骤 → 改为「有 content 且有 tool_calls 才记 Thought」。
+  2. `config_from_row` 只判「有没有行」，导致同步过主题的账号把 env 里的 DeepSeek 顶成 fake → 改判 `model_configured`。
+  3. 会话标题曾取助手答复（侧栏出现「等于 **243**」）→ 改取用户原话。
+  4. E2E 等 `.chat__row--assistant` 会命中流式占位气泡，reload 一掐就把未提交的流回滚掉 → 改为等「没有 `.chat__bubble--streaming` 且发送按钮不再 loading」。

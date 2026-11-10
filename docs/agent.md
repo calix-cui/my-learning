@@ -226,3 +226,20 @@ erDiagram
 - 长期记忆与 RAG（阶段 8）。
 - 断点续跑、跨会话的 agent 状态。
 - 人工审批与工具权限分级。
+
+## 8. 实现状态（2026-11-10 完成）
+
+| 任务 | 交付 | 提交 |
+|---|---|---|
+| T1 模型层 | `LLMClient.chat_with_tools()`；`FakeLLM(tool_script=...)` 可重放剧本；OpenAI 兼容实现上送 `tools` + `tool_choice=auto` | `51bd80d` |
+| T2 两表 | `agent_runs` / `agent_steps`（`(run_id, seq)` 唯一），迁移 `d8812afe7ea7` | `0dfe0eb` |
+| T3 工具层 | `calculator` / `now` / `search_conversations` + 注册表 | `f7360d8` |
+| T4 执行器 | `app/agent/executor.py`，8 步 / 2s / 连续 3 次失败；事件见 `app/agent/events.py` | `c79941d` |
+| T5 接口 | `POST /api/conversations/{id}/agent/stream`、`GET .../agent/runs` | `1f6d336` |
+| T6 前端 | 「深度回答」开关（`localStorage` 记忆）+ `AgentTimeline.vue`（插在最后一条用户消息之后） | 见 `git log` |
+| T7 文档与 E2E | `docs/api.md` §6、`docs/how-it-works.md` §4.5、`pnpm acceptance:agent` 10 项 | 见 `git log` |
+
+**与设计的两处偏差（有意为之）**：
+
+1. `assistant_text` 只在「本轮既说了话又请求了工具」时才记——否则最终答复会被记两次（一次 Thought、一次 Final）。
+2. 会话标题取**用户原话**而不是助手答复：首条消息自动命名时若用答复，侧栏会出现「等于 **243**。」这种碎片。

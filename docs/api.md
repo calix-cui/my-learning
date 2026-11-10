@@ -344,7 +344,97 @@ curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: applic
 7. **主题同步规则**：本机 `localStorage` 先保证首屏不闪；登录后拉一次 `/api/settings/appearance`，账号有值就以账号为准，没有就把本机偏好写上去。切换主题时本地立即生效、异步写回账号（失败不影响本地）。
 8. **401 统一处理**：`src/api/client.ts` 拦截器收到 401 会清本地登录态并跳 `/login?redirect=...`；`/auth/me` 探测请求带 `skipAuthRedirect: true` 豁免，由路由守卫自行判断。
 
-## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages`）
+## 6 Agent 接口（`/api/conversations/{id}/agent`）
+
+普通对话是「一问一答」；深度回答会多跑几轮「模型 → 工具 → 模型」，每步都落库可回放。
+
+### 6.1 发送消息（agent 循环，流式）
+
+`POST /api/conversations/{conversation_id}/agent/stream`
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `content` | string | 用户消息，1–4000 字，纯空白 400 |
+
+开流前就会拦下的错误（仍是普通 JSON，不是事件流）：
+
+| 情况 | 状态码 | message |
+|---|---|---|
+| 未登录 | 401 | 请先登录 |
+| 会话不存在或不属于自己 | 404 | 会话不存在 |
+| 内容全是空白 | 400 | 消息内容不能只包含空白 |
+| 同一会话已有运行在跑 | 409 | 这个会话正在生成回复，请稍后再试 |
+
+事件类型（每帧 `data: {json}`）：
+
+| type | 负载 | 含义 |
+|---|---|---|
+| `run_started` | `run_id`、`conversation_id` | 运行开始 |
+| `assistant_text` | `seq`、`content` | 模型「说完这句要调工具」的中间话 |
+| `tool_call` | `seq`、`tool`、`args` | 要调哪个工具、参数是什么 |
+| `tool_result` | `seq`、`tool`、`ok`、`content`、`duration_ms` | 工具执行结果；失败也是 `ok:false` 的这一步 |
+| `run_finished` | `run_id`、`content`、`steps`、`model` | 最终答复（同时写进 `messages`） |
+| `error` | `code`、`message` | 循环中途失败（如模型 502、超过 8 步） |
+
+```
+data: {"type":"run_started","run_id":1,"conversation_id":134}
+
+data: {"type":"tool_call","seq":2,"tool":"calculator","args":{"expression":"3**5"}}
+
+data: {"type":"tool_result","seq":3,"tool":"calculator","ok":true,"content":"243","duration_ms":0}
+
+data: {"type":"run_finished","run_id":1,"content":"3 的 5 次方等于 243。","steps":4,"model":"deepseek-flash"}
+```
+
+三条注意：
+
+1. **中间步骤只进 `agent_steps`，不进 `messages`**——聊天记录里只留「用户问的 + 最终回答」，过程通过下面的接口回放。
+2. **步数与时间有硬上限**：最多 8 步、单工具 2 秒、连续 3 次同类失败即中止。
+3. **客户端断开会整体回滚**：run 标 `failed`，不会留下半截助手消息。
+
+### 6.2 查看历史运行
+
+`GET /api/conversations/{conversation_id}/agent/runs?limit=5`
+
+返回最近几次运行（含步骤，按 `seq` 升序），用于刷新页面后回放时间线：
+
+```json
+{
+  "code": 200,
+  "message": "请求成功",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "status": "completed",
+        "step_count": 4,
+        "model": "deepseek-flash",
+        "started_time": "2026-11-10 23:00:11",
+        "finished_time": "2026-11-10 23:00:13",
+        "error_message": null,
+        "steps": [
+          { "seq": 1, "kind": "user_message", "content": "用工具算 3 的 5 次方…" },
+          { "seq": 2, "kind": "tool_call", "tool_name": "calculator", "tool_args": { "expression": "3**5" } },
+          { "seq": 3, "kind": "tool_result", "tool_name": "calculator", "ok": true, "content": "243", "duration_ms": 0 },
+          { "seq": 4, "kind": "final_answer", "content": "3 的 5 次方等于 243。" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`status` 取值：`running` / `completed` / `failed` / `cancelled`（取消暂未实现）。越权同样 404，不暴露会话是否存在。
+
+### 6.3 内置工具（只读）
+
+| 工具 | 参数 | 说明 |
+|---|---|---|
+| `calculator` | `expression` | 四则/幂/括号，`^` 按幂处理（模型爱写 `3^5`）；拒绝 `__import__`、`9**9**9` 这类越界表达式 |
+| `now` | `timezone?` | 当前时间，默认 `Asia/Shanghai`，输出「2026-11-10 22:55:38 CST（星期二）」 |
+| `search_conversations` | `keyword`、`limit?` （1–10） | 在自己历史会话标题里检索，只返回自己的数据 |
+
+## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages` / `agent_runs` / `agent_steps`）
 
 ```
 users
@@ -371,11 +461,14 @@ user_settings
   id                        int  pk
   user_id                   int  FK → users.id ON DELETE CASCADE，unique
   model_provider            varchar(20)   默认 fake
+  theme_id                  varchar(32)   nullable（主题 id，如 pine/sand）
+  theme_mode                varchar(10)   nullable（light/dark/system）
   model_base_url            varchar(255)  nullable
   model_name                varchar(64)   nullable
   model_timeout_seconds     int           默认 30
   model_api_key_ciphertext  varchar(512)  nullable（Fernet 密文）
   model_api_key_hint        varchar(8)    nullable（末四位）
+  model_configured          tinyint(1)    默认 0（只有真配过模型才置 1）
   create_time / update_time datetime
 
 conversations
@@ -393,7 +486,32 @@ messages
   content          text
   model            varchar(64)   nullable
   create_time      datetime
+
+agent_runs
+  id               int  pk autoincrement
+  conversation_id  int  FK → conversations.id  ON DELETE CASCADE，有索引
+  user_id          int  FK → users.id          ON DELETE CASCADE，有索引
+  status           varchar(16)  running | completed | failed | cancelled
+  step_count       int          默认 0
+  model            varchar(64)  nullable（这一轮实际回话的模型）
+  started_time     datetime
+  finished_time    datetime     nullable
+  error_message    varchar(255) nullable
+
+agent_steps
+  id           int  pk autoincrement
+  run_id       int  FK → agent_runs.id  ON DELETE CASCADE，有索引
+  seq          int            第几步，从 1 开始；与 run_id 组成唯一键
+  kind         varchar(20)    user_message | assistant_text | tool_call | tool_result | final_answer
+  content      text           nullable
+  tool_name    varchar(64)    nullable
+  tool_args    json           nullable
+  ok           tinyint(1)     nullable（仅工具步骤有值）
+  duration_ms  int            nullable
+  create_time  datetime
 ```
+
+`agent_steps` 是「过程」，`messages` 是「对话」：一次运行只把最终答复写进 `messages`，中间的工具往返全留在 `agent_steps`，这样聊天记录不会被工具日志污染，又能在需要时完整回放。
 
 删会话即删该会话全部消息（`ON DELETE CASCADE`），前端不需要逐条删；`messages` 不冗余 `user_id`，归属通过会话间接确定。
 

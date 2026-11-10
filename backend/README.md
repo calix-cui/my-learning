@@ -142,6 +142,14 @@ make check-migration
 - 已有库第一次接入：确认表结构与脚本一致后 `alembic stamp head`，只写 `alembic_version`，不动数据。
 - `make check` 仍然只跑 lint + 测试（不需要数据库），CI 依赖这一点。
 
+## Agent 执行循环（阶段 5）
+
+「深度回答」走 `POST /api/conversations/{id}/agent/stream`：模型 → 工具 → 模型，最多 8 步，过程落 `agent_runs` / `agent_steps`。
+
+- 工具（`backend/app/agent/tools/`，全部只读、按用户隔离）：`calculator`（ast 白名单，`^` 当幂）、`now`（时区默认 Asia/Shanghai）、`search_conversations`（只搜自己的会话标题）。
+- 护栏：`MAX_STEPS = 8`、单工具 `TOOL_TIMEOUT_SECONDS = 2.0`、连续 `MAX_CONSECUTIVE_FAILURES = 3` 次失败即中止；客户端断流会整体回滚并把 run 标 `failed`。
+- 事件协议与回放接口见 [`../docs/api.md`](../docs/api.md) §6；设计与取舍见 [`../docs/agent.md`](../docs/agent.md)。
+
 ## 账号体系
 
 - 密码：Argon2id（`argon2-cffi`），`password_hash` 不可逆；登录成功会顺带 rehash 旧参数。
@@ -164,6 +172,7 @@ ADMIN_EMAIL=me@example.com ADMIN_PASSWORD='至少8位的密码' uv run python -m
 
 - 账号 9（`/api/auth`）：注册、登录、登出、当前用户、设备列表、撤销设备、改密码、改显示名、注销账号
 - 对话 7：会话 5（新建/列表/详情/改名/删除）、消息 2（同步、SSE 流式）
+- Agent 2：`POST /conversations/{id}/agent/stream`（工具循环 SSE）、`GET /conversations/{id}/agent/runs`（回放）
 - 设置 4（`/api/settings`）：读模型配置、存模型配置、测试连通性、导出数据
 - 运维 3（`GET /`、`GET /healthz`、`GET /readyz`）
 

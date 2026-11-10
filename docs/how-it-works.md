@@ -129,6 +129,8 @@ erDiagram
     users ||--o{ sessions : "一个账号多台设备"
     users ||--o{ conversations : "一个账号多个会话"
     conversations ||--o{ messages : "一个会话多条消息"
+    conversations ||--o{ agent_runs : "一个会话多次运行"
+    agent_runs ||--o{ agent_steps : "一次运行多个步骤"
     users {
         int id PK "自增主键"
         varchar email UK "登录标识，统一小写"
@@ -157,6 +159,25 @@ erDiagram
         datetime update_time "有索引，列表按它倒序"
         datetime create_time
     }
+    agent_runs {
+        int id PK "自增主键"
+        int conversation_id FK "ON DELETE CASCADE"
+        int user_id FK "ON DELETE CASCADE"
+        varchar status "running/completed/failed"
+        int step_count
+        varchar model
+        datetime started_time
+        datetime finished_time
+    }
+    agent_steps {
+        int id PK "自增主键"
+        int run_id FK "ON DELETE CASCADE"
+        int seq "第几步，(run_id,seq) 唯一"
+        varchar kind "tool_call/tool_result/final_answer…"
+        text content
+        varchar tool_name
+        json tool_args
+    }
     messages {
         int id PK "自增主键"
         int conversation_id FK "ON DELETE CASCADE"
@@ -174,6 +195,29 @@ erDiagram
 1. **删会话即删消息**：数据库外键 `ON DELETE CASCADE`，前端不需要逐条删。
 2. **上下文只带最近 20 条**：`CONTEXT_LIMIT=20`，system 消息全带；这是成本与连贯性的折中，不是越多越好。
 3. **删账号即删数据**：`sessions` 与 `conversations` 都对 `users.id` 建了 `ON DELETE CASCADE`，消息随会话级联删除；这是 v1 的取舍——没有回收站，删了就没了。
+
+## 4.5 深度回答（agent 循环）是怎么转起来的
+
+普通对话是「一次请求、一次回答」；勾上「深度回答」后，后端会在同一个请求里跑一个循环：
+
+```
+用户提问
+  └─ 建 run（agent_runs）+ 落 user_message 步
+       └─ 循环（最多 8 步，每步先落库再推事件）
+            模型 chat_with_tools →
+              有 tool_calls？ ── 是 ─→ 记 tool_call 步 → 执行工具（2s 超时）
+                                    → 记 tool_result 步 → 把结果回灌 → 下一轮
+                              └─ 否 ─→ 这段文本就是最终答复 → 记 final_answer 步
+                                    → 写进 messages → run 标 completed
+```
+
+三条设计取舍：
+
+1. **不用 ReAct 提示词模板**：Action 让模型输出自由文本、再正则解析，参数类型和错误语义都得自己兜；原生工具调用（`tools` + `tool_calls`）把「叫什么、传什么」变成结构化 JSON，pydantic 直接校验，错误可以用 `ok:false` 回灌给模型。
+2. **过程与对话分表**：`agent_steps` 记全部往返，`messages` 只留最终答复；聊天记录保持干净，时间线可以随时回放。
+3. **失败也要落库**：工具失败、超过 8 步、模型 502、客户端断开，都会把 run 标成 `failed` 并写 `error_message`——不会出现「界面一直转圈但库里什么都没有」。
+
+代码入口：`backend/app/agent/executor.py`（循环）、`backend/app/agent/tools/`（工具）、`backend/app/api/agent.py`（流式接口）。
 
 ## 5. 代码地图（要改什么去哪）
 
