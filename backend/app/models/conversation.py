@@ -8,6 +8,7 @@ from app.database import Base
 
 # 只供类型检查工具使用，运行时不导入消息模块，避免互相导入。
 if TYPE_CHECKING:
+    from app.models.agent_run import AgentRun
     from app.models.message import Message
     from app.models.user import User
 
@@ -37,6 +38,10 @@ class Conversation(Base):
         comment="最后活动时间（列表按它倒序）",
     )
     user: Mapped["User"] = relationship(back_populates="conversations")
+    agent_runs: Mapped[list["AgentRun"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation",
         cascade="all, delete-orphan",
