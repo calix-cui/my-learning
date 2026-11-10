@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 ModelProvider = Literal["fake", "openai"]
+ThemeMode = Literal["light", "dark", "system"]
 
 
 class ModelSettingsResponse(BaseModel):
@@ -72,3 +73,24 @@ class ModelTestResponse(BaseModel):
     latency_ms: int
     model: str | None = None
     message: str
+
+
+class AppearanceSettingsResponse(BaseModel):
+    """当前账号保存的外观；两个字段都为空表示「这个账号没存过」。"""
+
+    theme_id: str | None = None
+    theme_mode: ThemeMode | None = None
+    update_time: datetime | None = None
+
+    @field_serializer("update_time")
+    def _fmt_time(self, value: datetime | None) -> str | None:
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
+
+
+class AppearanceSettingsUpdateRequest(BaseModel):
+    """保存外观：只改显式传了的字段；传 null 表示「清掉，回到本机偏好」。"""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    theme_id: str | None = Field(default=None, max_length=32)
+    theme_mode: ThemeMode | None = None

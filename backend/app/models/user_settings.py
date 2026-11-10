@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -17,8 +17,8 @@ DEFAULT_PROVIDER = "fake"
 class UserSettings(Base):
     """用户级设置：一人一行（`user_id` 上有唯一索引）。
 
-    目前只放模型接入；外观之类的纯前端偏好继续留在 localStorage，
-    等需要跨设备同步时再加列。
+    分两块：模型接入（provider/base_url/model/超时/Key 密文）与外观（主题 id + 明暗模式）。
+    外观为空时前端回落到 localStorage，所以老账号不受影响。
     """
 
     __tablename__ = "user_settings"
@@ -30,6 +30,11 @@ class UserSettings(Base):
         unique=True,
         index=True,
         comment="所属用户（一对一）",
+    )
+    # 是否真的保存过模型配置。外观（主题）也会在这一行落库，
+    # 不能因为「有行」就认定用户配过模型，否则新账号会丢掉环境变量那套默认值。
+    model_configured: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, comment="是否保存过模型配置"
     )
     model_provider: Mapped[str] = mapped_column(
         String(20), nullable=False, default=DEFAULT_PROVIDER, comment="模型来源：fake / openai"
@@ -47,6 +52,13 @@ class UserSettings(Base):
     )
     model_api_key_hint: Mapped[str | None] = mapped_column(
         String(8), nullable=True, comment="API Key 末四位，用于界面回显"
+    )
+    # 外观：为空表示「这个账号没存过」，前端用本机 localStorage 的值
+    theme_id: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="主题 id（如 pine），未同步时为 NULL"
+    )
+    theme_mode: Mapped[str | None] = mapped_column(
+        String(10), nullable=True, comment="明暗模式：light / dark / system"
     )
     create_time: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.now, comment="创建时间"

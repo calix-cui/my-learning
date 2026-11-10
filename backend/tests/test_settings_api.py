@@ -180,3 +180,49 @@ def test_delete_account_removes_owned_data(client, db_session):
 
     assert db_session.scalar(select(func.count()).select_from(Conversation)) == 0
     assert db_session.scalar(select(func.count()).select_from(Message)) == 0
+
+
+def test_appearance_requires_login(anon_client):
+    assert anon_client.get("/api/settings/appearance").status_code == 401
+    assert anon_client.put("/api/settings/appearance", json={"theme_id": "sand"}).status_code == 401
+
+
+def test_appearance_default_is_empty(client):
+    data = client.get("/api/settings/appearance").json()["data"]
+
+    assert data["theme_id"] is None
+    assert data["theme_mode"] is None
+
+
+def test_appearance_save_and_read_back(client):
+    saved = client.put(
+        "/api/settings/appearance", json={"theme_id": "sand", "theme_mode": "dark"}
+    ).json()["data"]
+
+    assert saved["theme_id"] == "sand"
+    assert saved["theme_mode"] == "dark"
+    assert saved["update_time"] is not None
+
+    read_back = client.get("/api/settings/appearance").json()["data"]
+    assert read_back["theme_id"] == "sand"
+    assert read_back["theme_mode"] == "dark"
+
+
+def test_appearance_rejects_unknown_mode(client):
+    assert client.put("/api/settings/appearance", json={"theme_mode": "purple"}).status_code == 422
+
+
+def test_appearance_null_clears_value(client):
+    client.put("/api/settings/appearance", json={"theme_id": "sand"})
+
+    data = client.put("/api/settings/appearance", json={"theme_id": None}).json()["data"]
+
+    assert data["theme_id"] is None
+
+
+def test_appearance_only_save_keeps_model_inherited(client):
+    client.put("/api/settings/appearance", json={"theme_id": "sand", "theme_mode": "dark"})
+
+    model = client.get("/api/settings/model").json()["data"]
+
+    assert model["inherited_from_env"] is True

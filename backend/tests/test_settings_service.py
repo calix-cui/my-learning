@@ -189,3 +189,81 @@ def test_decrypt_with_broken_ciphertext_falls_back(db_session, user):
 
     config = config_from_row(row)
     assert config.api_key == ""
+
+
+def test_read_appearance_defaults_to_empty(db_session, user):
+    from app.schemas.settings import AppearanceSettingsResponse
+    from app.services import settings_service
+
+    data = settings_service.read_appearance(db_session, user.id)
+
+    assert isinstance(data, AppearanceSettingsResponse)
+    assert data.theme_id is None
+    assert data.theme_mode is None
+
+
+def test_update_appearance_only_touches_given_fields(db_session, user):
+    from app.schemas.settings import AppearanceSettingsUpdateRequest
+    from app.services import settings_service
+
+    settings_service.update_appearance(
+        db_session, user.id, AppearanceSettingsUpdateRequest(theme_id="sand", theme_mode="dark")
+    )
+    # 只传 theme_mode，theme_id 应保持
+    data = settings_service.update_appearance(
+        db_session, user.id, AppearanceSettingsUpdateRequest(theme_mode="light")
+    )
+
+    assert data.theme_id == "sand"
+    assert data.theme_mode == "light"
+
+
+def test_update_appearance_explicit_null_clears(db_session, user):
+    from app.schemas.settings import AppearanceSettingsUpdateRequest
+    from app.services import settings_service
+
+    settings_service.update_appearance(
+        db_session,
+        user.id,
+        AppearanceSettingsUpdateRequest(theme_id="graphite", theme_mode="system"),
+    )
+    data = settings_service.update_appearance(
+        db_session, user.id, AppearanceSettingsUpdateRequest(theme_id=None)
+    )
+
+    assert data.theme_id is None
+    assert data.theme_mode == "system"
+
+
+def test_appearance_shares_row_with_model_settings(db_session, user):
+    from app.schemas.settings import AppearanceSettingsUpdateRequest, ModelSettingsUpdateRequest
+    from app.services import settings_service
+
+    settings_service.update_model_settings(
+        db_session, user.id, ModelSettingsUpdateRequest(provider="fake", timeout_seconds=45)
+    )
+    settings_service.update_appearance(
+        db_session, user.id, AppearanceSettingsUpdateRequest(theme_id="indigo")
+    )
+
+    model = settings_service.read_model_settings(db_session, user.id)
+    appearance = settings_service.read_appearance(db_session, user.id)
+
+    assert model.timeout_seconds == 45
+    assert model.inherited_from_env is False
+    assert appearance.theme_id == "indigo"
+
+
+def test_saving_appearance_does_not_pretend_model_is_configured(db_session, user):
+    """外观和模型共用一行，但只存外观不能让模型配置「变成已配置」。"""
+    from app.schemas.settings import AppearanceSettingsUpdateRequest
+    from app.services import settings_service
+
+    settings_service.update_appearance(
+        db_session, user.id, AppearanceSettingsUpdateRequest(theme_id="sand")
+    )
+
+    model = settings_service.read_model_settings(db_session, user.id)
+
+    assert model.inherited_from_env is True
+    assert model.update_time is None  # 还没写过模型配置

@@ -13,7 +13,11 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import CurrentUser
 from app.common.response import Response
 from app.dependencies import get_db
-from app.schemas.settings import ModelSettingsUpdateRequest, ModelTestRequest
+from app.schemas.settings import (
+    AppearanceSettingsUpdateRequest,
+    ModelSettingsUpdateRequest,
+    ModelTestRequest,
+)
 from app.services import export_service, settings_service
 
 router = APIRouter(prefix="/settings", tags=["设置相关的接口"])
@@ -36,6 +40,18 @@ def update_model(payload: ModelSettingsUpdateRequest, db: DbSession, user: Curre
 @router.post("/model/test", response_model=Response, summary="测试模型连通性（不落库）")
 def test_model(payload: ModelTestRequest, db: DbSession, user: CurrentUser):
     data = settings_service.test_model_settings(db, user.id, payload)
+    return Response.success(data=data.model_dump(mode="json"))
+
+
+@router.get("/appearance", response_model=Response, summary="读取当前账号保存的外观")
+def read_appearance(db: DbSession, user: CurrentUser):
+    data = settings_service.read_appearance(db, user.id)
+    return Response.success(data=data.model_dump(mode="json"))
+
+
+@router.put("/appearance", response_model=Response, summary="保存外观（跨设备同步主题）")
+def update_appearance(payload: AppearanceSettingsUpdateRequest, db: DbSession, user: CurrentUser):
+    data = settings_service.update_appearance(db, user.id, payload)
     return Response.success(data=data.model_dump(mode="json"))
 
 

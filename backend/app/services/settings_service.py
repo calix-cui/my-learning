@@ -19,6 +19,8 @@ from app.llm import ModelConfig, build_llm_for, config_from_env, config_from_row
 from app.llm.base import ChatMessage, LLMError, LLMTimeoutError
 from app.models import UserSettings
 from app.schemas.settings import (
+    AppearanceSettingsResponse,
+    AppearanceSettingsUpdateRequest,
     ModelSettingsResponse,
     ModelSettingsUpdateRequest,
     ModelTestRequest,
@@ -44,8 +46,12 @@ def _get_or_create(db: Session, user_id: int) -> UserSettings:
 
 
 def _to_response(row: UserSettings | None) -> ModelSettingsResponse:
-    """把库里的行翻译成接口响应；没有行时如实反映环境变量里的默认值。"""
-    if row is None:
+    """把库里的行翻译成接口响应；没配过模型时如实反映环境变量里的默认值。
+
+    注意：外观（主题）会在同一行落库，所以「有行」不等于「配过模型」，
+    必须看 `model_configured`。
+    """
+    if row is None or not row.model_configured:
         env = config_from_env()
         return ModelSettingsResponse(
             provider=env.provider,  # type: ignore[arg-type]
@@ -81,6 +87,8 @@ def update_model_settings(
 ) -> ModelSettingsResponse:
     row = _get_or_create(db, user_id)
     changes = payload.model_dump(exclude_unset=True)
+    # 走到这里就是「确实保存了模型配置」，之后读接口不再回落环境变量
+    row.model_configured = True
 
     api_key = changes.pop("api_key", None)
     if api_key is not None:
@@ -190,3 +198,40 @@ def effective_settings_snapshot() -> dict[str, Any]:  # pragma: no cover - 调�
         "app_secret_key_configured": crypto.is_configured(),
         "app_env": settings.app_env,
     }
+
+
+def read_appearance(db: Session, user_id: int) -> AppearanceSettingsResponse:
+    """没有行或字段为空时返回全 None，前端据此用本机 localStorage 的值。"""
+    row = get_settings_row(db, user_id)
+    if row is None:
+        return AppearanceSettingsResponse()
+    return AppearanceSettingsResponse(
+        theme_id=row.theme_id,
+        theme_mode=row.theme_mode,  # type: ignore[arg-type]
+        update_time=row.update_time,
+    )
+
+
+def update_appearance(
+    db: Session, user_id: int, payload: AppearanceSettingsUpdateRequest
+) -> AppearanceSettingsResponse:
+    """只改显式传了的字段；显式传 null = 清空该字段（回到本机偏好）。
+
+    `model_fields_set` 用来区分「没传」和「传了 null」——
+    前者保持原值，后者才是清除。
+    """
+    row = _get_or_create(db, user_id)
+    changed = payload.model_fields_set
+
+    if "theme_id" in changed:
+        row.theme_id = payload.theme_id or None
+    if "theme_mode" in changed:
+        row.theme_mode = payload.theme_mode or None
+
+    db.commit()
+    db.refresh(row)
+    return AppearanceSettingsResponse(
+        theme_id=row.theme_id,
+        theme_mode=row.theme_mode,  # type: ignore[arg-type]
+        update_time=row.update_time,
+    )
