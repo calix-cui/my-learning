@@ -3,6 +3,8 @@
 > 设计系统 **以根目录 [`DESIGN.md`](../../DESIGN.md) 为唯一来源**（token、排版、布局、组件规则都在那里）。
 > 本目录只放**可点开的高保真稿**：`mockups/*.html`（自包含，无外部依赖）+ `docs/images/design-*.png` 截图。
 
+工具链与复现流程见 [`toolchain.md`](toolchain.md)（为什么用 impeccable 主导、taste-skill 只借细节）。
+
 ## 为什么不用旧的那套
 
 旧设计（`archive/product-admin/docs/design/`）是商品管理后台的，页面已归档下线；当前应用只有对话、登录、注册、设置四类页面，按 2026-11-09 的裁决**从零重建，不参考旧实现**。

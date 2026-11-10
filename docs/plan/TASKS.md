@@ -13,7 +13,7 @@
 | T-FE-02 | 新增【设置】模块 | Vue 前端（+ 后端按需） | DONE | T-UI-01；口径见 [`../setting design.md`](../setting%20design.md)、[ADR-0009](../adr/0009-per-user-model-settings.md) |
 | T-FE-03 | 主题系统（4 套主题 + 明暗/跟随系统） | Vue 前端 | DONE | — |
 | T-FE-04 | 状态管理迁到 Pinia（setup store） | Vue 前端 | DONE | 用户 m06333 |
-| T-DOC-01 | 设计工具链调研（design-taste-frontend / impeccable） | Lead | IN_PROGRESS | — |
+| T-DOC-01 | 设计工具链调研（design-taste-frontend / impeccable） | Lead | DONE | 交付 `docs/design/toolchain.md` |
 
 阶段 5「Agent 基础执行循环」仍按 11 阶段计划排在业务队列里，被上面三条 UI/前端任务插队，尚未开始。
 
@@ -52,9 +52,11 @@
 
 ---
 
-## T-DOC-01 · 设计工具链调研（Lead）
+## T-DOC-01 · 设计工具链调研（Lead，DONE）
 
-见本轮答复：`design-taste-frontend` 与 `impeccable` 的分工、可用命令、需要用户配合的点。
+- **交付**：[`docs/design/toolchain.md`](../design/toolchain.md)——两工具实测差异表、可复现命令流程（`context` → `init` → `document` → `shape` → `critique`/`audit`/`polish`/`harden` → `detect`）、仓库该提交哪些文件、重跑时机、四条被否方案。
+- **结论**：App 界面由 `impeccable` 的 Operate 模式主导，`design-taste-frontend` 只借排版/间距/动效/文案细则。
+- **关键证据**：官网提到的 `references/app-screens.md` 在本地 2.5.1 与上游 `skills/taste-skill/references/`（20 个文件）中都不存在，属未发布路线，不能当方案依据。
 
 ---
 
