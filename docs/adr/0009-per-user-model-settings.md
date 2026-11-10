@@ -52,3 +52,11 @@
 | 接口 | `GET/PUT /api/settings/model`、`POST /api/settings/model/test`、`GET /api/settings/export`（见 api.md §4） |
 | 验证 | 后端 148 例 / 94.22%；设置 E2E 13/13（含「测试连接」「导出可解析」「注销后无法登录」） |
 | 代价兑现 | 每轮对话多一条 `user_settings` 查询（已用主键查，成本可忽略）；Key 丢失只能重填（无找回入口，界面已写明） |
+
+## 追加（2026-11-10）：外观也进 `user_settings`
+
+- 新增 `theme_id` / `theme_mode` 两列（都可空），接口 `GET|PUT /api/settings/appearance`。
+- **`model_configured` 列**：外观与模型共用一行，所以「有行」不再代表「配过模型」；
+  只有 `update_model_settings()` 会把该列置 `true`，读接口据此决定是否回落环境变量。
+  （最初漏了这层，导致只改主题的新账号拿不到环境变量里的模型配置。）
+- 优先级：账号 > `localStorage`；切换主题先写本机、再异步写账号，失败只影响跨设备同步。

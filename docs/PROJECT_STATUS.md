@@ -21,6 +21,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-10 | **主题随账号同步（T-FE-03 收尾）**：`user_settings` 加 `theme_id` / `theme_mode` + `GET|PUT /api/settings/appearance`；登录后账号优先、切换时本地先生效再异步写回；顺带用 `model_configured` 列修掉「只存主题被当成配过模型」的问题 | [ADR-0009](adr/0009-per-user-model-settings.md)、[api.md](api.md) §4.5；后端 159 例 / 94.42%，前端 59 例，设置 E2E 15 项 |
 | 11-09 | **设置模块（T-FE-02）**：模型接入（Key Fernet 加密存 `user_settings`、界面只显示末四位、可测试连接）/ 账号资料（改显示名、改密码踢其他设备）/ 登录设备（撤销）/ 外观 / 数据管理（导出 JSON·Markdown、注销账号）；聊天按账号取模型，未配置回落环境变量 | [ADR-0009](adr/0009-per-user-model-settings.md)、[api.md](api.md) §3.8–3.9、§4；后端 148 例 / 94.22%，前端 54 例，设置 E2E 13 项 |
 | 11-09 | **前端按 `DESIGN.md` 重构全部页面**：外壳（264 侧栏 + 48 顶栏 + 1080 内容区）、对话（720 阅读列 + 气泡 + 输入盒）、登录/注册（400 卡片 + 衬线标题 + logo）、设置（200 导航 + 560 表单）；会话状态提升到 `stores/chat.ts`；`styles/index.css` 收敛为 token 兜底 + reset + Element Plus 映射；接入 logo/favicon/manifest | `DESIGN.md`、[design/README.md](design/README.md)、截图 `docs/images/ui-0*.png`；前端 50 例、E2E 13+10 全过 |
 | 11-09 | **账号体系**：注册/登录/登出/我的设备/改密 + 服务端会话（HttpOnly Cookie，库里存 SHA-256）+ Argon2id + `conversations.user_id` 数据隔离（越权一律 404）+ 前端登录守卫与 401 统一跳转；后端 123 例 / 93.37%，前端 50 例（含组件 11），账号 E2E 13 项 | [auth.md](auth.md)、[ADR-0008](adr/0008-auth-and-session.md)、[api.md](api.md) §3 |

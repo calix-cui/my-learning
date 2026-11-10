@@ -319,6 +319,20 @@ curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: applic
 
 其他 `format` 取值 → `422`。
 
+### 4.5 读取 / 保存外观 `GET|PUT /api/settings/appearance`
+
+跨设备同步主题用。两个字段都可以是 `null`（表示这个账号没存过）。
+
+```json
+{"theme_id":"sand","theme_mode":"dark","update_time":"2026-11-10 15:20:00"}
+```
+
+保存只传要改的字段；**显式传 `null` = 清掉该字段**（回到本机偏好），不传 = 保持原值。
+
+- `theme_id`：主题 id（如 `pine` / `sand` / `indigo` / `graphite`），后端不校验取值范围，前端遇到未知 id 会忽略并保留本机主题。
+- `theme_mode`：`light` / `dark` / `system`，其他值 `422`。
+- 与模型配置共用 `user_settings` 同一行，**只存外观不会让模型配置变成「已配置」**（`inherited_from_env` 仍为 `true`）。
+
 ## 5 前端接入注意事项
 
 1. **统一解包**：所有业务响应都是 `{code,message,data}`；axios 拦截器里 `code !== 200` 时抛错并展示 `message`，业务层只拿 `data`。
@@ -327,7 +341,8 @@ curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: applic
 4. **`create_time` / `update_time` 非 ISO**：形如 `"2026-11-08 22:01:33"`；`new Date(...)` 在 Safari 会 Invalid Date，需先 `s.replace(" ", "T")`。
 5. **流式用 `fetch` 而非 `EventSource`**：接口是 `POST` + body（内容可达 4000 字，不能塞 query），前端按 `\n\n` 分帧、`data:` 行 `JSON.parse`，见 `frontend/src/api/chat.ts`。
 6. **CORS / 代理**：开发期推荐 Vite proxy（`/api` → `http://127.0.0.1:8000`）；直连时后端已放行 5173/4173（见 1.6），跨域请求需 `withCredentials`。
-7. **401 统一处理**：`src/api/client.ts` 拦截器收到 401 会清本地登录态并跳 `/login?redirect=...`；`/auth/me` 探测请求带 `skipAuthRedirect: true` 豁免，由路由守卫自行判断。
+7. **主题同步规则**：本机 `localStorage` 先保证首屏不闪；登录后拉一次 `/api/settings/appearance`，账号有值就以账号为准，没有就把本机偏好写上去。切换主题时本地立即生效、异步写回账号（失败不影响本地）。
+8. **401 统一处理**：`src/api/client.ts` 拦截器收到 401 会清本地登录态并跳 `/login?redirect=...`；`/auth/me` 探测请求带 `skipAuthRedirect: true` 豁免，由路由守卫自行判断。
 
 ## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages`）
 

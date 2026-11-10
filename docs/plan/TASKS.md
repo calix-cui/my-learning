@@ -65,7 +65,8 @@
 - **新增主题只需两处**：`theme/themes/<id>.ts` 写 18 个语义色（light + dark），在 `theme/themes/index.ts` 的数组里加一项。色阶（Element Plus 的 light-3/5/7/8/9）由 `color-mix` 自动派生。
 - **兼容层**：`styles/index.css` 的旧 `--pa-*` 全部映射到 `--ma-*`，老页面不改代码即跟随主题。
 - **验证**：`pnpm type-check` / `lint` / `test`（39 passed，主题相关 8 例）/ `build` 全绿；4 套主题 × 明暗 × 跟随系统的实测截图见 [`docs/design/README.md`](../design/README.md#主题系统2026-11-09-落地)。
-- **已知未做**：主题只存 localStorage，**未随账号同步**（换设备要重选）；等「模型接入」一起做设置读写接口时再补 `user_settings`。
+- **跨设备同步（2026-11-10 补齐）**：`user_settings` 加 `theme_id` / `theme_mode`，接口 `GET|PUT /api/settings/appearance`；登录后拉一次（账号 > 本机），切换主题时本地立即生效、异步写回。设置 E2E 加了两条：「切换主题后写回账号」「清空本机缓存后主题从账号恢复」。
+- **顺带修的坑**：外观与模型共用一行，最初导致「只改主题的新账号」被判成「已配置模型」而丢掉环境变量默认值 → 加 `model_configured` 列区分。
 
 ---
 
