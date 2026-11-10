@@ -9,7 +9,16 @@ from collections.abc import Iterator
 
 import httpx
 
-from app.llm.base import ChatMessage, LLMError, LLMReply, LLMTimeoutError
+from app.llm.base import (
+    ChatMessage,
+    LLMError,
+    LLMMessage,
+    LLMReply,
+    LLMTimeoutError,
+    ToolCall,
+    ToolCallReply,
+    ToolSpec,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +59,38 @@ class OpenAICompatibleClient:
         }
         if stream:
             payload["stream"] = True
+        return payload
+
+    def _tool_payload(self, messages: list[LLMMessage], tools: list[ToolSpec]) -> dict[str, object]:
+        """带工具的一轮请求体。
+
+        消息要按 OpenAI 的约定组装：assistant 的 `tool_calls` 原样带回，
+        tool 消息带 `tool_call_id`，否则上游无法把结果和调用配对，会直接 400。
+        """
+        converted: list[dict[str, object]] = []
+        for message in messages:
+            role = message.get("role", "user")
+            item: dict[str, object] = {"role": role, "content": message.get("content", "")}
+            if message.get("tool_calls"):
+                item["tool_calls"] = message["tool_calls"]
+            if message.get("tool_call_id"):
+                item["tool_call_id"] = message["tool_call_id"]
+            converted.append(item)
+
+        payload: dict[str, object] = {"model": self.model, "messages": converted}
+        if tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool["name"],
+                        "description": tool["description"],
+                        "parameters": tool["parameters"],
+                    },
+                }
+                for tool in tools
+            ]
+            payload["tool_choice"] = "auto"
         return payload
 
     @property
@@ -125,3 +166,79 @@ class OpenAICompatibleClient:
 
         model = data.get("model") or self.model
         return LLMReply(content=content, model=str(model))
+
+    def chat_with_tools(self, messages: list[LLMMessage], tools: list[ToolSpec]) -> ToolCallReply:
+        """一轮带工具的补全。
+
+        不做任何文本解析：工具调用来自 `choices[0].message.tool_calls`，
+        参数保持上游给的原始 JSON 字符串，交给工具层做 pydantic 校验。
+        """
+        payload = self._tool_payload(messages, tools)
+        try:
+            response = self._client.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=self._headers,
+                timeout=self.timeout_seconds,
+            )
+        except httpx.TimeoutException as exc:
+            raise LLMTimeoutError() from exc
+        except httpx.HTTPError as exc:
+            raise LLMError() from exc
+
+        self._raise_for_status(response.status_code)
+
+        try:
+            data = response.json()
+            choice = data["choices"][0]
+            message = choice["message"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise LLMError("模型返回格式无法解析") from exc
+
+        raw_calls = message.get("tool_calls") or []
+        if not isinstance(raw_calls, list):
+            raise LLMError("模型返回格式无法解析")
+
+        calls: list[ToolCall] = []
+        for item in raw_calls:
+            try:
+                function = item["function"]
+                calls.append(
+                    ToolCall(
+                        id=str(item.get("id") or f"call_{len(calls) + 1}"),
+                        name=str(function["name"]),
+                        # 参数可能是对象也可能是字符串，统一转成字符串交给工具层解析
+                        arguments=_as_json_text(function.get("arguments")),
+                    )
+                )
+            except (KeyError, TypeError, AttributeError) as exc:
+                raise LLMError("模型返回格式无法解析") from exc
+
+        content = message.get("content")
+        if content is None:
+            content = ""
+        if not isinstance(content, str):
+            raise LLMError("模型返回格式无法解析")
+
+        # 既没有文本也没有工具调用，说明上游返回了空结果，按失败处理
+        if not calls and not content.strip():
+            raise LLMError("模型返回内容为空")
+
+        return ToolCallReply(
+            content=content,
+            tool_calls=calls,
+            model=str(data.get("model") or self.model),
+            finish_reason=str(choice.get("finish_reason") or ("tool_calls" if calls else "stop")),
+        )
+
+
+def _as_json_text(value: object) -> str:
+    """把上游的 arguments 统一成字符串：对象序列化，字符串原样保留。"""
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return "{}"
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except (TypeError, ValueError) as exc:
+        raise LLMError("模型返回格式无法解析") from exc
