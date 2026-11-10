@@ -10,14 +10,52 @@
 
 范围只到「单 agent、单会话、无人工审批的自动循环」。多 agent 协作、MCP、长期记忆都不在本阶段。
 
-## 2. 调研：现在应用最广的四种运行架构
+## 2. 调研：ReAct 与现在应用最广的四种运行架构
 
+| **ReAct（提示词范式）** | [Yao et al., 2022《ReAct: Synergizing Reasoning and Acting》](https://arxiv.org/abs/2210.03629) | 在**提示词**里交替生成 `Thought → Action → Observation` 文本，Action 由正则解析后执行 | 模型输出 `Finish[...]` 或达到提示词里的步数上限 | 靠对话上下文累积（人工拼接） | 无（纯提示工程，无运行时钩子） |
 | 架构 | 代表实现 | 循环原语 | 终止条件 | 状态与持久化 | 人类介入 |
 |---|---|---|---|---|---|
 | **单 agent 工具循环** | [Anthropic「Building effective agents」](https://www.anthropic.com/research/building-effective-agents)、[Claude Agent SDK 的 agent loop](https://code.claude.com/docs/en/agent-sdk/agent-loop) | 请求 → 模型返回 `tool_use` 或最终文本 → 执行工具 → 结果作为 `tool_result` 回灌 → 再请求 | 模型不再请求工具 | SDK 内部消息列表 + 会话文件 | `canUseTool` 回调 / 权限模式 |
 | **图状状态机** | [LangGraph](https://langchain-ai.github.io/langgraph/) | 显式建图：`agent` 节点 → 条件边 → `tools` 节点 → 回 `agent` | 条件边走向 `END` | checkpointer 逐步落库，可回放 | `interrupt()` 挂起等人 |
 | **SDK Runner** | [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)、Claude Agent SDK | SDK 内部跑循环，暴露一次 `run()` | `max_turns` 或模型收尾 | `RunResult.new_items` 事件流 | guardrails + 审批钩子 |
 | **多 agent 编排** | CrewAI / AutoGen / Agents SDK 的 handoff | 一个 agent 把控制权交给另一个 | 最后一位给出最终答复 | 各自会话 | 同上 |
+
+### 2.1 为什么不直接「用 ReAct」
+
+**因为 ReAct 是一套提示词范式，不是运行时；而它要解决的问题，现在由原生工具调用协议承担了。**
+
+ReAct 论文（[arXiv:2210.03629](https://arxiv.org/abs/2210.03629)）的核心贡献是让模型**交替生成推理轨迹与动作**：
+`Thought` 帮模型规划与纠错，`Action` 让它去查外部资料，`Observation` 把结果带回上下文——
+在 HotpotQA / FEVER 上，这种交替比纯 chain-of-thought 更少幻觉，在 ALFWorld / WebShop 上成功率分别高出 34% / 10%。
+
+但那篇论文写作时（2022）模型还没有原生函数调用，所以 Action 是一段**文本**，需要程序用正则从生成内容里抠出来。
+今天的模型协议已经把这个环节标准化了：
+
+| 维度 | ReAct（文本 Action） | 原生工具调用（本设计采用） |
+|---|---|---|
+| 动作来源 | 模型输出的自由文本，正则解析 | API 返回结构化 `tool_calls` / `tool_use` 块 |
+| 参数校验 | 自己解析、自己容错 | JSON Schema 由模型侧遵守，服务端再校验 |
+| 错误回灌 | 拼一句「Observation: error…」 | 专门的错误通道（如 `is_error: true` 的 `tool_result`） |
+| 并行调用 | 基本做不到 | 一次响应多个 `tool_calls`，可并发执行 |
+| 终止判定 | 靠约定字符串（`Finish[...]`） | 看 `finish_reason` / `stop_reason` 是否还请求工具 |
+| 可审计性 | 解析结果不稳定，日志难对齐 | 每次调用有 `id`，请求与结果可精确配对 |
+
+Anthropic 官方教程里那五段「单工具单轮 → 多工具并行 → 错误处理」的演进，本质上就是**同一个循环**：
+`while stop_reason == "tool_use": 执行工具 → 把 tool_result 塞回对话 → 再请求`——
+它保留了 ReAct 的「思考-行动-观察」结构，只是把 Action/Observation 换成了结构化消息块。
+
+**所以本设计不是「抛弃 ReAct」，而是用生产级协议实现 ReAct 的循环**：
+
+- ReAct 的 `Thought` → 我们的 `assistant_text` 步骤 + `assistant_delta` 流式事件（用户能看见模型在想什么）。
+- ReAct 的 `Action` → 结构化 `tool_calls`，参数走 JSON Schema，执行前再过一遍 pydantic 校验。
+- ReAct 的 `Observation` → `tool_result`，失败时带 `ok=false` 与错误信息回灌，让模型自己纠错。
+- ReAct 的「步数上限」→ 我们写死在执行器里（8 步），不依赖提示词自觉。
+
+反过来，**什么时候该用纯 ReAct 提示词**：模型不支持工具调用协议、需要在一次补全里看到完整推理链、或做论文级对照实验。
+我们两者都不需要，所以选结构化协议。
+
+顺带说明：**不用 LangChain 的 `ReActAgent` 之类现成实现**，原因是它们同样停留在「文本解析」或引入一整套框架抽象，
+而我们的模型层（`LLMClient`）已经自建，工具也只有三个——自己写 250 行循环比适配框架更可控。详见 [ADR-0010](adr/0010-agent-execution-loop.md)。
 
 四条共同的底层原语，也是我们要实现的东西：
 
@@ -148,7 +186,7 @@ erDiagram
 
 | # | 任务 | 涉及文件 | 验收 |
 |---|---|---|---|
-| T1 | 协议扩展：`chat_with_tools` | `backend/app/llm/{base,fake,openai_compatible}.py` | Fake 能按脚本返回 `tool_calls`；OpenAI 兼容实现能发 `tools` 并解析 `tool_calls`；单测覆盖无工具/单工具/并行工具/畸形响应 |
+| T1 | 协议扩展：`chat_with_tools`（原生 `tool_calls`，非文本解析） | `backend/app/llm/{base,fake,openai_compatible}.py` | Fake 能按脚本返回 `tool_calls`；OpenAI 兼容实现能发 `tools` 并解析 `tool_calls`；单测覆盖无工具/单工具/并行工具/畸形响应 |
 | T2 | 数据模型与迁移 | `backend/app/models/{agent_run,agent_step}.py`、`migrations/versions/*` | 迁移可 upgrade/downgrade；`alembic check` 无漂移；级联删除生效 |
 | T3 | 工具层 | `backend/app/agent/tools/{base,calculator,now,search_conversations,registry}.py` | 每个工具的 happy path + 参数错误 + 超时；`calculator` 拒绝 `__import__`、`os`、超长表达式 |
 | T4 | 执行器与事件 | `backend/app/agent/{executor,events}.py` | 事件序列断言（含工具往返）；步数超限、工具失败重试、模型失败回滚 |

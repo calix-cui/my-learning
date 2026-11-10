@@ -51,8 +51,8 @@
 | 3 | 基础 API 和数据库 | ✅ | 对话 7 个操作 + 3 个探针、Alembic 迁移、MySQL（商品/分类接口已归档） |
 | 4 | **LLM 接入与基础对话** | ✅ | [chat.md](chat.md)：T1 表结构 / T2 模型抽象 / T3 会话 CRUD / T4 同步发消息 / T4b SSE 流式 / T5 `/chat` 页面 / T6 文档；已接 DeepSeek 实测 |
 | 4.5 | 账号体系（补强） | ✅ | [auth.md](auth.md)：users/sessions 两表 + Argon2id + 服务端会话 + 用户级数据隔离 + 登录页/守卫 |
-| 5 | Agent 基础执行循环 | 🟡 设计待确认 | [agent.md](agent.md) + [ADR-0010](adr/0010-agent-execution-loop.md)：单 agent 工具循环、8 步预算、T1–T7 拆分；**尚未写实现代码** |
-| 6 | Tool Calling | ⬜ | 依赖 5 |
+| 5 | Agent 基础执行循环 + Tool Calling | 🟡 设计待确认 | [agent.md](agent.md) + [ADR-0010](adr/0010-agent-execution-loop.md)：单 agent 工具循环、8 步预算、T1–T7 拆分；**尚未写实现代码** |
+| 6 | 工具生态与权限治理 | ⬜ | 依赖 5：工具注册表、只读/写入/外部分级、人工审批流、可观测性、MCP 适配层 |
 | 7 | Skill 和 MCP | ⬜ | 依赖 6；MCP client 在此阶段做（不自造协议，用官方 SDK） |
 | 8 | RAG 和 Memory | ⬜ | 依赖 7 |
 | 9 | Agent 应用功能完善 | ⬜ | 依赖 8 |
