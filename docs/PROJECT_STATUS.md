@@ -51,7 +51,7 @@
 | 3 | 基础 API 和数据库 | ✅ | 对话 7 个操作 + 3 个探针、Alembic 迁移、MySQL（商品/分类接口已归档） |
 | 4 | **LLM 接入与基础对话** | ✅ | [chat.md](chat.md)：T1 表结构 / T2 模型抽象 / T3 会话 CRUD / T4 同步发消息 / T4b SSE 流式 / T5 `/chat` 页面 / T6 文档；已接 DeepSeek 实测 |
 | 4.5 | 账号体系（补强） | ✅ | [auth.md](auth.md)：users/sessions 两表 + Argon2id + 服务端会话 + 用户级数据隔离 + 登录页/守卫 |
-| 5 | Agent 基础执行循环 | ⬜ | 依赖 4 |
+| 5 | Agent 基础执行循环 | 🟡 设计待确认 | [agent.md](agent.md) + [ADR-0010](adr/0010-agent-execution-loop.md)：单 agent 工具循环、8 步预算、T1–T7 拆分；**尚未写实现代码** |
 | 6 | Tool Calling | ⬜ | 依赖 5 |
 | 7 | Skill 和 MCP | ⬜ | 依赖 6；MCP client 在此阶段做（不自造协议，用官方 SDK） |
 | 8 | RAG 和 Memory | ⬜ | 依赖 7 |
@@ -59,7 +59,14 @@
 | 10 | 桌面端集成 | ⬜ | 按 [ADR-0001](adr/0001-desktop-shell-electron.md)（Electron + PyInstaller onedir） |
 | 11 | 部署、测试和发布 | ⚠️ 部分 | 容器化 ✅、测试基线 ✅、CI ✅；**发布流程（版本号/镜像归档/回滚）未做** |
 
-### 3.2 阶段 4 的接入方式（已定，设计见 [`chat.md`](chat.md)）
+### 3.2 阶段 5 的形状（待确认，设计见 [`agent.md`](agent.md)）
+
+调研了四种主流运行架构（单 agent 工具循环 / 图状状态机 / SDK Runner / 多 agent 编排），结论是**只实现第一种**：
+模型 ↔ 工具往返，没有 `tool_calls` 即收尾。护栏固定为最大 8 步、单工具 2s、连续 3 次同类失败中止。
+状态落 `agent_runs` + `agent_steps` 两张表，前端时间线可回放；工具 v1 只有 `calculator` / `now` / `search_conversations`，全部只读。
+不引 LangGraph / OpenAI Agents SDK / CrewAI，理由与被否方案见 [ADR-0010](adr/0010-agent-execution-loop.md)。
+
+### 3.2b 阶段 4 的接入方式（已定，设计见 [`chat.md`](chat.md)）
 
 **执行进度**：T1 数据模型 + 迁移 ✅（revision `b1b54e93e0ca`，`conversations` / `messages` 两表已建，`alembic check` 无漂移）；T2 模型抽象层 ✅（`FakeLLM` 默认 + `OpenAICompatibleClient`，`httpx.MockTransport` 覆盖 4 类错误映射）；T3 会话 CRUD ✅（5 个端点，[api.md](api.md) §4）；T4 发消息 ✅（`POST /{id}/messages`，同事务写两条消息、失败整体回滚、首条消息自动命名、上下文最近 20 条 + system，见 api.md §4.6；后端 104 例 / 覆盖率 87.59%）；T5 前端 `/chat` ✅（会话列表 + 消息区 + 输入框，Enter 发送、自动命名、刷新保留、重命名/删除，前端 26 例）；T4b 流式 ✅（`POST /{id}/messages/stream`，SSE 事件 meta/delta/done/error，先校验后开流、流结束才提交、断开即回滚，见 api.md §4.7；后端 120 例 / 覆盖率 87.87%；`pnpm acceptance:chat` 10 项 E2E 全过）；T6 文档 ✅
 
