@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { ElMessage } from 'element-plus'
 
@@ -15,6 +15,40 @@ import { confirmDialog, promptDialog } from '@/components/ui/messageBox'
 import type { AgentStep, ChatConversationListItem, ChatMessage } from '@/types/api'
 
 const AGENT_MODE_KEY = 'my-agent.agent-mode'
+
+/** 草稿态的伪会话键：界面已经在「一个会话」里，但后端还没有记录 */
+const DRAFT_KEY = 0
+
+/**
+ * 一个会话自己的运行时状态。
+ *
+ * 关键点：**会话之间不能共享可变状态**。之前 messages / streamingText 是 store 上的
+ * 单例，切换会话只是把它们换成另一份数据，而正在跑的流仍然往同一份里写，
+ * 于是「上一个会话的回答」就落到新会话里了。现在按会话隔离，流只写自己那一份。
+ */
+interface ChatThread {
+  messages: ChatMessage[]
+  /** 流式过程中已收到的文本；空串表示还在等第一个字符 */
+  streamingText: string
+  /** 当前这次运行的步骤时间线（工具往返过程） */
+  steps: AgentStep[]
+  /** 是否正在发送（普通回答或深度回答都算） */
+  sending: boolean
+  runningAgent: boolean
+  /** 是否已经从服务端拉过消息（避免每次切换都重复请求） */
+  loaded: boolean
+}
+
+function emptyThread(): ChatThread {
+  return {
+    messages: [],
+    streamingText: '',
+    steps: [],
+    sending: false,
+    runningAgent: false,
+    loaded: false,
+  }
+}
 
 /** 读回上次的「深度回答」开关；读不到就当关（省 token 是默认值） */
 function readAgentMode(): boolean {
@@ -33,12 +67,12 @@ function formatNow(): string {
 }
 
 /**
- * 会话状态提升到 store：侧边栏（会话列表）与对话页（消息区）要同时读写，
- * 放在视图里就得靠 props/emit 来回传，反而更难维护。
+ * 会话状态提升到 store：侧边栏（会话列表）与对话页（消息区）要同时读写。
+ * 每个会话的数据放在 threads 里按 id 隔离，视图只读「当前会话」那一份。
  */
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<ChatConversationListItem[]>([])
-  /** 当前打开的会话；null 表示还没选（空态） */
+  /** 当前打开的会话；null 表示草稿态（还没落库的空白会话） */
   const activeId = ref<number | null>(null)
   /**
    * 「新会话草稿」态：界面已经是一个空白会话，但后端还没有对应记录。
@@ -47,17 +81,33 @@ export const useChatStore = defineStore('chat', () => {
   const draft = ref(false)
   /** 每次点「新建会话」自增：视图据此清空输入框里的草稿文字 */
   const newChatTick = ref(0)
-  const messages = ref<ChatMessage[]>([])
   const loadingList = ref(false)
+  /** 正在拉某个会话的消息（只影响当前会话的骨架屏） */
   const loadingMessages = ref(false)
-  const sending = ref(false)
-  /** 流式过程中已收到的文本；空字符串表示还在等第一个字符 */
-  const streamingText = ref('')
   /** 是否用「深度回答」（agent 循环 + 工具）代替一问一答；默认关，省 token */
   const agentMode = ref(readAgentMode())
-  /** 当前这次运行的步骤时间线（工具往返过程） */
-  const agentSteps = ref<AgentStep[]>([])
-  const agentRunning = ref(false)
+
+  /** 按会话 id 存放的运行时状态；草稿态用 DRAFT_KEY */
+  const threads = reactive(new Map<number, ChatThread>())
+
+  /** 当前会话的键（草稿态是 0） */
+  const activeKey = computed(() => activeId.value ?? DRAFT_KEY)
+
+  function threadOf(key: number): ChatThread {
+    const existing = threads.get(key)
+    if (existing) return existing
+    threads.set(key, emptyThread())
+    // 必须把 reactive 代理取回来：直接改原始对象不会触发视图更新
+    return threads.get(key)!
+  }
+
+  /** 当前会话的那一份（视图只读这个） */
+  const activeThread = computed(() => threadOf(activeKey.value))
+  const messages = computed(() => activeThread.value.messages)
+  const streamingText = computed(() => activeThread.value.streamingText)
+  const agentSteps = computed(() => activeThread.value.steps)
+  const sending = computed(() => activeThread.value.sending)
+  const agentRunning = computed(() => activeThread.value.runningAgent)
 
   const activeConversation = computed(
     () => conversations.value.find((item) => item.id === activeId.value) ?? null,
@@ -66,12 +116,18 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 顶栏标签显示真正回话的模型（流式与非流式都会写进 assistant 消息） */
   const modelLabel = computed(() => {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const model = messages.value[i].model
+    const rows = messages.value
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      const model = rows[i].model
       if (model) return model
     }
     return ''
   })
+
+  /** 某个会话是否正在回答（侧栏可以用它显示「生成中」） */
+  function isBusy(id: number): boolean {
+    return threads.get(id)?.sending ?? false
+  }
 
   /** 列表里替换某条会话的本地状态，避免整表重拉 */
   function patchConversation(id: number, patch: Partial<ChatConversationListItem>) {
@@ -100,30 +156,33 @@ export const useChatStore = defineStore('chat', () => {
   async function openConversation(id: number) {
     draft.value = false
     activeId.value = id
-    loadingMessages.value = true
-    messages.value = []
+    const thread = threadOf(id)
+    // 已有缓存先显示（切回来是瞬时的），后台再刷新一次拿最新数据
+    const firstLoad = !thread.loaded
+    if (firstLoad) loadingMessages.value = true
     try {
       const detail = await getConversation(id)
-      messages.value = detail.messages
+      thread.messages = detail.messages
+      thread.loaded = true
       patchConversation(id, { title: detail.title })
     } catch {
-      // 会话可能已被别处删除：退回空态并刷新列表
-      activeId.value = null
-      messages.value = []
-      await loadConversations()
+      // 会话可能已被别处删除：只有当前还停在这个会话时才退回空态
+      threads.delete(id)
+      if (activeId.value === id) {
+        startNew()
+        await loadConversations()
+      }
     } finally {
-      loadingMessages.value = false
+      if (firstLoad) loadingMessages.value = false
     }
   }
 
   /** 进入新会话草稿态：不发任何请求，界面先空着，等第一条消息再建 */
   function startNew() {
+    threads.delete(DRAFT_KEY)
     draft.value = true
     newChatTick.value += 1
     activeId.value = null
-    messages.value = []
-    agentSteps.value = []
-    streamingText.value = ''
   }
 
   /** 草稿态发出第一条消息时才真正建会话；失败返回 null */
@@ -131,6 +190,12 @@ export const useChatStore = defineStore('chat', () => {
     if (activeId.value !== null) return activeId.value
     const created = await createConversation()
     conversations.value = [{ ...created, message_count: 0 }, ...conversations.value]
+    // 草稿里已经写好的用户消息搬到真实会话下，避免视觉上「跳一下」
+    const draftThread = threads.get(DRAFT_KEY)
+    if (draftThread?.messages.length) {
+      threadOf(created.id).messages = draftThread.messages
+    }
+    threads.delete(DRAFT_KEY)
     activeId.value = created.id
     draft.value = false
     return created.id
@@ -170,6 +235,7 @@ export const useChatStore = defineStore('chat', () => {
     await deleteConversation(item.id)
     ElMessage.success('删除成功')
     conversations.value = conversations.value.filter((row) => row.id !== item.id)
+    threads.delete(item.id)
     if (activeId.value === item.id) {
       // 删掉的正是当前会话：回到空白会话，而不是硬跳去别的会话
       startNew()
@@ -179,7 +245,7 @@ export const useChatStore = defineStore('chat', () => {
   /** 发送一条消息；返回是否成功（失败时由调用方决定输入框保留内容） */
   async function send(content: string): Promise<boolean> {
     const text = content.trim()
-    if (!text || sending.value) return false
+    if (!text || activeThread.value.sending) return false
 
     let id = activeId.value
     if (id === null) {
@@ -187,10 +253,11 @@ export const useChatStore = defineStore('chat', () => {
       if (id === null) return false
     }
 
-    // 乐观插入用户消息：等服务端 meta 回来再换成正身（带真实 id 与时间）
+    // 从此处开始只认这个 id：即使中途切走，写入的也是它自己那一份
+    const thread = threadOf(id)
     const optimisticId = -Date.now()
-    messages.value = [
-      ...messages.value,
+    thread.messages = [
+      ...thread.messages,
       {
         id: optimisticId,
         conversation_id: id,
@@ -200,22 +267,23 @@ export const useChatStore = defineStore('chat', () => {
         create_time: '',
       },
     ]
-    streamingText.value = ''
-    sending.value = true
+    thread.streamingText = ''
+    thread.sending = true
 
     let currentUserId = optimisticId
     try {
       await sendMessageStream(id, text, {
         onMeta: (message) => {
           currentUserId = message.id
-          messages.value = messages.value.map((m) => (m.id === optimisticId ? message : m))
+          thread.messages = thread.messages.map((m) => (m.id === optimisticId ? message : m))
         },
         onDelta: (delta) => {
-          streamingText.value += delta
+          thread.streamingText += delta
         },
         onDone: (event) => {
-          streamingText.value = ''
-          messages.value = [...messages.value, event.assistant_message]
+          thread.streamingText = ''
+          thread.messages = [...thread.messages, event.assistant_message]
+          thread.loaded = true
           patchConversation(id, {
             title: event.conversation_title,
             message_count: event.message_count,
@@ -227,12 +295,12 @@ export const useChatStore = defineStore('chat', () => {
       return true
     } catch (error) {
       // 后端已回滚这次提问，前端也要撤掉乐观消息
-      messages.value = messages.value.filter((m) => m.id !== currentUserId)
-      streamingText.value = ''
+      thread.messages = thread.messages.filter((m) => m.id !== currentUserId)
+      thread.streamingText = ''
       ElMessage.error(error instanceof Error ? error.message : '发送失败，请稍后重试')
       return false
     } finally {
-      sending.value = false
+      thread.sending = false
     }
   }
 
@@ -249,7 +317,7 @@ export const useChatStore = defineStore('chat', () => {
   /** 用 agent 循环发一条消息：过程进时间线，最终答复进 messages */
   async function sendWithAgent(content: string): Promise<boolean> {
     const text = content.trim()
-    if (!text || agentRunning.value) return false
+    if (!text || activeThread.value.runningAgent) return false
 
     let conversationId = activeId.value
     if (conversationId === null) {
@@ -257,9 +325,11 @@ export const useChatStore = defineStore('chat', () => {
     }
     if (conversationId === null) return false
 
+    // 与 send 一样：整段流程绑定 conversationId 自己的 thread
+    const thread = threadOf(conversationId)
     const optimisticId = -Date.now()
-    messages.value = [
-      ...messages.value,
+    thread.messages = [
+      ...thread.messages,
       {
         id: optimisticId,
         conversation_id: conversationId,
@@ -269,9 +339,10 @@ export const useChatStore = defineStore('chat', () => {
         create_time: formatNow(),
       },
     ]
-    agentSteps.value = []
-    agentRunning.value = true
-    sending.value = true
+    thread.steps = []
+    thread.streamingText = ''
+    thread.runningAgent = true
+    thread.sending = true
 
     try {
       await sendAgentStream(conversationId, text, {
@@ -286,8 +357,8 @@ export const useChatStore = defineStore('chat', () => {
             create_time: formatNow(),
           }
           if (event.type === 'tool_call') {
-            agentSteps.value = [
-              ...agentSteps.value,
+            thread.steps = [
+              ...thread.steps,
               {
                 ...base,
                 seq: event.seq,
@@ -297,8 +368,8 @@ export const useChatStore = defineStore('chat', () => {
               },
             ]
           } else if (event.type === 'tool_result') {
-            agentSteps.value = [
-              ...agentSteps.value,
+            thread.steps = [
+              ...thread.steps,
               {
                 ...base,
                 seq: event.seq,
@@ -310,15 +381,15 @@ export const useChatStore = defineStore('chat', () => {
               },
             ]
           } else if (event.type === 'assistant_text') {
-            agentSteps.value = [
-              ...agentSteps.value,
+            thread.steps = [
+              ...thread.steps,
               { ...base, seq: event.seq, kind: 'assistant_text', content: event.content },
             ]
           }
         },
         onFinished: (event) => {
-          messages.value = [
-            ...messages.value,
+          thread.messages = [
+            ...thread.messages,
             {
               id: -Date.now() - 1,
               conversation_id: conversationId,
@@ -328,25 +399,27 @@ export const useChatStore = defineStore('chat', () => {
               create_time: formatNow(),
             },
           ]
+          const row = conversations.value.find((item) => item.id === conversationId)
           patchConversation(conversationId, {
-            message_count: (activeConversation.value?.message_count ?? 0) + 2,
+            message_count: (row?.message_count ?? 0) + 2,
             update_time: formatNow(),
           })
           sortByRecent()
         },
       })
-      // 用服务端的真实 id / 时间覆盖乐观数据
+      // 用服务端的真实 id / 时间覆盖乐观数据（写回它自己的 thread）
       const detail = await getConversation(conversationId)
-      messages.value = detail.messages
+      thread.messages = detail.messages
+      thread.loaded = true
       patchConversation(conversationId, { title: detail.title })
       return true
     } catch (error) {
-      messages.value = messages.value.filter((item) => item.id !== optimisticId)
+      thread.messages = thread.messages.filter((item) => item.id !== optimisticId)
       ElMessage.error(error instanceof Error ? error.message : '深度回答失败')
       return false
     } finally {
-      agentRunning.value = false
-      sending.value = false
+      thread.runningAgent = false
+      thread.sending = false
     }
   }
 
@@ -354,18 +427,17 @@ export const useChatStore = defineStore('chat', () => {
   async function loadAgentRuns(conversationId: number) {
     const data = await listAgentRuns(conversationId)
     const latest = data.items[0]
-    agentSteps.value = latest ? latest.steps.filter((step) => step.kind !== 'final_answer') : []
+    threadOf(conversationId).steps = latest
+      ? latest.steps.filter((step) => step.kind !== 'final_answer')
+      : []
   }
 
   /** 退出登录时清空，避免下一个账号看到上一个人的会话 */
   function reset() {
     conversations.value = []
+    threads.clear()
     activeId.value = null
-    messages.value = []
-    streamingText.value = ''
-    agentSteps.value = []
-    agentRunning.value = false
-    sending.value = false
+    draft.value = false
   }
 
   return {
@@ -384,6 +456,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversation,
     activeTitle,
     modelLabel,
+    isBusy,
     loadConversations,
     openConversation,
     startNew,

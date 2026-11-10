@@ -196,3 +196,65 @@ class LLMClient(Protocol):
 - 第一条消息发出去时才 `POST /api/conversations` 建会话，紧接着走原来的 `/messages/stream`（或 `/agent/stream`）。
 - 删掉当前正在看的会话、或刷新后没有任何会话，都回到这个草稿态，而不是「空页面」。
 - 因此「有一个打开的会话」不再等于「后端有一行记录」：判断界面状态看 `chat.draft` / `chat.activeId`（`draft` 为真时 `activeId` 必为 null）。
+
+## 8. 会话运行时状态按会话隔离（2026-11-11 修订）
+
+### 8.1 修复的 bug
+
+「发出一条问题后立刻切到别的会话，切过去的新会话会被上一个会话的回答占据」。
+
+根因不是后端：SSE 按 `conversation_id` 各跑各的，服务端一直是对的。问题在**前端把运行时状态放在了 store 单例上**：
+
+```ts
+// 修复前：一份全局状态，谁都能写
+const messages = ref<ChatMessage[]>([])
+const streamingText = ref('')
+```
+
+`send()` 的回调（`onDelta` / `onDone`）闭包里拿的是 `conversationId`，但写的是**全局** `messages` / `streamingText`；`openConversation()` 只是把这两份数据换成另一个会话的。于是：
+
+1. 旧流还在跑 → `onDelta` 把内容追加到「当前会话」的流式气泡里（此时当前会话已经是别人）；
+2. `onDone` 把 assistant 消息 push 进新会话的消息数组；
+3. `sendWithAgent()` 收尾的 `await getConversation(id)` 更彻底，直接把全局 `messages` 覆盖成旧会话的详情。
+
+所以是**架构问题**：会话状态是单例，而「一次请求」的生命周期可以比「当前选中的会话」更长。
+
+### 8.2 方案：per-thread state + run 绑定
+
+参考 ChatGPT/Claude 的 Web 端、Vercel AI SDK 的 `useChat`、assistant-ui 的 runtime 设计，共识是两条：
+
+- **消息按 thread 存**（`threadId → messages`），视图只读当前 thread；
+- **流（run）绑定它自己的 thread**，回调只写那一份，切走不打断、也不串台。
+
+本项目落地为 `frontend/src/stores/chat.ts` 里的 `threads`：
+
+```ts
+interface ChatThread {
+  messages: ChatMessage[]
+  streamingText: string   // 流式已收文本
+  steps: AgentStep[]      // 深度回答的工具时间线
+  sending: boolean        // 普通/深度回答都算
+  runningAgent: boolean
+  loaded: boolean         // 是否已从服务端拉过
+}
+const threads = reactive(new Map<number, ChatThread>())  // 草稿态用 key 0
+const activeKey = computed(() => activeId.value ?? 0)
+```
+
+- `messages` / `streamingText` / `agentSteps` / `sending` / `agentRunning` 全部改成由 `activeKey` 派生的 `computed`，视图代码不变；
+- `send()` 与 `sendWithAgent()` 入口处 `const thread = threadOf(conversationId)`，**整段流程（包括 `onDone` 收尾的 `getConversation`）只写这个 thread**；
+- 切会话只是改 `activeId`，旧流继续跑完并落到它自己的 thread，切回去能看到完整回答（不需要重拉）；
+- 侧栏可用 `chat.isBusy(id)` 显示「生成中」，不再依赖全局 `sending`。
+
+### 8.3 两条容易踩的实现细节
+
+1. **reactive Map 的代理**：`threads.set(key, obj)` 存的是原始对象，`get()` 才拿到代理。`threadOf()` 必须把 `get()` 的结果返回，直接改原始对象不会触发视图更新。
+2. **不要用「当前会话」推断回调归属**：回调里一律用入口处捕获的 `conversationId`，禁止读 `activeId`。
+
+### 8.4 回归测试
+
+`frontend/src/stores/chat.test.ts`（3 例，`sendMessageStream` 用可控 deferred 模拟未完成的流）：
+
+- 切走后旧会话的 `onDelta` / `onDone` 不写进新会话，切回去数据还在；
+- 两个会话的 `sending` 互相独立（切到空闲会话按钮可用，`isBusy(旧会话)` 为真）；
+- 删掉当前会话回到草稿态并清掉缓存。
