@@ -38,6 +38,26 @@ def tool_result(seq: int, tool: str, ok: bool, content: str, duration_ms: int) -
     }
 
 
+def approval_required(
+    run_id: int,
+    approval_id: int,
+    seq: int,
+    tool: str,
+    args: dict[str, Any] | None,
+    reason: str,
+) -> AgentEvent:
+    """运行暂停，等用户批准/拒绝。前端据此渲染审批卡片，流到此结束。"""
+    return {
+        "type": "approval_required",
+        "run_id": run_id,
+        "approval_id": approval_id,
+        "seq": seq,
+        "tool": tool,
+        "args": args,
+        "reason": reason,
+    }
+
+
 def run_finished(run_id: int, content: str, steps: int, model: str | None) -> AgentEvent:
     return {
         "type": "run_finished",

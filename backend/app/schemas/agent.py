@@ -31,7 +31,9 @@ class AgentRunResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    status: Literal["running", "completed", "failed", "cancelled"] = Field(description="运行状态")
+    status: Literal["running", "waiting_approval", "completed", "failed", "cancelled"] = Field(
+        description="运行状态"
+    )
     step_count: int = Field(description="已执行步数")
     model: str | None = Field(default=None, description="实际使用的模型")
     started_time: datetime
@@ -48,9 +50,39 @@ class AgentRunListResponse(BaseModel):
     items: list[AgentRunResponse]
 
 
+class ApprovalDecisionRequest(BaseModel):
+    decision: Literal["approve", "reject"] = Field(description="批准或拒绝")
+    note: str | None = Field(default=None, max_length=255, description="决定理由，可空")
+
+
+class AgentApprovalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    run_id: int
+    seq: int = Field(description="对应 agent_steps.seq")
+    tool_name: str
+    tool_args: dict | None = Field(default=None, description="要执行什么，给用户看清楚")
+    status: Literal["pending", "approved", "rejected", "expired"]
+    note: str | None = Field(default=None, description="挂起原因或用户填的理由")
+    decided_time: datetime | None = None
+    create_time: datetime
+
+    @field_serializer("decided_time", "create_time")
+    def serialize_time(self, value: datetime | None) -> str | None:
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
+
+
+class AgentApprovalListResponse(BaseModel):
+    items: list[AgentApprovalResponse]
+
+
 __all__ = [
+    "AgentApprovalListResponse",
+    "AgentApprovalResponse",
     "AgentMessageRequest",
     "AgentRunListResponse",
     "AgentRunResponse",
     "AgentStepResponse",
+    "ApprovalDecisionRequest",
 ]

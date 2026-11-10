@@ -4,16 +4,28 @@
 """
 
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.agent.executor import MAX_STEPS, prepare_run, stream_run
+from app.agent.executor import (
+    MAX_STEPS,
+    build_policy,
+    decide_approval,
+    prepare_run,
+    resume_run,
+    stream_run,
+)
+from app.agent.policy import ToolPolicy
+from app.agent.tools import ToolLevel, ToolRegistry
+from app.agent.tools.base import ToolSpec, spec_of
 from app.auth.service import register_user
 from app.common.exceptions import BusinessError
 from app.llm.base import ToolCallReply
 from app.llm.fake import FakeLLM, final_reply, tool_reply
-from app.models import AgentRun, AgentStep, Conversation, Message
+from app.models import AgentApproval, AgentRun, AgentStep, Conversation, Message
 
 
 def _setup(db: Session, email: str = "exec@example.com", title: str = "测试"):
@@ -273,3 +285,169 @@ def test_busy_conversation_rejected(db_session: Session):
     with pytest.raises(BusinessError) as busy:
         prepare_run(db_session, user_id=user.id, conversation_id=conversation.id, content="第二次")
     assert busy.value.code == 409
+
+
+class _RenameArgs(BaseModel):
+    title: str
+
+
+class _RenameTool:
+    """写工具：只为测试审批链路，不真的改库。"""
+
+    name = "rename_conversation"
+    description = "改会话标题"
+    args_model = _RenameArgs
+    level = ToolLevel.WRITE
+
+    def run(self, args: Any, *, user_id: int) -> str:  # noqa: ARG002
+        return f"已改名为 {args.title}"
+
+    def spec(self) -> ToolSpec:
+        return spec_of(self)
+
+
+def _write_registry() -> ToolRegistry:
+    return ToolRegistry([_RenameTool()])
+
+
+def _suspend(db_session: Session, email: str = "approve@example.com"):
+    user, conversation = _setup(db_session, email)
+    registry = _write_registry()
+    llm = FakeLLM(tool_script=[tool_reply("rename_conversation", '{"title": "新名字"}')])
+    _, run, messages, is_first = prepare_run(
+        db_session, user_id=user.id, conversation_id=conversation.id, content="把标题改成新名字"
+    )
+    events = _drain(
+        stream_run(
+            db_session,
+            run=run,
+            conversation=conversation,
+            messages=messages,
+            llm=llm,
+            is_first_message=is_first,
+            user_id=user.id,
+            registry=registry,
+            policy=ToolPolicy(registry=registry),
+        )
+    )
+    return user, conversation, registry, run, events
+
+
+def test_write_tool_suspends_run_and_waits_for_approval(db_session: Session):
+    _, _, _, run, events = _suspend(db_session)
+
+    # 流停在审批事件，不会先跑工具再问
+    assert _types(events) == ["run_started", "tool_call", "approval_required"]
+    assert events[-1]["tool"] == "rename_conversation"
+    assert events[-1]["args"] == {"title": "新名字"}
+
+    db_session.expire_all()
+    assert db_session.get(AgentRun, run.id).status == "waiting_approval"
+    approval = db_session.query(AgentApproval).filter_by(run_id=run.id).one()
+    assert approval.status == "pending"
+    # 工具没执行：库里只有 tool_call，没有 tool_result
+    kinds = [step.kind for step in db_session.query(AgentStep).filter_by(run_id=run.id)]
+    assert kinds == ["user_message", "tool_call"]
+
+
+def test_approve_resumes_run_and_runs_the_tool(db_session: Session):
+    user, conversation, registry, run, _ = _suspend(db_session)
+    approval = db_session.query(AgentApproval).filter_by(run_id=run.id).one()
+
+    run, approval = decide_approval(
+        db_session,
+        user_id=user.id,
+        run_id=run.id,
+        approval_id=approval.id,
+        approved=True,
+        note=None,
+    )
+    events = _drain(
+        resume_run(
+            db_session,
+            run=run,
+            approval=approval,
+            llm=FakeLLM(),
+            user_id=user.id,
+            registry=registry,
+            policy=ToolPolicy(registry=registry),
+        )
+    )
+
+    assert _types(events) == ["tool_result", "run_finished"]
+    assert events[0]["ok"] is True
+    assert "已改名为 新名字" in events[0]["content"]
+    db_session.expire_all()
+    assert db_session.get(AgentRun, run.id).status == "completed"
+    results = db_session.query(AgentStep).filter_by(run_id=run.id, kind="tool_result").one().content
+    assert "新名字" in results
+
+
+def test_reject_feeds_refusal_back_to_the_model(db_session: Session):
+    user, conversation, registry, run, _ = _suspend(db_session, "reject@example.com")
+    approval = db_session.query(AgentApproval).filter_by(run_id=run.id).one()
+
+    run, approval = decide_approval(
+        db_session,
+        user_id=user.id,
+        run_id=run.id,
+        approval_id=approval.id,
+        approved=False,
+        note="不想现在改名",
+    )
+    events = _drain(
+        resume_run(
+            db_session,
+            run=run,
+            approval=approval,
+            llm=FakeLLM(),
+            user_id=user.id,
+            registry=registry,
+            policy=ToolPolicy(registry=registry),
+        )
+    )
+
+    assert _types(events) == ["tool_result", "run_finished"]
+    assert events[0]["ok"] is False
+    assert "用户拒绝" in events[0]["content"]
+    assert "不想现在改名" in events[0]["content"]
+    db_session.expire_all()
+    assert db_session.get(AgentRun, run.id).status == "completed"
+
+
+def test_two_rejections_of_the_same_tool_block_further_calls(db_session: Session):
+    user, conversation = _setup(db_session, "blocked@example.com")
+    registry = _write_registry()
+    run = AgentRun(conversation_id=conversation.id, user_id=user.id, status="running")
+    db_session.add(run)
+    db_session.flush()
+    for seq in (2, 4):
+        db_session.add(
+            AgentApproval(
+                run_id=run.id,
+                user_id=user.id,
+                seq=seq,
+                tool_name="rename_conversation",
+                tool_args={},
+                status="rejected",
+            )
+        )
+    db_session.commit()
+
+    policy = build_policy(db_session, user_id=user.id, registry=registry, run=run)
+    decision = policy.check("rename_conversation", {"title": "再试一次"})
+    assert decision.action == "deny"
+    assert "已被拒绝" in decision.reason
+
+
+def test_disabled_setting_hides_the_tool_from_the_registry(db_session: Session):
+    from app.agent.executor import registry_for
+    from app.models import UserSettings
+
+    user, _ = _setup(db_session, "disabled@example.com")
+    db_session.add(UserSettings(user_id=user.id, tools_disabled=["calculator"]))
+    db_session.commit()
+
+    registry = registry_for(db_session, user.id)
+    assert "calculator" not in registry.enabled_names()
+    assert registry.execute("calculator", '{"expression": "1+1"}', user_id=user.id)["ok"] is False

@@ -143,3 +143,110 @@ def test_busy_conversation_returns_409(client: TestClient, db_session):
     )
     assert response.status_code == 409
     assert response.json()["message"] == "这个会话正在生成回复，请稍后再试"
+
+
+def _approval_llm() -> FakeLLM:
+    return FakeLLM(
+        tool_script=[tool_reply("rename_conversation", {"conversation_id": 1, "title": "新名字"})]
+    )
+
+
+def test_write_tool_stops_at_approval_and_can_be_approved(client: TestClient):
+    fake = _approval_llm()
+    app.dependency_overrides[get_user_llm] = lambda: fake
+    try:
+        conversation_id = _conversation(client)
+        # 剧本里的 conversation_id 是 1，改成刚建的会话
+        fake._tool_script[0]["arguments"] = json.dumps(
+            {"conversation_id": conversation_id, "title": "新名字"}
+        )
+
+        stream = client.post(
+            f"/api/conversations/{conversation_id}/agent/stream", json={"content": "帮我改名"}
+        )
+        events = _read_events(stream)
+        assert [event["type"] for event in events] == [
+            "run_started",
+            "tool_call",
+            "approval_required",
+        ]
+        approval = events[-1]
+        assert approval["tool"] == "rename_conversation"
+
+        listed = client.get(f"/api/agent/runs/{approval['run_id']}/approvals")
+        assert listed.json()["data"]["items"][0]["status"] == "pending"
+
+        decided = client.post(
+            f"/api/agent/runs/{approval['run_id']}/approvals/{approval['approval_id']}",
+            json={"decision": "approve"},
+        )
+        resumed = _read_events(decided)
+        assert [event["type"] for event in resumed] == ["tool_result", "run_finished"]
+        assert resumed[0]["ok"] is True
+
+        detail = client.get(f"/api/conversations/{conversation_id}").json()["data"]
+        assert detail["title"] == "新名字"
+
+        # 同一个审批不能决定两次
+        again = client.post(
+            f"/api/agent/runs/{approval['run_id']}/approvals/{approval['approval_id']}",
+            json={"decision": "approve"},
+        )
+        assert again.status_code == 409
+    finally:
+        app.dependency_overrides.pop(get_user_llm, None)
+
+
+def test_rejecting_feeds_refusal_back_and_keeps_title(client: TestClient):
+    fake = _approval_llm()
+    app.dependency_overrides[get_user_llm] = lambda: fake
+    try:
+        conversation_id = _conversation(client)
+        fake._tool_script[0]["arguments"] = json.dumps(
+            {"conversation_id": conversation_id, "title": "不应该生效"}
+        )
+
+        stream = client.post(
+            f"/api/conversations/{conversation_id}/agent/stream", json={"content": "帮我改名"}
+        )
+        approval = _read_events(stream)[-1]
+
+        decided = client.post(
+            f"/api/agent/runs/{approval['run_id']}/approvals/{approval['approval_id']}",
+            json={"decision": "reject", "note": "先不改"},
+        )
+        resumed = _read_events(decided)
+        assert resumed[0]["type"] == "tool_result"
+        assert resumed[0]["ok"] is False
+        assert "用户拒绝" in resumed[0]["content"]
+
+        detail = client.get(f"/api/conversations/{conversation_id}").json()["data"]
+        assert detail["title"] == "agent 测试"
+    finally:
+        app.dependency_overrides.pop(get_user_llm, None)
+
+
+def test_approvals_are_scoped_to_the_owner(client: TestClient, anon_client: TestClient):
+    fake = _approval_llm()
+    app.dependency_overrides[get_user_llm] = lambda: fake
+    try:
+        conversation_id = _conversation(client)
+        fake._tool_script[0]["arguments"] = json.dumps(
+            {"conversation_id": conversation_id, "title": "x"}
+        )
+        stream = client.post(
+            f"/api/conversations/{conversation_id}/agent/stream", json={"content": "改名"}
+        )
+        approval = _read_events(stream)[-1]
+    finally:
+        app.dependency_overrides.pop(get_user_llm, None)
+
+    assert anon_client.get(f"/api/agent/runs/{approval['run_id']}/approvals").status_code == 401
+
+    other = TestClient(app)
+    other.post(
+        "/api/auth/register",
+        json={"email": "intruder-agent@example.com", "password": "password123"},
+    )
+    # 别人的 run：一律 404，不暴露存在性
+    assert other.get(f"/api/agent/runs/{approval['run_id']}/approvals").status_code == 404

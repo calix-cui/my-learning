@@ -34,6 +34,7 @@ from app.agent.tools.base import (
 )
 from app.agent.tools.calculator import CalculatorTool
 from app.agent.tools.clock import NowTool
+from app.agent.tools.conversation import RenameConversationTool
 from app.agent.tools.history import SearchConversationsTool
 
 __all__ = [
@@ -71,6 +72,7 @@ class BuiltinSource:
             CalculatorTool(),
             NowTool(),
             SearchConversationsTool(self._session),
+            RenameConversationTool(self._session),
         ]
 
 

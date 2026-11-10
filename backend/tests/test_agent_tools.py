@@ -95,7 +95,12 @@ def test_search_conversations_empty_result(db_session: Session):
 def test_registry_executes_and_reports_unknown_tool(db_session: Session):
     registry = build_registry(db_session)
 
-    assert registry.names() == ["calculator", "now", "search_conversations"]
+    assert registry.names() == [
+        "calculator",
+        "now",
+        "search_conversations",
+        "rename_conversation",
+    ]
     assert registry.has("calculator")
     assert registry.execute("calculator", '{"expression": "2^10"}', user_id=1)["content"] == "1024"
 

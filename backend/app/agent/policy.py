@@ -31,6 +31,8 @@ class Decision:
 
     action: DecisionAction
     reason: str = ""
+    # 上限类拒绝要直接中止整次运行（不是回灌给模型接着试），见 docs/tools.md §3.4
+    fatal: bool = False
 
     @property
     def allowed(self) -> bool:
@@ -98,9 +100,17 @@ class ToolPolicy:
 
         if meta.requires_approval:
             if self.approvals_used >= MAX_APPROVALS_PER_RUN:
-                return Decision("deny", f"本次运行审批次数已达上限（{MAX_APPROVALS_PER_RUN} 次）")
+                return Decision(
+                    "deny",
+                    f"本次运行审批次数已达上限（{MAX_APPROVALS_PER_RUN} 次）",
+                    fatal=True,
+                )
             if self.rejects_by_tool.get(name, 0) >= MAX_REJECTS_PER_TOOL:
-                return Decision("deny", f"工具 {name} 已被拒绝 {MAX_REJECTS_PER_TOOL} 次，已中止")
+                return Decision(
+                    "deny",
+                    f"工具 {name} 已被拒绝 {MAX_REJECTS_PER_TOOL} 次，已中止",
+                    fatal=True,
+                )
             return Decision("approve", f"{name} 是 {meta.level} 级工具，需要你确认")
         return Decision("allow")
 
