@@ -86,7 +86,7 @@ defineExpose({ focus })
 <style scoped>
 .chat__composer {
   flex: none;
-  padding: 12px 40px 20px;
+  padding: 12px 32px 24px;
 }
 
 .composer__inner {
@@ -95,10 +95,10 @@ defineExpose({ focus })
 }
 
 .composer__box {
-  padding: 10px 12px 8px;
+  padding: 14px 16px 10px;
   background: var(--ma-color-surface);
   border: 1px solid var(--ma-color-line);
-  border-radius: var(--ma-radius-md);
+  border-radius: var(--ma-radius-xl);
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
@@ -109,17 +109,22 @@ defineExpose({ focus })
   box-shadow: 0 0 0 3px var(--ma-color-accent-soft);
 }
 
+/* 未聚焦也保留一层极淡的投影，让输入盒从纸面浮起来 */
+.composer__box {
+  box-shadow: var(--ma-shadow-soft);
+}
+
 .composer__input {
   display: block;
   width: 100%;
-  min-height: 44px;
+  min-height: 52px;
   max-height: 160px;
   padding: 0;
   font: inherit;
   font-size: 15px;
   line-height: 1.7;
   color: var(--ma-color-ink);
-  resize: vertical;
+  resize: none;
   background: none;
   border: 0;
   outline: none;

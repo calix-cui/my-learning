@@ -33,22 +33,18 @@ const itemMeta = (item: ChatConversationListItem) =>
 
 <template>
   <div class="threads">
+    <el-button class="chat__new" type="primary" plain round :icon="Plus" @click="handleCreate">
+      新建会话
+    </el-button>
+
     <div class="threads__head">
-      <span class="threads__label">会话</span>
-      <el-button
-        class="chat__new"
-        type="primary"
-        plain
-        size="small"
-        :icon="Plus"
-        @click="handleCreate"
-      >
-        新建
-      </el-button>
+      <span class="threads__label">今天</span>
     </div>
 
     <div v-loading="chat.loadingList" class="threads__list">
-      <p v-if="!chat.conversations.length" class="threads__empty">还没有会话，点「新建」开始</p>
+      <p v-if="!chat.conversations.length" class="threads__empty">
+        还没有会话，点上面的「新建会话」开始
+      </p>
 
       <div
         v-for="item in chat.conversations"
@@ -83,19 +79,25 @@ const itemMeta = (item: ChatConversationListItem) =>
   min-height: 0;
 }
 
+.chat__new {
+  width: 100%;
+  height: 40px;
+  margin-bottom: 18px;
+  font-size: 14px;
+}
+
 .threads__head {
   display: flex;
   flex: none;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px 10px;
+  padding: 0 10px 8px;
 }
 
 .threads__label {
-  padding-left: 10px;
   font-size: 12px;
   color: var(--ma-color-faint);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 }
 
 .threads__list {
@@ -115,12 +117,12 @@ const itemMeta = (item: ChatConversationListItem) =>
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
-  border-radius: var(--ma-radius-sm);
+  gap: 2px;
+  border-radius: var(--ma-radius-md);
 }
 
 .chat__item + .chat__item {
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .chat__item:hover {

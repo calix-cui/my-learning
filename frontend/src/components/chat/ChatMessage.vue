@@ -36,7 +36,7 @@ const html = computed(() => renderMarkdown(props.message.content))
 }
 
 .chat__row + .chat__row {
-  margin-top: 20px;
+  margin-top: 28px;
 }
 
 .chat__row--user {
@@ -52,7 +52,7 @@ const html = computed(() => renderMarkdown(props.message.content))
   gap: 6px;
   align-items: center;
   font-size: 12px;
-  color: var(--ma-color-muted);
+  color: var(--ma-color-faint);
 }
 
 .chat__who i {
@@ -63,23 +63,26 @@ const html = computed(() => renderMarkdown(props.message.content))
 }
 
 .chat__bubble {
-  max-width: 80%;
-  padding: 12px 16px;
+  max-width: 78%;
+  padding: 12px 18px;
   font-size: 15px;
-  line-height: 1.75;
+  line-height: 1.8;
   border-radius: var(--ma-radius-lg);
 }
 
 .chat__row--user .chat__bubble {
-  color: var(--ma-color-on-accent);
-  background: var(--ma-color-accent);
+  color: var(--ma-color-ink);
+  background: var(--ma-color-accent-soft);
+  border-radius: var(--ma-radius-lg) var(--ma-radius-lg) var(--ma-radius-sm) var(--ma-radius-lg);
 }
 
+/* 助手回答不套气泡：整段正文直接落在纸面上，读长文更顺 */
 .chat__row--assistant .chat__bubble {
   max-width: 100%;
+  padding: 0;
   color: var(--ma-color-ink);
-  background: var(--ma-color-surface);
-  border: 1px solid var(--ma-color-line);
+  background: transparent;
+  border: 0;
 }
 
 .chat__content {

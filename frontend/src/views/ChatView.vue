@@ -117,6 +117,7 @@ onMounted(async () => {
 
     <div ref="scroller" v-loading="chat.loadingMessages" class="chat__scroll">
       <div v-if="showEmptyState" class="chat__empty">
+        <img class="chat__empty-logo" src="/logo.png" alt="" width="44" height="44" />
         <p class="chat__empty-title">
           {{ hasConversation ? '还没有消息' : '还没有选择会话' }}
         </p>
@@ -190,7 +191,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 40px 12px;
+  padding: 22px 32px 10px;
 }
 
 .chat__title {
@@ -199,8 +200,9 @@ onMounted(async () => {
   align-items: center;
   margin: 0;
   overflow: hidden;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -261,12 +263,16 @@ onMounted(async () => {
   text-align: center;
 }
 
+.chat__empty-logo {
+  margin-bottom: 14px;
+  border-radius: 12px;
+}
+
 .chat__empty-title {
   margin: 0 0 8px;
-  font-family: var(--ma-font-serif);
   font-size: 22px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 
 .chat__empty-desc {

@@ -104,20 +104,21 @@ ToolRegistry
    │                                                   │
    │                                          前端展示「要调用 X，参数 …」
    │                                                   │
-   │                        ┌──────────┬───────────────┼───────────────┐
-   │                        ▼          ▼               ▼               ▼
-   │                    approve    reject          expire         取消运行
-   │                        │          │               │               │
-   ▼                        ▼          ▼               ▼               ▼
- 继续循环 <── 同一次运行恢复 ── 结果回灌「用户拒绝」  run failed      run cancelled
+   │                        ┌──────────┬───────────────┐
+   │                        ▼          ▼               ▼
+   │                    approve    reject         取消运行
+   │                        │          │               │
+   ▼                        ▼          ▼               ▼
+ 继续循环 <── 同一次运行恢复 ── 结果回灌「用户拒绝」   run cancelled
 ```
 
 关键约定：
 
-- **审批是一个独立资源**（`agent_approvals`），带 `expires_time`（默认 10 分钟）与 `decided_by`。
+- **审批是一个独立资源**（`agent_approvals`），带 `decided_by`；**不设过期时间**，页面会一直等用户回复（快模型慢用户是常态，超时判 failed 等于白跑一次）。
 - 批准/拒绝都写 `tool_result` 步骤（`content` 记决定与理由），**不伪造工具结果**：批准后才真正执行，拒绝则回灌「用户拒绝，理由：…」让模型自己换路。
 - 恢复靠 DB 重放：`run.step_count` + `agent_steps` 已存着，恢复时按 `run_id` 取全部步骤重建 `LLMMessage` 列表，不需要保存 Python 对象。
 - 同一 run 只允许一个 pending 审批（避免一次弹五个框）。
+- **次数上限**（防「换个参数接着试」的死循环）：单次 run 最多 **5 次审批**、同一工具最多被拒绝 **2 次**；任一超限即中止整次运行，状态 `failed`，理由写「审批次数已达上限」。
 - 拒绝不改写用户原话，也不删已发生的步骤——审计要完整。
 
 ### 3.5 可观测性
@@ -157,7 +158,7 @@ erDiagram
         json tool_args
         varchar status "pending/approved/rejected/expired"
         varchar note "决定理由"
-        datetime expires_time "默认 10 分钟"
+        int reject_count "同工具已被拒几次，达 2 次中止"
         datetime decided_time
         datetime create_time
     }
@@ -178,7 +179,7 @@ erDiagram
 | `GET` | `/api/settings/tools/stats?days=7` | 聚合统计 |
 | `GET` | `/api/agent/runs/{run_id}/approvals` | 该运行的审批（含已决） |
 | `POST` | `/api/agent/runs/{run_id}/approvals/{approval_id}` | `{decision: "approve"\|"reject", note?: string}` |
-| `POST` | `/api/conversations/{id}/agent/stream` | 事件新增 `approval_required`（含 `approval_id`、`tool`、`args`、`expires_time`）与 `run_waiting` |
+| `POST` | `/api/conversations/{id}/agent/stream` | 事件新增 `approval_required`（含 `approval_id`、`tool`、`args`、`attempt`）与 `run_waiting` |
 
 约束：
 
@@ -195,7 +196,8 @@ erDiagram
 | 写操作误伤 | `WRITE` 一律审批；同一 run 内同工具连续 3 次失败中止 |
 | 外部请求 SSRF | `EXTERNAL` 只允许出站白名单域名（阶段 6 无外网工具，规则先落位） |
 | 审批被绕过 | 审批判定在服务端，HTTP 层不接受「已批准」的客户端自述 |
-| 审批挂起占资源 | `expires_time` + 后台清理；超时 run 置 `failed`，理由写明「审批超时」 |
+| 审批挂起占资源 | 挂起期间不起线程、不占连接，只有一条 `waiting_approval` 的 run 记录；用户可随时「取消运行」收尾 |
+| 无限等待导致 run 越积越多 | 列表页把 `waiting_approval` 的 run 标成「等待你确认」；超过 30 天仍未决定的由清理任务标 `failed`（仅清理，不影响在线体验） |
 | 审计缺失 | `agent_steps` + `agent_approvals` 双记录；删除会话级联清理（用户注销即消失） |
 
 ## 7. 任务拆分（阶段 6）
@@ -204,9 +206,9 @@ erDiagram
 |---|---|---|---|
 | T1 | 工具元数据与注册表重构 | `ToolMeta` / `ToolLevel` / `ToolSource` / `ToolRegistry` 按用户过滤 | 加一个假工具不改执行器；重名注册报错；既有 17 个工具测试仍绿 |
 | T2 | 策略层与参数规则 | `ToolPolicy`、规则配置、`daily_tool_budget` | 单测覆盖：读自动、写挂起、黑名单直拒、预算超限 |
-| T3 | 审批数据模型与迁移 | `agent_approvals` 表、`agent_runs.status` 扩值、`user_settings` 两列 | `alembic upgrade/downgrade/upgrade` 通过、`alembic check` 无漂移 |
-| T4 | 执行器暂停与恢复 | `stream_run` 遇需审批工具即挂起；`resume_run` 从 DB 重放 | 单测：挂起后事件序列、批准后继续、拒绝后回灌、超时标 failed |
-| T5 | 接口 | 6 个接口 + SSE 新事件 | 未登录 401、越权 404、重复决定 409、过期 409 |
+| T3 | 审批数据模型与迁移 | `agent_approvals` 表（无 `expires_time`）、`agent_runs.status` 扩值、`user_settings` 两列 | `alembic upgrade/downgrade/upgrade` 通过、`alembic check` 无漂移 |
+| T4 | 执行器暂停与恢复 | `stream_run` 遇需审批工具即挂起；`resume_run` 从 DB 重放 | 单测：挂起后事件序列、批准后继续、拒绝后回灌、审批 5 次上限、同工具拒绝 2 次上限 |
+| T5 | 接口 | 6 个接口 + SSE 新事件 | 未登录 401、越权 404、重复决定 409 |
 | T6 | 前端 | 时间线审批卡片、设置页「工具」节、统计小表 | 批准/拒绝都能走通；刷新后审批仍可处理 |
 | T7 | 文档与验收 | `docs/api.md` §6.4、E2E 8 项、README/状态页 | `acceptance:tools` 全绿 |
 
@@ -215,8 +217,8 @@ erDiagram
 1. 新增一个工具只需一个类 + 一行注册，执行器零改动。
 2. `WRITE`/`EXTERNAL` 工具必然产生一条 `agent_approvals`，且 run 状态变 `waiting_approval`。
 3. 批准后原 run 继续、拒绝后模型能看到「用户拒绝 + 理由」并换路，二者都留完整步骤。
-4. 审批超时（10 分钟）后 run 变 `failed`，理由「审批超时」，前端可见。
-5. 服务重启后，pending 审批仍能批准并恢复（状态在 DB，不在内存）。
+4. 单次 run 超过 5 次审批、或同一工具被拒绝超过 2 次，run 变 `failed`，理由「审批次数已达上限」，前端可见。
+5. 服务重启后，pending 审批仍能批准并恢复（状态在 DB，不在内存）；审批**没有过期时间**，第二天回来点仍然有效。
 6. 关闭某个工具后，模型请求它得到 `ok=false`「工具未启用」，而不是抛异常。
 7. 统计接口能给出每个工具的调用次数、失败率、p95 耗时。
 8. 全部既有门禁保持绿：`make check` ≥ 93%、`pnpm lint/test/build`、四套 E2E。
@@ -233,6 +235,7 @@ erDiagram
 | 风险 | 影响 | 缓解 |
 |---|---|---|
 | 审批打断对话节奏 | 用户嫌烦 | 默认只对写/外网工具要审批；读工具永远直跑 |
+| 无限等待 → 用户忘了这回事 | run 一直挂在 `waiting_approval` | 侧栏/列表标「等待确认」；允许取消运行；30 天清理任务兜底 |
 | 恢复路径复杂 | 容易出半截状态 | 以 `agent_steps` 为唯一真相，恢复只读不写；先写 T4 单测再碰前端 |
 | 审批表膨胀 | 数据变多 | 随 run 级联删除；后续可按天归档 |
 | 前端状态机复杂 | 时间线与审批交叉 | 前端只认事件，不推断状态；run 状态由后端给 |

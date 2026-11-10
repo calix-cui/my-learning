@@ -65,8 +65,8 @@ const activeComponent = computed(
 
 .settings__nav {
   flex: none;
-  width: 200px;
-  padding: 20px 12px;
+  width: 208px;
+  padding: 24px 14px;
   border-right: 1px solid var(--ma-color-line);
 }
 
@@ -76,7 +76,7 @@ const activeComponent = computed(
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   margin-bottom: 2px;
   font: inherit;
   font-size: 14px;
@@ -85,7 +85,7 @@ const activeComponent = computed(
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: var(--ma-radius-sm);
+  border-radius: var(--ma-radius-md);
 }
 
 .settings__item:hover {
@@ -107,7 +107,7 @@ const activeComponent = computed(
 .settings__panel {
   flex: 1;
   min-width: 0;
-  padding: 28px 40px;
+  padding: 32px 40px;
   overflow-y: auto;
 }
 
@@ -123,9 +123,9 @@ const activeComponent = computed(
 }
 
 .settings__title {
-  font-family: var(--ma-font-serif);
   font-size: 24px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: 1.3;
   color: var(--ma-color-ink);
 }

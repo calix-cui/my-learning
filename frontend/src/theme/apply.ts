@@ -42,6 +42,7 @@ export function buildThemeVars(theme: ThemeDefinition, mode: ThemeMode): Record<
     '--ma-radius-sm': staticTokens.radiusSm,
     '--ma-radius-md': staticTokens.radiusMd,
     '--ma-radius-lg': staticTokens.radiusLg,
+    '--ma-radius-xl': staticTokens.radiusXl,
     '--ma-space-xs': staticTokens.spaceXs,
     '--ma-space-sm': staticTokens.spaceSm,
     '--ma-space-md': staticTokens.spaceMd,

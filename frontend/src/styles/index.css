@@ -32,9 +32,13 @@
   --ma-font-sans: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
   --ma-font-serif: 'Songti SC', 'Noto Serif SC', Georgia, serif;
   --ma-font-mono: 'SF Mono', Menlo, Consolas, monospace;
-  --ma-radius-sm: 6px;
-  --ma-radius-md: 10px;
-  --ma-radius-lg: 14px;
+  --ma-radius-sm: 8px;
+  --ma-radius-md: 12px;
+  --ma-radius-lg: 18px;
+  --ma-radius-xl: 26px;
+  /* 对话型产品的投影要极淡：只用来把浮层从纸面抬起一档 */
+  --ma-shadow-soft: 0 1px 2px rgb(28 27 24 / 4%), 0 8px 24px rgb(28 27 24 / 6%);
+  --ma-shadow-float: 0 4px 12px rgb(28 27 24 / 8%), 0 16px 40px rgb(28 27 24 / 8%);
   --ma-sidebar-width: 264px;
   --ma-content-width: 1080px;
   --ma-reading-width: 720px;
@@ -70,6 +74,25 @@ h3,
 h4,
 p {
   margin: 0;
+}
+
+h1 {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+h3 {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
 }
 
 a {
@@ -108,7 +131,22 @@ time,
 
 .el-button {
   font-family: inherit;
-  border-radius: var(--ma-radius-sm);
+  border-radius: var(--ma-radius-md);
+}
+
+/* 胶囊按钮：新建会话、发送这类「动作」用得最多 */
+.el-button.is-round,
+.el-button--small.is-round {
+  border-radius: 999px;
+}
+
+.el-button--primary.is-plain {
+  --el-button-bg-color: var(--ma-color-surface);
+  --el-button-border-color: var(--ma-color-line-strong);
+  --el-button-text-color: var(--ma-color-ink);
+  --el-button-hover-bg-color: var(--ma-color-sunken);
+  --el-button-hover-border-color: var(--ma-color-accent);
+  --el-button-hover-text-color: var(--ma-color-ink);
 }
 
 .el-button--primary {
@@ -127,7 +165,7 @@ time,
 
 .el-input__wrapper,
 .el-textarea__inner {
-  border-radius: var(--ma-radius-sm);
+  border-radius: var(--ma-radius-md);
   box-shadow: 0 0 0 1px var(--ma-color-line-strong) inset;
 }
 
@@ -178,8 +216,8 @@ time,
   padding: 32px;
   background: var(--ma-color-surface);
   border: 1px solid var(--ma-color-line);
-  border-radius: var(--ma-radius-lg);
-  box-shadow: 0 1px 2px rgb(28 27 24 / 4%);
+  border-radius: var(--ma-radius-xl);
+  box-shadow: var(--ma-shadow-soft);
 }
 
 .auth__brand {
@@ -200,11 +238,11 @@ time,
 }
 
 .auth__title {
-  font-family: var(--ma-font-serif);
-  font-size: 28px;
+  font-family: var(--ma-font-sans);
+  font-size: 26px;
   font-weight: 600;
   line-height: 1.3;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 
 .auth__subtitle {
@@ -215,8 +253,10 @@ time,
 
 .auth__submit {
   width: 100%;
-  height: 40px;
+  height: 44px;
   margin-top: 4px;
+  font-size: 15px;
+  border-radius: var(--ma-radius-md);
 }
 
 .auth__switch {

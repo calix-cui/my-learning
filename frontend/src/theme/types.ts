@@ -56,6 +56,7 @@ export interface StaticTokens {
   radiusSm: string
   radiusMd: string
   radiusLg: string
+  radiusXl: string
   spaceXs: string
   spaceSm: string
   spaceMd: string

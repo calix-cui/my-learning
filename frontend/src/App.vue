@@ -166,8 +166,8 @@ async function handleUserCommand(command: string) {
   flex: none;
   flex-direction: column;
   width: var(--ma-sidebar-width);
-  padding: 14px 12px 10px;
-  background: var(--ma-color-sunken);
+  padding: 18px 14px 12px;
+  background: var(--ma-color-canvas);
   border-right: 1px solid var(--ma-color-line);
 }
 
@@ -175,7 +175,7 @@ async function handleUserCommand(command: string) {
   display: flex;
   gap: 10px;
   align-items: center;
-  padding: 2px 10px 16px;
+  padding: 2px 10px 20px;
 }
 
 .layout__logo {
@@ -183,9 +183,9 @@ async function handleUserCommand(command: string) {
 }
 
 .layout__brand-text {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 
 .layout__threads {
@@ -209,14 +209,14 @@ async function handleUserCommand(command: string) {
   gap: 10px;
   align-items: center;
   min-width: 0;
-  padding: 6px 8px;
+  padding: 8px 10px;
   font: inherit;
   color: inherit;
   text-align: left;
   cursor: pointer;
   background: none;
   border: 0;
-  border-radius: var(--ma-radius-sm);
+  border-radius: var(--ma-radius-md);
 }
 
 .layout__user-trigger:hover {
@@ -289,8 +289,9 @@ async function handleUserCommand(command: string) {
   flex: none;
   align-items: center;
   justify-content: space-between;
-  height: 48px;
-  padding: 0 24px;
+  height: 56px;
+  padding: 0 32px;
+  background: var(--ma-color-surface);
   border-bottom: 1px solid var(--ma-color-line);
 }
 
