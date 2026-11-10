@@ -32,6 +32,8 @@ interface ChatThread {
   streamingText: string
   /** 当前这次运行的步骤时间线（工具往返过程） */
   steps: AgentStep[]
+  /** 输入框草稿：切走再切回来，写了一半的字还在 */
+  draftText: string
   /** 是否正在发送（普通回答或深度回答都算） */
   sending: boolean
   runningAgent: boolean
@@ -44,6 +46,7 @@ function emptyThread(): ChatThread {
     messages: [],
     streamingText: '',
     steps: [],
+    draftText: '',
     sending: false,
     runningAgent: false,
     loaded: false,
@@ -79,8 +82,6 @@ export const useChatStore = defineStore('chat', () => {
    * 点「新建会话」只进这个状态，等第一条消息真正发出去才落库。
    */
   const draft = ref(false)
-  /** 每次点「新建会话」自增：视图据此清空输入框里的草稿文字 */
-  const newChatTick = ref(0)
   const loadingList = ref(false)
   /** 正在拉某个会话的消息（只影响当前会话的骨架屏） */
   const loadingMessages = ref(false)
@@ -108,6 +109,14 @@ export const useChatStore = defineStore('chat', () => {
   const agentSteps = computed(() => activeThread.value.steps)
   const sending = computed(() => activeThread.value.sending)
   const agentRunning = computed(() => activeThread.value.runningAgent)
+
+  /** 输入框内容也是会话状态的一部分：每个会话各存各的草稿 */
+  const composerText = computed({
+    get: () => activeThread.value.draftText,
+    set: (value: string) => {
+      activeThread.value.draftText = value
+    },
+  })
 
   const activeConversation = computed(
     () => conversations.value.find((item) => item.id === activeId.value) ?? null,
@@ -181,7 +190,6 @@ export const useChatStore = defineStore('chat', () => {
   function startNew() {
     threads.delete(DRAFT_KEY)
     draft.value = true
-    newChatTick.value += 1
     activeId.value = null
   }
 
@@ -292,6 +300,7 @@ export const useChatStore = defineStore('chat', () => {
           sortByRecent()
         },
       })
+      thread.draftText = ''
       return true
     } catch (error) {
       // 后端已回滚这次提问，前端也要撤掉乐观消息
@@ -412,6 +421,7 @@ export const useChatStore = defineStore('chat', () => {
       thread.messages = detail.messages
       thread.loaded = true
       patchConversation(conversationId, { title: detail.title })
+      thread.draftText = ''
       return true
     } catch (error) {
       thread.messages = thread.messages.filter((item) => item.id !== optimisticId)
@@ -447,7 +457,7 @@ export const useChatStore = defineStore('chat', () => {
     conversations,
     activeId,
     draft,
-    newChatTick,
+    composerText,
     messages,
     loadingList,
     loadingMessages,

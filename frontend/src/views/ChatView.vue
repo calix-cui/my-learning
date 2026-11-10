@@ -12,7 +12,6 @@ const MAX_LENGTH = 4000
 
 const chat = useChatStore()
 const settings = useSettingsStore()
-const draft = ref('')
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null)
 const scroller = ref<HTMLElement | null>(null)
 
@@ -26,14 +25,6 @@ const modelLabel = computed(() => {
 /** 空态只在「有会话但还没有消息」时出现；没有会话时也显示招呼语，让首屏不空 */
 const showEmptyState = computed(
   () => !chat.loadingMessages && chat.messages.length === 0 && !chat.streamingText,
-)
-
-/** 点「新建会话」时把输入框里的残留文字清掉（草稿态与已有会话都要清） */
-watch(
-  () => chat.newChatTick,
-  () => {
-    draft.value = ''
-  },
 )
 
 /** 时间线跟着「这一次运行」走：有步骤或正在跑才显示 */
@@ -58,12 +49,11 @@ function scrollToBottom() {
 }
 
 async function handleSend() {
-  const content = draft.value
+  const content = chat.composerText
   if (!content.trim()) return
-  // 失败时保留草稿，用户不用重打；成功才清空
+  // 失败时保留草稿，用户不用重打；成功由 store 清掉自己会话的草稿
   const ok = chat.agentMode ? await chat.sendWithAgent(content) : await chat.send(content)
   if (ok) {
-    draft.value = ''
     composer.value?.focus()
   }
   scrollToBottom()
@@ -139,7 +129,7 @@ onMounted(async () => {
 
     <ChatComposer
       ref="composer"
-      v-model="draft"
+      v-model="chat.composerText"
       :sending="chat.sending"
       :disabled="false"
       :max-length="MAX_LENGTH"

@@ -231,6 +231,7 @@ const streamingText = ref('')
 ```ts
 interface ChatThread {
   messages: ChatMessage[]
+  draftText: string       // 输入框草稿，切走再切回来还在
   streamingText: string   // 流式已收文本
   steps: AgentStep[]      // 深度回答的工具时间线
   sending: boolean        // 普通/深度回答都算
@@ -244,6 +245,9 @@ const activeKey = computed(() => activeId.value ?? 0)
 - `messages` / `streamingText` / `agentSteps` / `sending` / `agentRunning` 全部改成由 `activeKey` 派生的 `computed`，视图代码不变；
 - `send()` 与 `sendWithAgent()` 入口处 `const thread = threadOf(conversationId)`，**整段流程（包括 `onDone` 收尾的 `getConversation`）只写这个 thread**；
 - 切会话只是改 `activeId`，旧流继续跑完并落到它自己的 thread，切回去能看到完整回答（不需要重拉）；
+- **输入框也属于会话状态**：`draftText` 放进 `ChatThread`，视图用 `v-model="chat.composerText"`
+  （writable computed）读写，切会话就是切草稿；发送成功后由 store 清掉自己那一份，不再需要
+  「点新建时清空输入框」的补丁；
 - 侧栏可用 `chat.isBusy(id)` 显示「生成中」，不再依赖全局 `sending`。
 
 ### 8.3 两条容易踩的实现细节
@@ -257,4 +261,5 @@ const activeKey = computed(() => activeId.value ?? 0)
 
 - 切走后旧会话的 `onDelta` / `onDone` 不写进新会话，切回去数据还在；
 - 两个会话的 `sending` 互相独立（切到空闲会话按钮可用，`isBusy(旧会话)` 为真）；
+- 输入框草稿按会话隔离（写一半切走再切回，文字还在；另一个会话仍是空的）；
 - 删掉当前会话回到草稿态并清掉缓存。

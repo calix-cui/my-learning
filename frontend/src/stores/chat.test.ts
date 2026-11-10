@@ -128,6 +128,17 @@ describe('chat store：会话状态按会话隔离', () => {
     expect(chat.isBusy(1)).toBe(false)
   })
 
+  it('输入框草稿也按会话隔离：切走再切回来文字还在', async () => {
+    const chat = useChatStore()
+    chat.activeId = 1
+    chat.composerText = '会话一写了一半'
+    await chat.openConversation(2)
+    expect(chat.composerText).toBe('')
+    chat.composerText = '会话二的草稿'
+    await chat.openConversation(1)
+    expect(chat.composerText).toBe('会话一写了一半')
+  })
+
   it('删掉当前会话回到草稿态，并清掉它的缓存', async () => {
     const chat = useChatStore()
     chat.activeId = 1
