@@ -6,7 +6,6 @@ import { useSessionStore } from '@/stores/session'
 const ChatView = () => import('@/views/ChatView.vue')
 const LoginView = () => import('@/views/LoginView.vue')
 const RegisterView = () => import('@/views/RegisterView.vue')
-const SettingsView = () => import('@/views/SettingsView.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -30,12 +29,8 @@ const router = createRouter({
       component: ChatView,
       meta: { title: '对话' },
     },
-    {
-      path: '/settings',
-      name: 'settings',
-      component: SettingsView,
-      meta: { title: '设置' },
-    },
+    // 设置是悬浮窗：深链进来先回对话页，再靠 query 把窗打开
+    { path: '/settings', redirect: { path: '/chat', query: { settings: '1' } } },
     { path: '/:pathMatch(.*)*', redirect: '/chat' },
   ],
   scrollBehavior: () => ({ top: 0 }),

@@ -95,7 +95,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 | `/login` | 登录（公开） | `views/LoginView.vue`、`stores/session.ts` |
 | `/register` | 注册（公开，注册即登录） | `views/RegisterView.vue` |
 | `/chat` | 对话（左会话列表 + 右消息区，SSE 逐字渲染，助手消息按 Markdown 渲染；头部「深度回答」开关可切到 agent 循环并展开执行时间线） | `views/ChatView.vue`、`components/chat/*`、`stores/chat.ts`、`api/chat.ts`、`api/agent.ts`、`utils/markdown.ts` |
-| `/settings` | 设置（左侧二级导航 200px + 右侧 560px 表单）：模型接入 / 账号资料 / 登录设备 / 外观 / 数据管理 | `views/SettingsView.vue`、`components/settings/*`、`stores/settings.ts`、`components/theme/*` |
+| `/settings` | **悬浮窗**（不是独立页面）：`/chat?settings=1` 之上盖一层，关掉回原处；内含模型接入 / 账号资料 / 登录设备 / 外观 / 数据管理五节 | `components/settings/SettingsDialog.vue`、`views/SettingsView.vue`、`components/settings/*`、`stores/settings.ts` |
 | `/` / 其他 | 重定向到 `/chat`；未登录时守卫改送 `/login?redirect=...` | `src/router/index.ts` |
 
 未登录只剩登录/注册两个页面可达：`router.beforeEach` 先向后端确认一次登录态（`GET /api/auth/me`），再决定放行或跳转。
@@ -126,12 +126,12 @@ frontend/
 │   └── auth-acceptance.mjs    # 账号端到端验收（13 项：注册→刷新→退出→再登录）
 └── src/
     ├── main.ts                # 挂载 Element Plus（zh-cn）+ router
-    ├── App.vue                # 侧栏 + 顶栏 + <router-view>（登录页不套外壳）
+    ├── App.vue                # 侧栏 + 对话区 + 设置悬浮窗（登录页不套外壳，没有顶栏）
     ├── components/
-    │   ├── chat/              # ThreadList / ChatMessage / ChatComposer / AgentTimeline
-    │   ├── chat/              # ThreadList（侧栏会话）/ ChatMessage（气泡+Markdown）/ ChatComposer（输入区）
+    │   ├── ui/                # 通用组件库：AppIcon（内联 SVG）/ IconButton（圆形）/ SoftButton（阴影当边界）
+    │   ├── chat/              # ThreadList / ThreadItem / ChatToolbar / ChatEmpty / ChatMessage / ChatComposer / AgentTimeline
     │   ├── theme/             # ThemeCard / ModeSwitch
-    │   └── settings/          # AppearancePanel / ModelPanel / AccountPanel / DevicesPanel / DataPanel
+    │   └── settings/          # SettingsDialog（悬浮窗）+ Model/Account/Devices/Data/Appearance 五个面板
 
     ├── env.d.ts               # .vue 模块类型声明
     ├── router/index.ts        # 路由 + 登录守卫（未登录只能进 /login、/register）
@@ -158,7 +158,7 @@ frontend/
     │   ├── ChatView.vue       # 对话页
     │   ├── LoginView.vue      # 登录页
     │   ├── RegisterView.vue   # 注册页
-    │   └── SettingsView.vue   # 设置页（五节全部可用）
+    │   └── SettingsView.vue   # 设置内容（导航 + 五节面板，由 SettingsDialog 承载）
     └── styles/index.css       # 设计 token 兜底 + reset + Element Plus 令牌映射 + 认证页共用样式
 ```
 

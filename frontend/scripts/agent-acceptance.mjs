@@ -107,16 +107,17 @@ await page.waitForSelector('.chat__empty-title', { timeout: 10000 })
 
 await step('A-01 默认是普通对话，没有时间线', async () => {
   if (await page.$('.timeline')) throw new Error('默认就显示了时间线')
-  const checked = await page.$eval('.chat__mode .el-switch', (el) =>
-    el.classList.contains('is-checked'),
+  const checked = await page.$eval(
+    '.chat__mode',
+    (el) => el.getAttribute('aria-pressed') === 'true',
   )
   if (checked) throw new Error('深度回答默认是开着的')
 })
 
 await step('A-02 打开「深度回答」', async () => {
-  await page.click('.chat__mode .el-switch')
+  await page.click('.chat__mode')
   await page.waitForFunction(
-    () => document.querySelector('.chat__mode .el-switch')?.classList.contains('is-checked'),
+    () => document.querySelector('.chat__mode')?.getAttribute('aria-pressed') === 'true',
     { timeout: 5000 },
   )
 })
@@ -173,9 +174,9 @@ await step('A-07 刷新后仍能看到上次的工具过程', async () => {
 })
 
 await step('A-08 关掉开关后回到普通对话', async () => {
-  await page.click('.chat__mode .el-switch')
+  await page.click('.chat__mode')
   await page.waitForFunction(
-    () => !document.querySelector('.chat__mode .el-switch')?.classList.contains('is-checked'),
+    () => document.querySelector('.chat__mode')?.getAttribute('aria-pressed') === 'false',
     { timeout: 5000 },
   )
   const before = agentCalls.length

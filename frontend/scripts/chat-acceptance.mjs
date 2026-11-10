@@ -216,10 +216,28 @@ await step('UI-07 新建第二个会话后列表排序', async () => {
 
 // 用页面上的删除按钮清掉当前会话（顺带验证删除交互），其余交给接口清理
 await step('UI-09 会话删除需二次确认', async () => {
-  await page.click('.chat__item')
-  await page.hover('.chat__item')
+  // 会话项的操作收进「...」菜单：hover 出按钮，再点开菜单
   await page.waitForSelector('.chat__item-actions', { visible: true })
-  await page.click('.chat__item-actions .el-button:last-child')
+  await page.hover('.chat__item')
+  // hover 之后按钮才从 opacity 0 显现，等一拍再点，否则点到的是隐藏态
+  await new Promise((resolve) => setTimeout(resolve, 250))
+  await page.click('.chat__item-actions button')
+  await new Promise((resolve) => setTimeout(resolve, 400))
+
+  // 每个会话项都有自己的「...」菜单，关着的那几个也在 DOM 里；
+  // 只对当前可见的那一项动手，否则会点到隐藏菜单上。
+  const targets = await page.$$('.el-dropdown-menu__item')
+  let clicked = false
+  for (const item of targets) {
+    const text = (await item.evaluate((el) => el.textContent?.trim())) ?? ''
+    if (text !== '删除') continue
+    if (!(await item.isIntersectingViewport())) continue
+    await item.click()
+    clicked = true
+    break
+  }
+  if (!clicked) throw new Error('没找到可见的「删除」菜单项')
+
   await page.waitForSelector('.el-message-box', { visible: true })
   await page.click('.el-message-box .el-button--primary')
   await page.waitForFunction(() => document.querySelectorAll('.chat__item').length === 1, {

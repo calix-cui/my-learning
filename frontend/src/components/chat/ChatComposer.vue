@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import { Promotion } from '@element-plus/icons-vue'
+
+import AppIcon from '@/components/ui/AppIcon.vue'
 
 const props = defineProps<{
   modelValue: string
   sending: boolean
   disabled: boolean
   maxLength: number
+  agentMode: boolean
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   send: []
+  'toggle-agent-mode': []
 }>()
 
 const focused = ref(false)
@@ -22,7 +25,6 @@ const value = computed({
   set: (next: string) => emit('update:modelValue', next),
 })
 
-const counter = computed(() => `${props.modelValue.length} / ${props.maxLength}`)
 const canSend = computed(
   () => !props.sending && !props.disabled && props.modelValue.trim().length > 0,
 )
@@ -50,34 +52,45 @@ defineExpose({ focus })
 
 <template>
   <div class="chat__composer">
-    <div class="composer__inner">
-      <div class="composer__box" :class="{ 'is-focus': focused }">
-        <textarea
-          ref="textarea"
-          v-model="value"
-          class="composer__input"
-          aria-label="消息内容"
-          :maxlength="maxLength"
-          :disabled="disabled"
-          placeholder="输入消息，Enter 发送，Shift + Enter 换行"
-          rows="2"
-          @focus="focused = true"
-          @blur="focused = false"
-          @keydown="handleKeydown"
-        />
-        <div class="composer__bar">
-          <span class="composer__count">{{ counter }}</span>
-          <el-button
-            type="primary"
-            class="composer__send"
-            :disabled="!canSend"
-            :loading="sending"
-            @click="submit"
-          >
-            <el-icon v-if="!sending"><Promotion /></el-icon>
-            <span>{{ sending ? '回复中' : '发送' }}</span>
-          </el-button>
-        </div>
+    <div class="composer__box" :class="{ 'is-focus': focused }">
+      <textarea
+        ref="textarea"
+        v-model="value"
+        class="composer__input"
+        aria-label="消息内容"
+        :maxlength="maxLength"
+        :disabled="disabled"
+        placeholder="给 My Agent 发送消息"
+        rows="1"
+        @focus="focused = true"
+        @blur="focused = false"
+        @keydown="handleKeydown"
+      />
+
+      <div class="composer__bar">
+        <button
+          type="button"
+          class="chat__mode"
+          :class="{ 'is-on': agentMode }"
+          :aria-pressed="agentMode"
+          title="打开后会先思考、必要时调用工具，再给出回答"
+          @click="emit('toggle-agent-mode')"
+        >
+          <AppIcon name="sparkle" :size="15" />
+          深度回答
+        </button>
+
+        <el-button
+          type="primary"
+          circle
+          class="composer__send"
+          :disabled="!canSend"
+          :loading="sending"
+          aria-label="发送"
+          @click="submit"
+        >
+          <AppIcon v-if="!sending" name="send" :size="17" />
+        </el-button>
       </div>
     </div>
   </div>
@@ -86,40 +99,29 @@ defineExpose({ focus })
 <style scoped>
 .chat__composer {
   flex: none;
-  padding: 12px 32px 24px;
-}
-
-.composer__inner {
-  max-width: var(--ma-reading-width);
-  margin: 0 auto;
+  padding: 8px 32px 24px;
 }
 
 .composer__box {
-  padding: 14px 16px 10px;
+  max-width: var(--ma-reading-width);
+  padding: 14px 16px 12px;
+  margin: 0 auto;
   background: var(--ma-color-surface);
-  border: 1px solid var(--ma-color-line);
   border-radius: var(--ma-radius-xl);
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+  box-shadow: var(--ma-shadow-soft);
+  transition: box-shadow 0.18s ease;
 }
 
 .composer__box.is-focus {
-  border-color: var(--ma-color-accent);
-  box-shadow: 0 0 0 3px var(--ma-color-accent-soft);
-}
-
-/* 未聚焦也保留一层极淡的投影，让输入盒从纸面浮起来 */
-.composer__box {
-  box-shadow: var(--ma-shadow-soft);
+  box-shadow: var(--ma-shadow-float);
 }
 
 .composer__input {
   display: block;
   width: 100%;
-  min-height: 52px;
-  max-height: 160px;
-  padding: 0;
+  min-height: 48px;
+  max-height: 200px;
+  padding: 4px 2px;
   font: inherit;
   font-size: 15px;
   line-height: 1.7;
@@ -139,18 +141,51 @@ defineExpose({ focus })
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 4px;
+  padding-top: 8px;
 }
 
-.composer__count {
-  font-size: 12px;
-  color: var(--ma-color-faint);
-  font-variant-numeric: tabular-nums;
+/* 「深度回答」是一枚可开关的胶囊，状态靠底色与文字色区分，不加边框 */
+.chat__mode {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ma-color-muted);
+  cursor: pointer;
+  background: color-mix(in srgb, var(--ma-color-ink) 5%, transparent);
+  border: 0;
+  border-radius: 999px;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.chat__mode:hover {
+  color: var(--ma-color-ink);
+  background: color-mix(in srgb, var(--ma-color-ink) 8%, transparent);
+}
+
+.chat__mode.is-on {
+  color: var(--ma-color-accent);
+  background: var(--ma-color-accent-soft);
+}
+
+.chat__mode:focus-visible {
+  outline: 2px solid var(--ma-color-accent);
+  outline-offset: 2px;
 }
 
 .composer__send {
-  height: 32px;
-  padding: 0 14px;
-  font-size: 13px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+.composer__send.is-disabled {
+  color: var(--ma-color-faint);
+  background: color-mix(in srgb, var(--ma-color-ink) 6%, transparent);
 }
 </style>

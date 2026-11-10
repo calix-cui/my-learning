@@ -44,11 +44,6 @@ const activeComponent = computed(
 
     <div class="settings__panel">
       <div class="settings__col">
-        <header class="settings__head">
-          <h1 class="settings__title">设置</h1>
-          <p class="settings__desc">这里的改动只影响你自己的账号，保存后立即生效。</p>
-        </header>
-
         <component :is="activeComponent" />
       </div>
     </div>
@@ -66,8 +61,7 @@ const activeComponent = computed(
 .settings__nav {
   flex: none;
   width: 208px;
-  padding: 24px 14px;
-  border-right: 1px solid var(--ma-color-line);
+  padding: 18px 14px;
 }
 
 .settings__item {
@@ -114,25 +108,5 @@ const activeComponent = computed(
 .settings__col {
   max-width: 560px;
   margin: 0 auto;
-}
-
-.settings__head {
-  padding-bottom: 20px;
-  margin-bottom: 24px;
-  border-bottom: 1px solid var(--ma-color-line);
-}
-
-.settings__title {
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.3;
-  color: var(--ma-color-ink);
-}
-
-.settings__desc {
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--ma-color-muted);
 }
 </style>

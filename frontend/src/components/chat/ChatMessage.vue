@@ -14,8 +14,6 @@ const html = computed(() => renderMarkdown(props.message.content))
 
 <template>
   <div class="chat__row" :class="isUser ? 'chat__row--user' : 'chat__row--assistant'">
-    <span v-if="!isUser" class="chat__who"><i />助手</span>
-
     <div class="chat__bubble">
       <!-- 用户消息按纯文本显示；助手消息是模型输出的 Markdown，经 DOMPurify 消毒 -->
       <div v-if="isUser" class="chat__content">{{ message.content }}</div>
@@ -45,21 +43,6 @@ const html = computed(() => renderMarkdown(props.message.content))
 
 .chat__row--assistant {
   align-items: flex-start;
-}
-
-.chat__who {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 12px;
-  color: var(--ma-color-faint);
-}
-
-.chat__who i {
-  width: 6px;
-  height: 6px;
-  background: var(--ma-color-accent);
-  border-radius: 999px;
 }
 
 .chat__bubble {

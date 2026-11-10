@@ -143,8 +143,24 @@ cd frontend && node .shots-light.mjs /tmp/ui-shots   # 临时脚本，出浅色�
 
 约束不变：颜色仍由主题 token 提供（不引入新色值）、`DESIGN.md` 的语义不变、所有 E2E 选择器（`.chat__*`、`.auth__*`、`.theme-card`、`.layout__user-trigger`）保持不变。
 
+## 2026-11-11 第二轮：组件化与「减少边界」
+
+第一轮只调了观感，第二轮解决的是**结构**问题：
+
+| 诉求 | 做法 |
+|---|---|
+| 设置不该是一个页面 | 改成**悬浮窗**（`components/settings/SettingsDialog.vue`），盖在对话之上，关掉回到原处；`/settings` 仍可深链（重定向到 `/chat?settings=1`） |
+| 顶栏冗余 | 删除 `layout__topbar`，模型标签与分享移到对话区右上角的工具栏（`ChatToolbar.vue`） |
+| 小模块之间的边界太多 | 侧栏 footer、设置导航去掉 1px 分隔线；按钮与输入盒用**阴影**表达「浮起」，不再画边框 |
+| 会话项操作太重 | 右侧改为 26px 圆形「…」（`IconButton.vue`），hover 才出现；菜单只留「重命名 / 删除」，选中态只靠背景色 |
+| 一个文件写完整个页面 | 抽出组件库：`ui/AppIcon.vue`（内联 SVG）、`ui/IconButton.vue`、`ui/SoftButton.vue`、`chat/ThreadItem.vue`、`chat/ChatToolbar.vue`、`chat/ChatEmpty.vue` |
+
+界面上的文字只保留必要信息：删掉了「助手」标签、消息条数、字数计数、空态的长说明。
+
 实现截图：
 
-- 对话页（修订后）：![对话页](../images/ui-06-chat-restyle.png)
-- 空态：![空态](../images/ui-07-chat-empty.png)
+- 对话页：![对话页](../images/ui-07-chat.png)
+- 空态：![空态](../images/ui-06-chat-empty.png)
 - 登录页：![登录页](../images/ui-08-login.png)
+- 设置悬浮窗：![设置悬浮窗](../images/ui-09-settings-dialog.png)
+- 会话项菜单：![会话项菜单](../images/ui-10-thread-menu.png)

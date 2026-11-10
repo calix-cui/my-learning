@@ -1,20 +1,29 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ChatDotRound, Plus } from '@element-plus/icons-vue'
-
 import AgentTimeline from '@/components/chat/AgentTimeline.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
+import ChatEmpty from '@/components/chat/ChatEmpty.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
+import ChatToolbar from '@/components/chat/ChatToolbar.vue'
 import { useChatStore } from '@/stores/chat'
+import { useSettingsStore } from '@/stores/settings'
 
 const MAX_LENGTH = 4000
 
 const chat = useChatStore()
+const settings = useSettingsStore()
 const draft = ref('')
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null)
 const scroller = ref<HTMLElement | null>(null)
 
 const hasConversation = computed(() => chat.activeId !== null)
+
+/** 优先显示账号里配置的模型；没配过才退回上一条回复用的模型 */
+const modelLabel = computed(() => {
+  const configured = settings.modelLabel
+  return configured && configured !== '未配置' ? configured : chat.modelLabel
+})
+/** 空态只在「有会话但还没有消息」时出现；没有会话时也显示招呼语，让首屏不空 */
 const showEmptyState = computed(
   () => !chat.loadingMessages && chat.messages.length === 0 && !chat.streamingText,
 )
@@ -28,11 +37,6 @@ const lastUserIndex = computed(() => {
     if (chat.messages[i].role === 'user') return i
   }
   return -1
-})
-
-const subtitle = computed(() => {
-  if (!hasConversation.value) return '选择或新建一个会话'
-  return `${chat.messages.length} 条消息`
 })
 
 /** 消息区滚到底：新消息、切换会话、Markdown 渲染后高度变化都要滚 */
@@ -55,11 +59,6 @@ async function handleSend() {
     composer.value?.focus()
   }
   scrollToBottom()
-}
-
-async function handleCreate() {
-  await chat.createNew()
-  composer.value?.focus()
 }
 
 watch(() => chat.activeId, scrollToBottom)
@@ -91,47 +90,10 @@ onMounted(async () => {
 
 <template>
   <div class="chat">
-    <header class="chat__head">
-      <div class="chat__head-text">
-        <h2 class="chat__title">
-          <el-icon class="chat__title-icon"><ChatDotRound /></el-icon>
-          {{ hasConversation ? chat.activeTitle : '对话' }}
-        </h2>
-        <p class="chat__sub">{{ subtitle }}</p>
-      </div>
-
-      <!-- 深度回答：开启后走 agent 循环（可调工具），过程在时间线里可见 -->
-      <div class="chat__mode">
-        <el-switch
-          :model-value="chat.agentMode"
-          size="small"
-          aria-label="深度回答"
-          @update:model-value="
-            (value: string | number | boolean) => chat.toggleAgentMode(value === true)
-          "
-        />
-        <span class="chat__mode-label">深度回答</span>
-        <span class="chat__mode-hint">可调用计算器、时间、历史检索</span>
-      </div>
-    </header>
+    <ChatToolbar :title="hasConversation ? chat.activeTitle : ''" :model="modelLabel" />
 
     <div ref="scroller" v-loading="chat.loadingMessages" class="chat__scroll">
-      <div v-if="showEmptyState" class="chat__empty">
-        <img class="chat__empty-logo" src="/logo.png" alt="" width="44" height="44" />
-        <p class="chat__empty-title">
-          {{ hasConversation ? '还没有消息' : '还没有选择会话' }}
-        </p>
-        <p class="chat__empty-desc">
-          {{
-            hasConversation
-              ? '在下方输入框说点什么，助手会记住这次对话的前后文。'
-              : '在左侧选一个会话，或新建一个。首条消息会自动作为会话标题。'
-          }}
-        </p>
-        <el-button v-if="!hasConversation" type="primary" :icon="Plus" @click="handleCreate">
-          新建会话
-        </el-button>
-      </div>
+      <ChatEmpty v-if="showEmptyState" />
 
       <div v-else class="chat__col">
         <template v-for="(message, index) in chat.messages" :key="message.id">
@@ -172,7 +134,9 @@ onMounted(async () => {
       :sending="chat.sending"
       :disabled="!hasConversation"
       :max-length="MAX_LENGTH"
+      :agent-mode="chat.agentMode"
       @send="handleSend"
+      @toggle-agent-mode="chat.toggleAgentMode(!chat.agentMode)"
     />
   </div>
 </template>
@@ -183,60 +147,6 @@ onMounted(async () => {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-}
-
-.chat__head {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 22px 32px 10px;
-}
-
-.chat__title {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin: 0;
-  overflow: hidden;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat__title-icon {
-  color: var(--ma-color-faint);
-}
-
-.chat__sub {
-  margin: 2px 0 0;
-  font-size: 13px;
-  color: var(--ma-color-muted);
-}
-
-.chat__mode {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--ma-color-muted);
-  cursor: pointer;
-}
-
-.chat__mode-label {
-  color: var(--ma-color-ink);
-}
-
-.chat__mode-hint {
-  color: var(--ma-color-faint);
-}
-
-.chat__timeline {
-  margin: 4px 0 16px;
 }
 
 .chat__scroll {
@@ -252,35 +162,6 @@ onMounted(async () => {
 }
 
 /* 空态：标题用衬线，与登录页呼应；不放大插图 */
-.chat__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  max-width: 420px;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.chat__empty-logo {
-  margin-bottom: 14px;
-  border-radius: 12px;
-}
-
-.chat__empty-title {
-  margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.chat__empty-desc {
-  margin: 0 0 20px;
-  font-size: 13px;
-  line-height: 1.8;
-  color: var(--ma-color-muted);
-}
 
 .chat__bubble--streaming {
   max-width: 100%;
