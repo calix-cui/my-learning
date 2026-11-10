@@ -111,8 +111,10 @@ async function handleUserCommand(command: string) {
               @keydown.enter.prevent="toggle"
               @keydown.space.prevent="toggle"
             >
-              <span class="layout__avatar">{{ session.avatarText }}</span>
-              <span class="layout__user-name">{{ session.displayName }}</span>
+              <span class="layout__user-info">
+                <span class="layout__avatar">{{ session.avatarText }}</span>
+                <span class="layout__user-name">{{ session.displayName }}</span>
+              </span>
               <AppIcon name="more" :size="16" class="layout__user-more" />
             </div>
           </template>
@@ -182,8 +184,9 @@ async function handleUserCommand(command: string) {
 .layout__user-trigger {
   display: flex;
   flex: 1;
-  gap: 10px;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   min-width: 0;
   padding: 8px 10px;
   font: inherit;
@@ -228,6 +231,14 @@ async function handleUserCommand(command: string) {
   flex-direction: column;
   min-width: 0;
   line-height: 1.4;
+}
+
+.layout__user-info {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
 }
 
 .layout__user-name {

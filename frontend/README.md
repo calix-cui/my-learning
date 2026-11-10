@@ -39,6 +39,31 @@ pnpm type-check
 > 端口约定：dev 5173、preview 4173，均不会占用后端 8000 端口；`strictPort: true` 保证端口被占用时直接报错而不是静默换端口。
 > 想一条命令起前后端：仓库根 `./scripts/dev.sh`。
 
+## 前端开发约定（新增代码必须遵守）
+
+以下几条是硬约定，评审时按它执行；细节背景见根目录 `DESIGN.md`。
+
+### 1. 多用 div，减少嵌套层数
+
+- **能用一层就用一层**：不要为了「语义好看」叠出 `div > div > span > span` 这种壳；容器一律用 `div`，只有**行内文字**才用 `span`。
+- 判断标准：这个元素只负责布局（宽度/间距/flex）→ 用 `div`；它直接包文字、且需要和相邻文字同流 → 用 `span`。
+- 一个组件模板里，从根到叶子**尽量不超过 4 层**；超过就说明有可以合并的包装层。
+- 不要再写「为了加一个 class 而包一层 div」：class 直接加在已有的那一层上。
+- 反例：`<div class="wrap"><div class="inner"><span class="text">…</span></div></div>` → 正例：`<div class="wrap">…</div>`。
+- 例外：`<Teleport>`、`<Transition>`、`<template v-for>` 这类框架必需的结构不算嵌套。
+
+### 2. 交互反馈统一用渐变
+
+hover 用 `linear-gradient(90deg, ink 7%, ink 3%)`，按下 `12% → 7%`，危险操作用红色渐变；禁止整块纯色 hover，也不做位移/放大（详见 `DESIGN.md`「交互反馈」）。
+
+### 3. 不要轻易加分割线
+
+小模块之间用间距、底色与阴影分组；只有 Markdown 语义（表格、引用块）、输入框聚焦态、低对比度退化三种例外（详见 `DESIGN.md`「边界规则」）。
+
+### 4. 可点元素必须可键盘访问
+
+用真实 `<button>`；确实需要 `div` 时，补 `role="button"` + `tabindex="0"` + `@keydown.enter` / `@keydown.space`，否则 ESLint 的 a11y 规则会拦。
+
 ## 代码规范与检查
 
 按 [ADR-0002](../docs/adr/0002-frontend-quality-gate-lite.md) 的「轻量档」配置：只拦会出错的问题，不追求类型感知规则与格式统一率。

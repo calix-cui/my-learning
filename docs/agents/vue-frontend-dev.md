@@ -9,14 +9,24 @@
 
 ## 2. 输入
 
-- `docs/design/<项目>-design.md`（tokens、组件规范、每页尺寸）
-- `docs/product/<项目>-prd.md`（功能与验收标准）
+- `PRODUCT.md`（产品上下文）与 `DESIGN.md`（tokens、边界规则、交互反馈、Do/Don'ts）
+- `docs/design/README.md`（设计稿索引与实现状态）
 - `docs/api.md`（接口契约）
 
 ## 3. 技术栈（固定，不要私自换）
 
 Vue 3.4（`<script setup lang="ts">`）· Vite · TypeScript · Element Plus · axios · vue-router 4 · pnpm。
 样式：手写 CSS + CSS 变量（`src/styles/index.css` 已有 token），**不引入 Tailwind/UnoCSS**。
+
+## 3.1 结构约定：多用 div、少嵌套（硬规则）
+
+- **容器一律 `div`**，只有行内文字才用 `span`；不要为了挂 class 而多包一层。
+- 从组件根到叶子**不超过 4 层**，超了就合并包装层。
+- 只有布局职责的元素不要用 `section`/`article`/`span` 撑语义。
+- `<Teleport>`/`<Transition>`/`<template v-for>` 这类框架必需结构不计入层数。
+- 需要 `div` 当按钮时，必须补 `role="button"` + `tabindex="0"` + `@keydown.enter`/`@keydown.space`。
+
+完整清单见 [`frontend/README.md`](../../frontend/README.md) 的「前端开发约定」；视觉规则见 [`DESIGN.md`](../../DESIGN.md)。
 
 ## 4. 目录约定
 

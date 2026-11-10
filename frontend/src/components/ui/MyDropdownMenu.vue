@@ -37,9 +37,16 @@ function place() {
   if (!el) return
   const rect = el.getBoundingClientRect()
   const width = panel.value?.offsetWidth ?? 180
+  const height = panel.value?.offsetHeight ?? 0
   const left = props.align === 'end' ? rect.right - width : rect.left
+
+  // 下方放不下就翻到上方（用户区在侧栏底部，否则菜单会掉出屏幕）
+  const below = rect.bottom + 6
+  const overflows = height > 0 && below + height > window.innerHeight - 8
+  const top = overflows ? Math.max(8, rect.top - height - 6) : below
+
   position.value = {
-    top: rect.bottom + 6,
+    top,
     left: Math.max(8, Math.min(left, window.innerWidth - width - 8)),
   }
 }
@@ -88,9 +95,9 @@ onBeforeUnmount(detach)
 </script>
 
 <template>
-  <span ref="trigger" class="my-menu__trigger">
+  <div ref="trigger" class="my-menu__trigger">
     <slot :toggle="toggle" :open="open" />
-  </span>
+  </div>
 
   <Teleport to="body">
     <Transition name="my-menu-fade">
@@ -114,7 +121,9 @@ onBeforeUnmount(detach)
 
 <style scoped>
 .my-menu__trigger {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
+  min-width: 0;
 }
 
 .my-menu {
