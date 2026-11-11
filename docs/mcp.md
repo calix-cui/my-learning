@@ -199,7 +199,7 @@ erDiagram
 | T3 ✅ | 装配与连接管理 | `source.py`（`McpTool`/`McpSource`）、`manager.py`（连接池 + `probe`）、`registry_for()`、修掉 T-26（超时读 `meta.timeout_seconds`） | 单测 11 例：前缀 `mcp__<slug>__<tool>`、`EXTERNAL` 级别、schema 透传、`isError`→`ToolError`、连接复用与空闲回收、禁用服务器不出现、连不上只记 `last_status=error` 不打断对话 |
 | T4 ✅ | 接口 | 6 个接口（`api/mcp.py` + `schemas/mcp.py` + `services/mcp_service.py`） | 契约测试 12 例：清单带已接入状态、接入市场条目、缺 path/重复 slug/命令不在白名单 400、启停与改配置断连接、越权与未登录、试连成功/失败落库、env 只存密文 |
 | T5 ✅ | 前端市场页 | `frontend/src/components/settings/MarketPanel.vue`、`frontend/src/api/mcp.ts`、`SettingsView` 新增「工具市场」节、`ui/icon-paths.ts`（图标表独立成文件，后端给的图标名要做类型收窄） | 卡片网格（`minmax(260px, 1fr)` / gap 16）、四种筛选、开关即时生效并失败回滚、点工具数展开清单（连接池冷的时候先试连一次）、移除走确认框；规格已回写 `DESIGN.md` §5.7；截图 `docs/images/ui-15-tool-market.png`、`ui-16-tool-market-installed.png` |
-| T6 | 审批联调 | `mcp__*` 工具挂起 → 批准后真实调用 | E2E：接入 → 让模型用一次 MCP 工具 → 审批 → 时间线出现结果 |
+| T6 ✅ | 审批联调 | `backend/tests/test_mcp_agent.py`（真 stdio server 走完 `registry_for → stream_run → approval_required → decide_approval → resume_run`） | 3 例：MCP 工具在注册表里是 `EXTERNAL` + `requires_approval`；调用挂起且 run 变 `waiting_approval`；批准后事件为 `tool_result` 且内容等于服务器回显、run 收尾 `completed`、服务器 `last_status=ok`；拒绝时回灌「用户拒绝…+理由」且工具未执行 |
 | T7 | 文档与 DESIGN 回写 | `docs/api.md` §6.5、`DESIGN.md` §5 新增 4 条规格、`acceptance:mcp` | 新页面完全按 DESIGN.md 实现；截图入 `docs/images/` |
 
 ## 8. 验收标准
