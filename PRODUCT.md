@@ -56,7 +56,7 @@ Vue 3.5 + TypeScript 5.7 + Vite 6 + Element Plus 2.9（不引第二套 UI 库）
 - 真实页面：`frontend/src/views/{LoginView,RegisterView,ChatView}.vue`，可通过 `http://127.0.0.1:5173` 打开（后端 8000）。
 - 截图：`frontend/.acceptance/auth-01-login.png`、`auth-03-chat.png`（旧设计，仅作现状参考）。
 - 接口契约：`docs/api.md`（账号 7 + 对话 7 + 运维 3）。
-- 设置模块待办口径：`docs/setting design.md`。
+- 设置模块的现状与接口口径：[`docs/api.md`](docs/api.md) §3.8–§4、[ADR-0009](docs/adr/0009-per-user-model-settings.md)。
 - 无品牌 logo、无插画、无真实用户访谈；不要虚构这些素材。
 
 ## Product Principles

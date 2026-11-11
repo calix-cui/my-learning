@@ -4,7 +4,7 @@
 PY ?= .venv/bin/python
 UV ?= uv
 
-.PHONY: help install install-dev lock run init-db migrate revision check-migration test lint fmt check
+.PHONY: help install install-dev lock run init-db migrate revision check-migration test lint fmt check clean-demo clean-demo-yes
 
 help:  ## 列出所有命令
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -43,5 +43,12 @@ lint:  ## 静态检查（只报告，不改文件）
 fmt:  ## 自动修复导入顺序并格式化代码
 	$(PY) -m ruff check --fix .
 	$(PY) -m ruff format .
+
+clean-demo:  ## 删掉本地库里 E2E/调试留下的示例账号（先看，再 --yes 真删）
+	$(PY) scripts/cleanup_demo_accounts.py
+	@echo '确认无误后执行： make clean-demo-yes'
+
+clean-demo-yes:  ## 真的删除示例账号（会级联删掉它们的会话/消息/run）
+	$(PY) scripts/cleanup_demo_accounts.py --yes
 
 check: lint test  ## 提交前自检：lint + 测试（不需要数据库，CI 也跑这个）

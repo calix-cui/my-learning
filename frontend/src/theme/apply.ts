@@ -37,7 +37,6 @@ export function buildThemeVars(theme: ThemeDefinition, mode: ThemeMode): Record<
   const vars: Record<string, string> = {
     '--ma-mode': mode,
     '--ma-font-sans': staticTokens.fontSans,
-    '--ma-font-serif': staticTokens.fontSerif,
     '--ma-font-mono': staticTokens.fontMono,
     '--ma-radius-sm': staticTokens.radiusSm,
     '--ma-radius-md': staticTokens.radiusMd,

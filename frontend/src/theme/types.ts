@@ -51,7 +51,6 @@ export interface ThemeDefinition {
 /** 与主题无关的排版/间距/圆角，全局只有一份 */
 export interface StaticTokens {
   fontSans: string
-  fontSerif: string
   fontMono: string
   radiusSm: string
   radiusMd: string

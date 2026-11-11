@@ -85,9 +85,7 @@ def build_registry(
     conversation_id: int | None = None,
 ) -> "ToolRegistry":
     """按当前请求构造注册表；`disabled` 来自用户设置，被关掉的工具既不展示也执行不了。"""
-    return ToolRegistry.from_sources(
-        [BuiltinSource(session, conversation_id)], disabled=disabled
-    )
+    return ToolRegistry.from_sources([BuiltinSource(session, conversation_id)], disabled=disabled)
 
 
 class ToolRegistry:

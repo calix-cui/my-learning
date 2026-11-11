@@ -1,217 +1,385 @@
 ---
 name: My Agent
-description: 属于你一个人的 AI 助手：安静、可信、数据在你自己手里的对话应用。
+description: 属于你一个人的 AI 助手。安静、可信、数据在你自己手里。
 colors:
-  canvas: "#FAF8F4"
-  surface: "#FFFFFF"
-  surface-sunken: "#F3F0EA"
-  ink: "#1C1B18"
-  ink-muted: "#6B675E"
-  ink-faint: "#9A958A"
-  line: "#E5E0D6"
-  line-strong: "#D2CCBE"
-  pine: "#1F4D46"
-  pine-deep: "#173A35"
-  pine-soft: "#E7EFEC"
-  amber: "#B4722A"
-  amber-soft: "#FBF1E4"
-  danger: "#A6352B"
-  danger-soft: "#FBEAE7"
+  canvas: "#faf8f4"
+  surface: "#ffffff"
+  sunken: "#f3f0ea"
+  ink: "#1c1b18"
+  muted: "#6b675e"
+  faint: "#9a958a"
+  line: "#e5e0d6"
+  line-strong: "#d2ccbe"
+  accent: "#1f4d46"
+  accent-hover: "#173a35"
+  accent-soft: "#e7efec"
+  on-accent: "#ffffff"
+  success: "#1a7f63"
+  success-soft: "#e6f4f0"
+  warn: "#a3651f"
+  warn-soft: "#fbf1e4"
+  danger: "#a6352b"
+  danger-soft: "#fbeae7"
 typography:
   display:
-    fontFamily: '"Songti SC", "Noto Serif SC", Georgia, serif'
     fontSize: "28px"
     fontWeight: 600
     lineHeight: 1.3
-    letterSpacing: "0.01em"
-  title:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif'
-    fontSize: "20px"
+    letterSpacing: "-0.02em"
+  h1:
+    fontSize: "24px"
     fontWeight: 600
-    lineHeight: 1.4
-    letterSpacing: "0em"
+    lineHeight: 1.35
+    letterSpacing: "-0.01em"
+  h2:
+    fontSize: "18px"
+    fontWeight: 600
+    lineHeight: 1.5
+  h3:
+    fontSize: "15px"
+    fontWeight: 600
+    lineHeight: 1.6
   body:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif'
     fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.75
     letterSpacing: "0.01em"
-  small:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif'
+  caption:
     fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0.01em"
   mono:
-    fontFamily: '"SF Mono", ui-monospace, Menlo, Consolas, monospace'
     fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.6
-    letterSpacing: "0em"
 rounded:
-  sm: "6px"
-  md: "10px"
-  lg: "14px"
+  sm: "8px"
+  md: "12px"
+  lg: "18px"
+  xl: "26px"
   pill: "999px"
 spacing:
   xs: "4px"
-  sm: "8px"
-  md: "16px"
-  lg: "24px"
-  xl: "32px"
-  xxl: "48px"
+  sm: "6px"
+  md: "10px"
+  lg: "16px"
+  xl: "24px"
+  xxl: "32px"
 components:
   button-primary:
-    backgroundColor: "{colors.pine}"
-    textColor: "#FFFFFF"
-    rounded: "{rounded.sm}"
-    padding: "0 18px"
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.on-accent}"
+    rounded: "{rounded.md}"
     height: "40px"
-  button-primary-hover:
-    backgroundColor: "{colors.pine-deep}"
-  button-ghost:
-    backgroundColor: "transparent"
+    padding: "0 18px"
+  button-secondary:
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.sm}"
-    padding: "0 14px"
-    height: "36px"
+    rounded: "{rounded.pill}"
+    height: "40px"
+    padding: "0 16px"
   input:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.sm}"
-    padding: "0 12px"
+    rounded: "{rounded.md}"
     height: "40px"
-  sidebar:
-    backgroundColor: "{colors.surface-sunken}"
-    textColor: "{colors.ink}"
-    width: "264px"
-  bubble-user:
-    backgroundColor: "{colors.pine}"
-    textColor: "#FFFFFF"
-    rounded: "{rounded.lg}"
-    padding: "12px 16px"
-  bubble-assistant:
+    padding: "0 12px"
+  composer:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.lg}"
-    padding: "16px 20px"
+    rounded: "{rounded.xl}"
+    padding: "14px 16px 12px"
   card:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.md}"
-    padding: "20px 24px"
+    rounded: "{rounded.lg}"
+    padding: "24px"
+  sidebar:
+    backgroundColor: "{colors.canvas}"
+    width: "264px"
 ---
 
-## Overview
+# My Agent 设计规范
 
-My Agent 是一个**个人** AI 助手。界面要让人放松：暖白纸面、墨色文字、一个深松绿作为唯一强调色。视觉主语永远是**内容**（对话与设置项），外壳尽量退到背景里。
+> 这份文档是**唯一**的视觉规则来源。做新页面、改组件、调颜色之前先读它；改完 UI 要把改动**回写**进来（见 §9）。
 
-三条设计立场：
+## 0. 怎么用
 
-1. **安静优先**：没有渐变、没有装饰性插图、没有大面积色块。颜色只用来区分层级和标示状态。
-2. **可信优先**：危险操作（清空、注销、撤销设备）用暖红并配二次确认；成功用松绿，失败用暖红，绝不用「绿色对勾」掩盖失败。
-3. **一屏一件事**：对话页只做对话，设置页只做设置，登录页只做登录。
+1. **写页面前**：读 §2–§5，把要用的颜色、字号、间距、圆角先定下来，再动 `<style>`。
+2. **写样式时**：只用 `var(--ma-*)` 变量，不写死十六进制、不写魔法数字（有例外要在这里补一条规则）。
+3. **交付前**：过一遍 §10 自查清单。
+4. **改完 UI**：同一个提交里更新本文档——新增组件补 §5，改尺寸改对应表格。
 
-## Colors
+三个必须记住的硬规则（详见 §8）：**不要随便加分割线**、**hover 用横向渐变**、**结构多用 div、嵌套 ≤4 层**。
 
-| Token | 值 | 用途 |
+## 1. 设计立场
+
+1. **安静优先**：没有渐变背景、没有装饰插图、没有大面积色块。颜色只用来区分层级和标记状态。
+2. **可信优先**：危险操作用暖红 + 说清后果 + 二次确认；失败就显示失败，不用绿色掩盖。
+3. **一屏一件事**：对话页只做对话，设置页只做设置，登录页只做登录。内容永远比外壳显眼。
+
+## 2. 配色
+
+### 2.1 语义色 token（组件只准用这些名字）
+
+CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/*.ts`。下表是默认主题**松林 · 浅色**的取值。
+
+| Token | 变量 | 松林·浅色 | 用途 |
+|---|---|---|---|
+| `canvas` | `--ma-color-canvas` | `#faf8f4` | 页面底色（暖白纸） |
+| `surface` | `--ma-color-surface` | `#ffffff` | 卡片、输入框、浮层、助手消息区 |
+| `sunken` | `--ma-color-sunken` | `#f3f0ea` | 代码块、分组背景、次要区域 |
+| `ink` | `--ma-color-ink` | `#1c1b18` | 正文、标题（不用纯黑） |
+| `muted` | `--ma-color-muted` | `#6b675e` | 次要说明、时间戳、占位符 |
+| `faint` | `--ma-color-faint` | `#9a958a` | 装饰性文字（分隔符、禁用态），不用于正文 |
+| `line` | `--ma-color-line` | `#e5e0d6` | 极少数需要的 1px 线（见 §8.1） |
+| `line-strong` | `--ma-color-line-strong` | `#d2ccbe` | hover 时的线、滚动条 |
+| `accent` | `--ma-color-accent` | `#1f4d46` | **主色**：主按钮、选中态、用户气泡、焦点环 |
+| `accent-hover` | `--ma-color-accent-hover` | `#173a35` | 主色按下 / 深一档 |
+| `accent-soft` | `--ma-color-accent-soft` | `#e7efec` | 选中底色、用户气泡浅底 |
+| `on-accent` | `--ma-color-on-accent` | `#ffffff` | 主色之上的文字 |
+| `success` / `success-soft` | `--ma-color-success(-soft)` | `#1a7f63` / `#e6f4f0` | 成功、运行中 |
+| `warn` / `warn-soft` | `--ma-color-warn(-soft)` | `#a3651f` / `#fbf1e4` | 待确认、待配置、预算接近上限 |
+| `danger` / `danger-soft` | `--ma-color-danger(-soft)` | `#a6352b` / `#fbeae7` | 破坏性操作、错误 |
+
+### 2.2 四套主题的主色
+
+主题只换颜色，不换布局、字号、圆角。切换入口在设置 → 外观，深浅模式单独选（浅色 / 深色 / 跟随系统）。
+
+| 主题 | id | 浅色主色 | 深色主色 | 浅色底色 | 深色底色 | 气质 |
+|---|---|---|---|---|---|---|
+| 松林（默认） | `pine` | `#1f4d46` | `#74c3ae` | `#faf8f4` | `#141715` | 暖白纸 + 深松绿，最安静 |
+| 暖砂 | `sand` | `#8f4b2a` | `#d99272` | `#fbf6ec` | `#171310` | 米黄纸 + 陶土棕，暖 |
+| 靛蓝 | `indigo` | `#2f3f86` | `#93a4ee` | `#f7f8fb` | `#101318` | 冷灰纸 + 深靛蓝，工具感 |
+| 石墨 | `graphite` | `#3f4650` | `#b8bec9` | `#f7f7f8` | `#121213` | 几乎无色相，最不打扰 |
+
+> 新增主题只需在 `frontend/src/theme/themes/` 加一个文件并注册；**任何组件都不许写死颜色**，否则换主题就破。
+
+### 2.3 配色规则
+
+1. **一屏最多两处强调色**：一个主按钮 + 一个选中态。第三处开始就变成仪表盘。
+2. **状态不能只靠颜色**：成功/失败/待确认都要有文字，颜色只是加强。
+3. **深浅两套必须同时给**：18 个 token 缺一个就会在深色下出现「透明洞」。
+4. **正文对比度 ≥ 4.5:1**：`faint` 不能用来写正文或按钮文字。
+5. **危险动作**用 `danger` 系，且必须配文案说明后果，禁止只把字变红。
+
+## 3. 字体
+
+### 3.1 字族
+
+| 用途 | 字体栈 | 变量 |
 |---|---|---|
-| `canvas` | `#FAF8F4` | 页面底色（暖白纸），比纯白柔和，长时间阅读不刺眼 |
-| `surface` | `#FFFFFF` | 卡片、输入框、助手气泡 |
-| `surface-sunken` | `#F3F0EA` | 侧边栏、代码块底、分组背景 |
-| `ink` | `#1C1B18` | 正文，不用纯黑 |
-| `ink-muted` | `#6B675E` | 次要说明、时间戳、占位符 |
-| `ink-faint` | `#9A958A` | 只用于非必要装饰文字（分隔符、禁用态） |
-| `line` | `#E5E0D6` | 1px 分隔线、卡片描边 |
-| `pine` / `pine-deep` / `pine-soft` | `#1F4D46` / `#173A35` / `#E7EFEC` | 主操作、选中态、用户气泡、焦点环 |
-| `amber` / `amber-soft` | `#B4722A` / `#FBF1E4` | 提醒（未保存、待配置、用量接近上限） |
-| `danger` / `danger-soft` | `#A6352B` / `#FBEAE7` | 破坏性操作、错误信息 |
+| 正文 / UI / 标题 | `-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif` | `--ma-font-sans` |
+| 代码 / 数字标识 | `"SF Mono", ui-monospace, Menlo, Consolas, monospace` | `--ma-font-mono` |
+
+**全站只有一个字族**（无衬线）。层级靠字号、字重、行高区分；不再引衬线体，也不用全大写做层级。
+
+### 3.2 字号阶梯
+
+| 层级 | 字号 | 字重 | 行高 | 字距 | 用在哪 |
+|---|---|---|---|---|---|
+| `display` | 28px | 600 | 1.3 | `-0.02em` | 登录/注册标题、空态大标题 |
+| `h1` | 24px | 600 | 1.35 | `-0.01em` | 页面主标题（对话标题、设置标题） |
+| `h2` | 18px | 600 | 1.5 | 0 | 区块标题（「执行过程」、设置分组名） |
+| `h3` | 15px | 600 | 1.6 | 0 | 列表项标题、字段组标题 |
+| `body` | 15px | 400 | 1.75 | `0.01em` | 正文、消息、表单值、说明文字 |
+| `body-strong` | 15px | 500 | 1.75 | `0.01em` | 按钮文字、会话标题、强调短语 |
+| `caption` | 13px | 400 | 1.5 | `0.01em` | 时间戳、辅助说明、字数统计 |
+| `micro` | 12px | 400 | 1.5 | 0 | 极次要标签（模型名、状态后缀） |
+| `mono` | 13px | 400 | 1.6 | 0 | 代码块、工具参数、API Key 末四位 |
 
 规则：
 
-- 强调色每屏**最多出现两处**（一个主按钮 + 一个选中态）。多了就退化成仪表盘。
-- 正文不用 `ink-faint`，对比度不足 4.5:1。
-- 状态不只靠颜色：上架/下架、成功/失败都要有文字，颜色只是强化。
+1. 一屏最多 **4 个字号层级**；同一层级内不要靠「12px vs 13px」制造差异，用颜色/字重。
+2. 消息正文 15px/1.75；Markdown 渲染后的段落间距 12px，标题上下留 16/8px。
+3. 数字列（时间、计数、用量）加 `font-variant-numeric: tabular-nums`（已有 `.tabular` 类）。
+4. 中英混排保留 `0.01em` 字距；纯数字/代码不加。
+5. 行宽上限 `--ma-reading-width`（720px），超过就换行，不拉满窗口。
 
-## Typography
+## 4. 间距与布局
 
-- **显示级**（登录页标题、空态大标题）用衬线 `Songti SC / Georgia`，28px/1.3，字距 +0.01em。整站只有登录页与空态使用衬线，其余一律无衬线。
-- **正文** 15px / 1.75：中文长段落最舒服的行高；对话气泡、设置项说明都用这一档。
-- **小字** 13px / 1.5：时间戳、字段说明、按钮内次要文案。
-- **等宽** 13px：代码块、API Key 末四位、版本号。
-- 中文与英文/数字混排时保留 `0.01em` 字距，避免挤在一起。
-- 数字列（用量、时间）用 `font-variant-numeric: tabular-nums` 对齐。
+### 4.1 间距阶梯（8pt 为主，允许 6/10 做视觉微调）
 
-## Layout
+| 变量 | 值 | 典型用途 |
+|---|---|---|
+| `--ma-space-xs` | 6px | 图标与文字、徽标内边距 |
+| `--ma-space-sm` | 10px | 列表项内边距、标签与控件 |
+| `--ma-space-md` | 16px | 卡片内边距、按钮组水平间距 |
+| `--ma-space-lg` | 24px | 卡片之间、表单字段之间 |
+| `--ma-space-xl` | 32px | 页面区块之间、页面上下留白 |
+| 48px | — | 登录页顶部留白、空态上下呼吸 |
 
-- 外壳：左侧栏 **264px**（`surface-sunken`，1px 右边线）+ 主区（`canvas`），主区最大内容宽 **1080px**，超出居中留白。
-- 对话页：消息列最大宽 **720px** 居中；用户气泡右对齐、助手气泡左对齐且无气泡尾巴。
-- 登录/注册：单列卡片 **400px**，垂直居中偏上（距顶部 12vh），背景只用 `canvas`。
-- 设置页：左侧二级导航 **200px**（模型 / 账号 / 设备 / 外观 / 数据 / 关于）+ 右侧表单区，表单最大宽 **560px**。
-- 间距节奏用 8pt：`4 / 8 / 16 / 24 / 32 / 48`。区块之间 32，字段之间 24，标签与控件之间 8。
-- 断点：`≥1280` 三栏（侧栏 + 内容 + 可选的上下文栏）；`960–1279` 隐藏侧栏改用顶部下拉；`<960` 单列，移动端只保证「不横向滚动、能读能发」。
+### 4.2 骨架尺寸
 
-## Elevation & Depth
+| 元素 | 尺寸 | 说明 |
+|---|---|---|
+| 侧边栏 | 264px | `--ma-sidebar-width`，底色 `canvas` |
+| 内容区 | 1080px | `--ma-content-width`，超出居中 |
+| 对话阅读列 | 720px | `--ma-reading-width`，消息与输入盒同宽 |
+| 设置二级导航 | 208px | 悬浮窗内部的左栏 |
+| 设置表单区 | 560px | 字段最大宽，右侧留白 |
+| 设置悬浮窗 | `min(920px, 100%)` | 圆角 26，`--ma-shadow-float` |
+| 登录卡片 | 400px | 距顶 12vh，垂直居中 |
+| 输入盒 | 阅读列宽 | 圆角 26，最小高 48 |
 
-- 只有两级：`canvas` 上的 `surface` 卡片（1px `line` 描边 + `0 1px 2px rgba(28,27,24,.04)`）与浮层（弹窗、下拉，`0 8px 24px rgba(28,27,24,.10)`）。
-- 不用大阴影堆叠，不用玻璃拟态。
-- 焦点态用 3px `pine-soft` 外环 + 1px `pine` 内描边，替代 `outline: none`。
+### 4.3 场景间距
 
-## Shapes
+| 场景 | 间距 |
+|---|---|
+| 页面左右留白 | 32px（内容区 > 1200 时可到 40px） |
+| 区块（section）之间 | 32px |
+| 卡片之间 | 24px |
+| 表单字段之间 | 24px（紧凑模式 16px） |
+| 标签与控件之间 | 8px |
+| 按钮之间 | 12px |
+| 消息之间 | 28px（同一提问的步骤卡与回答之间 12px） |
+| 侧栏顶部（品牌/新建按钮） | 18–20px 内边距 |
 
-- 圆角：输入框与按钮 6px，卡片 10px，气泡 14px，状态点与头像用 pill。
-- 描边一律 1px，颜色 `line`；hover 提到 `line-strong`。
-- 图标用 Element Plus 线性图标，20px，线宽随组件；不自绘插画。
+### 4.4 圆角
 
-## Components
+| 变量 | 值 | 用在哪 |
+|---|---|---|
+| `--ma-radius-sm` | 8px | 小标签、内嵌块、代码行内 |
+| `--ma-radius-md` | 12px | **按钮、输入框、列表项、菜单项**（默认档） |
+| `--ma-radius-lg` | 18px | 卡片、消息气泡、步骤卡 |
+| `--ma-radius-xl` | 26px | 浮层/弹窗、对话输入盒、大容器 |
+| `pill` | 999px | 状态胶囊、头像、圆形图标按钮、次要按钮 |
 
-- **按钮**：主按钮深松绿实底（40px 高）；次按钮白底 1px 描边；文字按钮只用于行内操（撤销、重命名）。同一行最多一个主按钮。
-- **输入框**：40px 高，白底，聚焦时描边变 `pine` + 外环；错误态描边 `danger` 并在下方 8px 处给 13px 红字说明原因。
-- **侧边栏会话项**：两行——标题（15px，最多 1 行省略）+ 元信息（13px `ink-muted`，「N 条 · 时间」）。选中态底色 `pine-soft` + 左侧 3px `pine` 竖条，不用整块反白。
-- **消息气泡**：用户气泡右对齐（`pine` 底白字，最多 80% 宽）；助手气泡左对齐（白底、1px 描边），支持 Markdown 的 h1–h4、列表、代码块（`surface-sunken` 底 + 等宽 13px）、表格、引用。
-- **状态胶囊**：`pine-soft` 底 + `pine` 字（成功/在线）、`amber-soft` + `amber`（待配置）、`danger-soft` + `danger`（失败）。前后各 6px 内边距，圆角 pill。
-- **空态**：居中、最多 3 行文案（一句标题 + 一句解释 + 一个主操作），不放大插图。
-- **危险区**（设置页底部）：`danger-soft` 底卡片，写明「删除后无法恢复」，操作按钮为红色描边按钮，点击后弹二次确认，需输入会话数量或账号邮箱才能确认。
+规则：同一层级里圆角不要混（卡片 18 里别嵌 26 的块）；嵌套时内层圆角 = 外层 − 内边距，最小 8。
 
-## 结构约定：多用 div、少嵌套（2026-11-11 修订）
+### 4.5 断点
 
-1. **容器用 `div`，只有行内文字用 `span`**；不要为了挂一个 class 而多包一层。
-2. 组件模板从根到叶子**不超过 4 层**；超过就说明有可合并的包装层。
-3. 布局容器不要用 `section`/`article` 这类语义标签「撑门面」——语义标签只在表达文档结构时使用。
-4. 需要 `div` 承担按钮行为时，补 `role="button"` + `tabindex="0"` + Enter/Space 键盘处理。
-5. `Teleport`、`Transition`、`template v-for` 等框架必需结构不计入层数。
+| 宽度 | 布局 |
+|---|---|
+| ≥1280px | 侧栏 + 内容区（+ 可选右栏） |
+| 960–1279px | 侧栏可收起；内容区占满 |
+| <960px | 单列；只保证「不横向滚动、能读能发」 |
 
-## 交互反馈：hover 用渐变，不用整块灰（2026-11-11 修订）
+## 5. 组件规范
 
-悬停反馈是「有质感」和「像 Bootstrap 默认样式」的分界线。统一规则：
+### 5.1 按钮
 
-1. **凡是可点的东西，hover 都用横向渐变**：`linear-gradient(90deg, ink 7%, ink 3%)`（`ink` 即 `--ma-color-ink`）。方向固定从左到右，不要有的从上到下。
-2. **按下（`:active`）加深一档**：`12% → 7%`；选中态（`is-active`）与按下同档。
-3. **覆盖范围**：按钮、图标按钮、列表项（会话项、设备项、设置导航）、菜单项、用户区。项目里已经这样实现，新增交互元素照抄。
-4. **危险动作**用红色渐变：`danger 10% → 4%`，不要只改文字颜色。
-5. **选中态优先**：元素已经是选中色时，hover 保持选中色，不要再叠一层灰（否则看起来像被取消选中）。
-6. **不用整块纯色 hover**（`background: #f5f5f5` 这类）——它会让界面显得廉价，也让深浅色主题下更难调。
-7. **过渡时间 150ms**、只过渡 `background` 与 `color`，不做位移、放大、阴影跳动。
+| 类型 | 高度 | 圆角 | 底色 | 文字 | 用法 |
+|---|---|---|---|---|---|
+| 主按钮 | 40px | 12px | `accent` | `on-accent` | 每屏最多一个（发送、保存、批准执行） |
+| 次按钮 | 40px | pill | `surface` + 10% 阴影 | `ink` | 取消、重命名、次要动作（`SoftButton`） |
+| 描边按钮 | 32–36px | 12px | 透明 + 1px `line-strong` | `ink` | 表格行内、弹窗底部 |
+| 文字按钮 | — | — | 透明 | `accent` | 行内操作（改名、查看全部） |
+| 危险按钮 | 40px | 12px | `danger` | `on-accent` | 删除/注销，必须配二次确认 |
+| 图标按钮 | 32–36px | pill | 透明 | `muted` | 工具栏、消息操作 |
 
-## 边界规则：不要轻易加分割线（2026-11-11 修订）
+状态：
 
-这条是硬规则，评审时按它执行：
+- hover：横向渐变 `linear-gradient(90deg, ink 7%, ink 3%)`（实底按钮改为 `accent-hover`）。
+- active / 选中：加深一档（12% → 7%）。
+- disabled：`opacity .45` + `cursor: not-allowed`，不做灰底变色。
+- 主按钮内 padding `0 18px`，图标与文字 gap 6px，字号 14–15px / 500。
 
-1. **大板块里的小模块之间不加分割线**。默认用间距（24 / 32px）分隔；需要更强的分组感时，用底色差异或一层很淡的阴影，而不是画线。
-2. **按钮、输入框、卡片、菜单、弹窗**这些「有体积」的组件用**阴影**表达边界与抬升，不用 1px 描边（`--ma-shadow-soft` / `--ma-shadow-float`）。
-3. 只在三种情况下允许线条：
-   - **内容语义本身需要**：Markdown 的表格、引用块（阅读区里的排版元素，不是布局切分）。
-   - **状态提示**：输入框聚焦时的 1px 强调色描边 + 3px 外环。
-   - **可访问性**：`prefers-contrast` 或极低对比度屏幕上，阴影不足以区分时，可退化为一层 `--ma-color-line-soft`。
-4. 列表项之间**不用横线**：靠行高、hover 底色与圆角分组表达；选中态只用底色（不加左侧竖条）。
-5. 已经存在但不再必要的分割线，看到就顺手删掉——它通常是「不敢用留白」的痕迹。
+### 5.2 输入类
 
-## Do's and Don'ts
+- 单行输入：高 40px，圆角 12，白底 `surface`，`padding 0 12px`，字号 15。
+- 聚焦：1px `accent` 描边 + 3px `accent-soft` 外环（不用 `outline: none` 裸奔）。
+- 错误：1px `danger` 描边，下方 8px 处 13px `danger` 说明原因。
+- 多行输入盒（对话）：圆角 26，`padding 14px 16px 12px`，`--ma-shadow-soft`，聚焦升为 `--ma-shadow-float`；`textarea` 高度自适应 48–200px，不显示 resize 手柄。
+- 开关 / 单选 / 下拉：统一 40px 行高，标签在左、控件在右，间距 16。
 
-- ✅ 一屏只有一个主按钮；❌ 同一行并排两个实底按钮。
-- ✅ hover 用 7%→3% 的横向渐变；❌ 用整块纯色灰、位移或放大做悬停反馈。
-- ✅ 用留白与层级（字号 / 字重 / 底色 / 阴影）分隔区块；❌ 用分割线或彩色背景块切分。
-- ✅ 长内容（对话、代码）保持 720px 阅读宽；❌ 把文本拉满 1440px。
-- ✅ 危险操作用暖红 + 文案说清后果；❌ 用灰色小字弱化「删除全部」。
-- ✅ 加载中显示骨架或「正在回复…」；❌ 用乐观更新假装成功。
-- ✅ 中文术语固定：会话 / 消息 / 模型 / 设备；❌ 混用「聊天记录」「机器人」「终端」。
+### 5.3 卡片与面板
+
+- 圆角 18，`surface` 底，`padding 24`，**不加边框**，用 `--ma-shadow-soft` 或少一层底色区分。
+- 悬浮面板/弹窗：圆角 26，`--ma-shadow-float`，遮罩 `rgb(0 0 0 / 28%)`。
+- 卡片内部分组：用 24px 间距或 `sunken` 底块，**不画分割线**。
+
+### 5.4 导航
+
+- **侧边栏**：264px，底色 `canvas`（与内容区同色，不靠线分隔），内部 padding 18–20。
+- **会话项**：高 44–48，圆角 12，padding `10px`；标题 14px/500 单行省略；hover 横向渐变；选中 `accent-soft` 底（不加左侧竖条）；右侧「…」按钮仅 hover/选中时出现。
+- **设置二级导航**：208px，项高 40，圆角 12，padding `10px 12px`，14px；选中 `accent-soft` 底。
+- **顶栏**：内容区顶部 64px，标题左、操作右，不加底边框（用留白分隔）。
+
+### 5.5 菜单与弹窗
+
+- 下拉菜单：`--ma-shadow-float` + 圆角 18，面板 padding 6，项高 40、圆角 12、字号 14，危险项文字 `danger`。
+- 菜单必须能键盘操作（↑↓ 移动、Enter 选中、Esc 关闭），点击外部关闭。
+- 确认弹窗：宽 `min(420px, 90vw)`，圆角 18，标题 18/600，正文 15/1.7，按钮右对齐，主按钮在最右。
+- 遵循「浮层贴触发器、下方放不下就翻到上方」的定位规则。
+
+### 5.6 消息与输入
+
+- 用户消息：右对齐，`accent-soft` 底，`ink` 字，最大宽 78%，圆角 18（右下角可小一档 8）。
+- 助手消息：左对齐，**不用气泡**，直接排在 `canvas` 上，15px/1.8；步骤卡与正文间距 12。
+- 元信息（时间 · 模型名）：13px `muted`，在消息下方 6px。
+- 输入盒：见 §5.2；下方一行是字数（13px `muted`）与发送按钮。
+
+### 5.7 状态与辅助元素
+
+- **状态胶囊**：`success-soft` + `success`、`warn-soft` + `warn`、`danger-soft` + `danger`；pill 圆角，padding `0 10px`，高 24，字号 12–13。
+- **步骤 / 执行过程卡**：`surface` 底 + `--ma-shadow-soft`，圆角 18，标题 13/600 `muted`，每步一行（图标 + 文字 + 参数），参数用 `mono` 13。
+- **审批卡**：`warn-soft` 边（1px 允许，属于状态提示）+ 圆角 18；参数用 `<pre>`（`sunken` 底、`mono` 13、圆角 8）。
+- **空态**：居中，图标/虚线圈 44px，标题 20–28，说明 15 `muted`，一个主操作；最多 3 行文案。
+- **图标**：20px 线性图标，线宽统一；不混用两套图标集，不自绘插画。
+
+## 6. 交互与动效
+
+1. **过渡 150ms**（复杂浮层 180ms），只过渡 `background` / `color` / `box-shadow` / `opacity`；不做位移放大。
+2. **hover 用横向渐变**，不用整块纯色灰（见 §8.2）。
+3. **焦点可见**：键盘焦点用 3px `accent-soft` 外环 + 1px `accent` 描边。
+4. **加载**：流式回答显示「正在回复…」气泡 + 光标；按钮进 loading 态并禁用重复提交。
+5. **禁止假成功**：不用乐观更新掩盖失败；失败必须回滚并给出可读文案。
+6. **尊重 `prefers-reduced-motion`**：该系统偏好下取消非必要过渡。
+
+## 7. 文案与无障碍
+
+- 术语固定：**会话 / 消息 / 模型 / 设备 / 工具 / 审批**。不要混用「聊天记录」「机器人」「终端」。
+- 按钮说动词（保存、批准执行、撤销设备）；错误说原因 + 下一步（「密码至少 8 位」「网络断开，已保留草稿」）。
+- 不展示冗余文字：不写「点击这里」「如下所示」；一行能说清就不写两行。
+- 所有可点元素：`role`/语义标签正确、可 Tab 到达、Enter/Space 可触发、有 `aria-label`（纯图标时）。
+- 颜色不是唯一信息载体（见 §2.3）。
+
+## 8. 三条硬规则
+
+### 8.1 不要随便加分割线
+
+1. 大板块里的小模块之间**不加线**，用 24/32px 间距；需要更强分组感时用底色差异或极淡阴影。
+2. 按钮、输入框、卡片、菜单、弹窗用**阴影**表达边界，不用 1px 描边。
+3. 只有三种情况允许线条：Markdown 表格/引用的排版线、输入框聚焦描边、极低对比度环境下的可访问性退化。
+4. 列表项之间不用横线（靠行高 + hover 底色 + 圆角分组）；选中态只用底色。
+5. 看到不必要的分割线，顺手删掉——它通常是「不敢用留白」的痕迹。
+
+### 8.2 hover 用渐变，不用整块灰
+
+1. 可点元素 hover 统一 `linear-gradient(90deg, ink 7%, ink 3%)`，方向固定从左到右。
+2. `:active` 与选中态加深：`12% → 7%`。
+3. 覆盖范围：按钮、图标按钮、列表项（会话/设备/设置导航）、菜单项、用户区。
+4. 危险动作 hover 用 `danger 10% → 4%`。
+5. 已是选中色时，hover 保持选中色，不再叠灰。
+6. 不用 `background: #f5f5f5` 这类整块纯色 hover。
+
+### 8.3 结构多用 div、少嵌套
+
+1. 容器用 `div`，只有行内文字用 `span`；不为挂 class 多包一层。
+2. 模板从根到叶子 ≤4 层，超过说明有可合并的包装层。
+3. 不要用 `section`/`article` 撑门面；语义标签只在表达文档结构时用。
+4. `div` 承担按钮行为时补 `role="button"` + `tabindex="0"` + Enter/Space 处理。
+5. `Teleport`/`Transition`/`template v-for` 不计入层数。
+
+## 9. 变更流程（每次 UI 改动都要走）
+
+1. **动手前**：确认这次要用的组件在 §5 里有定义；没有就先补一条规范再实现。
+2. **实现中**：只改 `var(--ma-*)` 与本文档定义的尺寸，不引入第三套圆角/间距/颜色。
+3. **提交前**：
+   - 若新增/修改了组件样式 → 改 §5 对应条目；
+   - 若调整了间距/圆角/字号阶梯 → 改 §4 / §3 表格；
+   - 若新增颜色语义 → 改 §2 与 `frontend/src/theme/types.ts`（两边必须同时加）。
+4. **提交信息**里写清「改了什么视觉规则」，方便回溯。
+
+## 10. 自查清单
+
+- [ ] 颜色全部来自 `--ma-color-*`，没有新的十六进制值。
+- [ ] 深浅两种模式都看过（切换主题 + 明暗都验）。
+- [ ] 字号落在 §3.2 的 9 档里，没有 11px / 14.5px 这类野值。
+- [ ] 间距落在 §4.1 阶梯里；区块 32、字段 24、标签 8。
+- [ ] 圆角只用 8 / 12 / 18 / 26 / pill。
+- [ ] 没有新加的分割线；边界用阴影或底色表达。
+- [ ] hover/active 用的是渐变加深，不是整块灰。
+- [ ] 主按钮一屏最多一个，危险动作有二次确认。
+- [ ] 键盘能走完：Tab 顺序合理、Enter/Space 可用、Esc 能关浮层。
+- [ ] 文案术语与 §7 一致，没有冗余提示。
+- [ ] 本次改动已回写本文档。

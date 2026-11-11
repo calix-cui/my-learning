@@ -1,7 +1,7 @@
 # ADR-0009 · 每用户模型配置与密钥加密
 
 - **状态**：已接受（2026-11-09）
-- **相关**：[`../setting design.md`](../setting%20design.md) §二、[`../auth.md`](../auth.md)、[ADR-0006](0006-llm-client-and-chat-storage.md)、[ADR-0008](0008-auth-and-session.md)
+- **相关**：[`../api.md`](../api.md) §4、[`../auth.md`](../auth.md)、[ADR-0006](0006-llm-client-and-chat-storage.md)、[ADR-0008](0008-auth-and-session.md)
 
 ## 背景
 

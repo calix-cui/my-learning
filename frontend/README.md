@@ -41,7 +41,9 @@ pnpm type-check
 
 ## 前端开发约定（新增代码必须遵守）
 
-以下几条是硬约定，评审时按它执行；细节背景见根目录 `DESIGN.md`。
+**动手先读根目录 [`DESIGN.md`](../DESIGN.md)**：颜色、字号、间距、圆角、组件样式都以它为准；改完 UI 要在同一个提交里把改动回写进去。
+
+以下几条是硬约定，评审时按它执行。
 
 ### 1. 多用 div，减少嵌套层数
 
@@ -77,7 +79,7 @@ pnpm lint          # ESLint 全量检查（CI 会跑，有 error 即失败）
 pnpm lint:fix      # 自动修可修的问题
 pnpm format        # Prettier 格式化（本地用，不进 CI 阻断）
 pnpm format:check  # 只检查格式，不写入
-pnpm test          # Vitest 单测：纯逻辑 44 例 + 组件 15 例，共 59 例，不连后端
+pnpm test          # Vitest 单测：纯逻辑 + 组件，共 64 例，不连后端
 pnpm test:coverage # 同上，额外出覆盖率报告（coverage/index.html，不设门槛）
 pnpm test:watch    # 监听模式，开发时用
 ```

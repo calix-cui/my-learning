@@ -1,7 +1,7 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-11 · 阶段 6「工具生态与权限治理」已落地（T1–T7） · `main` 与 `origin/main` 同步（见 `git log -1`）
+> 最近更新：2026-11-11 · 阶段 6 已落地（T1–T7） · 文档与代码做过一次精简，`DESIGN.md` 重写为设计规范
 
 ## 1. 现在在哪
 
@@ -22,6 +22,8 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-11 | **文档与代码精简**：删掉 3 份过程报告、`docs/setting design.md`、`docs/plan/TASKS.md`（共 976 行）；`TECHNICAL_DEBT.md` 只留当前未解决的 10 条；清空开发库 112 个演示账号（新增 `backend/scripts/cleanup_demo_accounts.py` + `make clean-demo`）；`:root` 兜底 token 与 `theme/pine.ts` 对齐 | [docs/README.md](README.md) §5 维护规则、[DESIGN.md](../DESIGN.md)、[TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) |
+| 11-11 | **`DESIGN.md` 重写为设计规范**：配色 18 个语义 token + 四套主题主色、字体 3 字族 9 档字号、间距与骨架尺寸、组件（按钮 6 型 / 卡片 / 导航 / 菜单 / 消息 / 状态）与三条硬规则、§9 变更流程、§10 自查清单；`AGENTS.md` §2.5 规定「UI 改动必须遵循并更新 DESIGN.md」 | [DESIGN.md](../DESIGN.md)、[design/README.md](design/README.md) |
 | 11-11 | **阶段 6：工具生态与权限治理（T1–T7）**：`ToolMeta`/`ToolLevel`/`ToolRegistry` + `ToolPolicy`（参数规则、日预算）、`agent_approvals` 四态审批与迁移 `2c0c6e7b3613`、执行器挂起与 `resume_run` 重放、写工具 `rename_conversation`、6 个接口、前端 `ApprovalCard` 与设置页「工具」节、`acceptance:tools` 9 项；后端 230 例 / 93.37%，前端 64 例 | [tools.md](tools.md)、[ADR-0011](adr/0011-tool-permissions-and-approvals.md)、[api.md](api.md) §6.4 |
 | 11-10 | **阶段 5：Agent 执行循环 + Tool Calling（T1–T7）**：模型层原生 `tools`/`tool_calls`（Fake 剧本可重放）、两表 `agent_runs`/`agent_steps`、只读工具层与注册表、执行器（8 步 / 2s 工具超时 / 连续 3 次失败中止 / 断流回滚）、`POST /agent/stream` + `GET /agent/runs`、前端「深度回答」开关与执行时间线（刷新可回放）；后端 204 例 / 93.22%，前端 59 例，Agent E2E 10 项 | [agent.md](agent.md)、[ADR-0010](adr/0010-agent-execution-loop.md)、[api.md](api.md) §6；截图 `docs/images/agent-timeline.png` |
 | 11-10 | **主题随账号同步（T-FE-03 收尾）**：`user_settings` 加 `theme_id` / `theme_mode` + `GET|PUT /api/settings/appearance`；登录后账号优先、切换时本地先生效再异步写回；顺带用 `model_configured` 列修掉「只存主题被当成配过模型」的问题 | [ADR-0009](adr/0009-per-user-model-settings.md)、[api.md](api.md) §4.5；后端 159 例 / 94.42%，前端 59 例，设置 E2E 15 项 |
@@ -34,7 +36,7 @@
 | 11-08 | **目录扁平化**：`python/fastapi-demo/` → `backend/`、`fullstack/product-admin/` → `frontend/`（`git mv` 保留历史），同步 CI 路径、Compose 上下文、pre-commit 正则、`.vscode`、全部文档与角色卡；E2E 复跑 18/18 + 10/10 | 提交见 `git log` |
 | 11-08 | **阶段 4 对话功能**：会话/消息落库 + 模型抽象（fake/openai）+ 会话 CRUD + 同步与 SSE 两种发消息 + `/chat` 页面；后端 120 例 / 87.87%，前端 26 例，E2E 10 项 | [chat.md](chat.md)、[api.md](api.md) §4、[ADR-0006](adr/0006-llm-client-and-chat-storage.md) |
 | 11-07 | **名称空白校验统一**：分类改名、商品改名与新增同规则（先 strip 再判空，纯空白 400），补 5 个用例 | T-22 已解决（相关接口已归档） |
-| 11-07 | **文档治理四批 + 终检**：39 份文档全量审查（22 条事实陈旧、11 处职责重叠、6 处缺失），四批重构 + [终检报告](DOCUMENTATION_FINAL_REPORT.md)；人读 1348 行 / AI 向 1739 行 / 归档 672 行，0 孤儿 0 失效链接 | [审查报告](DOCUMENTATION_AUDIT.md)、[重构方案](DOCUMENTATION_REFACTOR_PLAN.md) |
+| 11-07 | **文档治理四批 + 终检**：39 份文档全量审查（22 条事实陈旧、11 处职责重叠、6 处缺失），四批重构 + 终检（过程报告已随 2026-11-11 精简删除，git 历史可查） | 本次提交 |
 | 11-07 | **测试基线**：后端 55 例 + 覆盖率门槛 80%（实测 85.38%），前端 Vitest 17 例 | [ADR-0005](adr/0005-testing-baseline.md) |
 | 11-07 | **容器化**：多阶段镜像 + Compose（db/backend/frontend/可选 Caddy）+ `/healthz` `/readyz` | [ADR-0004](adr/0004-deployment-docker-compose.md)、[deploy.md](deploy.md) |
 | 11-07 | **uv 统一依赖**：`pyproject.toml` 唯一来源 + `uv.lock`，CI 用 `uv sync --frozen` | `a09763d` |
@@ -87,7 +89,7 @@
 
 | 门槛 | 判定标准 | 现状 |
 |---|---|---|
-| 文档可信 | `docs/` 无已知过期事实 | ✅ 2026-11-07（见 [DOCUMENTATION_FINAL_REPORT.md](DOCUMENTATION_FINAL_REPORT.md) §3） |
+| 文档可信 | `docs/` 无已知过期事实 | ✅ 2026-11-11（精简掉 3 份过程报告与 2 份过期设计稿，见本次提交） |
 | 基线可跑 | `make check` ≥80%、`pnpm lint && pnpm test && pnpm build` 全过 | ✅ 2026-11-09（后端 123 passed / 93.37%、前端 50 passed） |
 | 存储明确 | 对话数据存哪（新表 or 不落库）、是否需要会话 ID | ✅ 已定：`conversations` / `messages` 两表落库（[ADR-0006](adr/0006-llm-client-and-chat-storage.md)） |
 
@@ -113,13 +115,13 @@
 
 ## 5. 已知问题
 
-按优先级见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)（T-01…T-25）。当前最该处理的五条：
+按优先级见 [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md)（当前 10 条，P0 已清空）。最该处理的五条：
 
-1. **T-04 部分解决** — 后端测试用内存 SQLite，MySQL 专有行为（外键级联、排序规则、并发可见性）无自动化覆盖；`users`/`sessions` 的级联删除同样只在真实 MySQL 冒烟里验证过
-2. **T-05 遗留** — CI 不校验迁移一致性（`alembic check` 需要 MySQL service）
-3. **T-02 遗留** — 前端 ESLint 未启 type-aware（ADR-0002 已接受该取舍）
-4. **T-23** — 后端日志无统一配置、无 request id，排障只能靠 uvicorn 默认输出
-5. **模型标签不一致** — 同步路径存上游 `model`、流式路径存配置名，见 `backend/README.md`「已知限制」
+1. **T-11** — E2E 直接打开发库，跑一次就留一批演示账号；临时用 `make clean-demo` 收尾（根治要独立测试库）
+2. **T-04** — 后端测试用内存 SQLite，MySQL 专有行为（外键级联、排序规则、并发可见性）没有自动化覆盖
+3. **T-06** — 统一响应的 `data: Any` 让 OpenAPI 里没有具体结构，前端只能手写类型
+4. **T-17** — CORS 写死 localhost 且 `allow_methods=["*"]`，上真实域名要改代码
+5. **T-23** — 后端日志无统一配置、无 request id，排障只能靠 uvicorn 默认输出
 
 ## 6. 阻塞与环境限制
 
@@ -131,8 +133,8 @@
 ## 7. 仓库状态
 
 - 目录结构：`backend/`（后端）、`frontend/`（前端）、`docs/`（文档）、`deploy/`（Caddy）；`agent/`、`desktop/` 为后续阶段预留
-- 最近提交：目录扁平化 + 阶段 4 SSE 流式，详见 `git log --oneline -8`
-- CI：最近一次 run `42372731737`（`8a3e806`）双 job 绿；只改 `docs/` 的提交不会触发 CI（`ci.yml` 的 `paths` 只含 `backend/**`、`frontend/**`、自身）
-- 文档：人读 1350 行 / AI 向 1670 行 / 归档 670 行；全仓相对链接 0 失效（`/tmp/linkcheck.py` 口径）
-- 测试基线：后端 75 passed / 91%；前端 23 passed；对话 E2E 10/10（商品 E2E 随模块归档）
-- 容器验证：三容器 healthy，`http://localhost:8080` 首页、`/chat`、`/api/conversations`、`/healthz`、`/readyz` 均 200；`down && up -d` 后数据仍在
+- 最近提交：见 `git log --oneline -5`
+- CI：只改 `docs/` 的提交不会触发 CI（`ci.yml` 的 `paths` 只含 `backend/**`、`frontend/**`、自身）
+- 文档：`docs/` 下 38 份 markdown（人读 / AI 向两层，规则见 `docs/README.md` §3）；全仓相对链接 0 失效
+- 测试基线：后端 231 passed / 93.39%；前端 64 passed；E2E 五套（chat 10 / agent 10 / auth 13 / settings 15 / tools 9）
+- 容器验证：三容器 healthy，`http://localhost:8080` 首页、`/chat`、`/api/conversations`、`/healthz`、`/readyz` 均 200

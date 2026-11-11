@@ -58,6 +58,7 @@ async function toggle() {
     place()
     document.addEventListener('pointerdown', onOutside, true)
     document.addEventListener('keydown', onKeydown)
+    focusItem(0)
   } else {
     detach()
   }
@@ -74,8 +75,30 @@ function onOutside(event: PointerEvent) {
   close()
 }
 
+function menuItems(): HTMLButtonElement[] {
+  return Array.from(panel.value?.querySelectorAll<HTMLButtonElement>('.my-menu__item') ?? [])
+}
+
+function focusItem(index: number) {
+  const list = menuItems()
+  if (!list.length) return
+  const target = list[(index + list.length) % list.length]
+  target.focus({ preventScroll: true })
+}
+
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') close()
+  if (event.key === 'Escape') {
+    close()
+    return
+  }
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+
+  const list = menuItems()
+  if (!list.length) return
+  event.preventDefault()
+  const current = list.indexOf(document.activeElement as HTMLButtonElement)
+  const step = event.key === 'ArrowDown' ? 1 : -1
+  focusItem(current === -1 ? 0 : current + step)
 }
 
 function close() {
