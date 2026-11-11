@@ -56,7 +56,7 @@ from app.models.agent_step import (
     STEP_USER_MESSAGE,
 )
 from app.models.mcp_server import STATUS_ERROR, STATUS_OK
-from app.services import chat_service
+from app.services import chat_service, skill_service
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +136,10 @@ def stream_run(
     tools = registry or registry_for(db, user_id, conversation.id)
     tool_policy = policy or build_policy(db, user_id=user_id, registry=tools, run=run)
 
+    messages = _with_skill(
+        db, user_id=user_id, conversation=conversation, messages=messages, tools=tools
+    )
+
     yield events.run_started(run.id, conversation.id)
     yield from _run_loop(
         db,
@@ -167,6 +171,9 @@ def resume_run(
     tools = registry or registry_for(db, user_id, conversation.id)
     tool_policy = policy or build_policy(db, user_id=user_id, registry=tools, run=run)
     messages, pending = _replay_messages(db, run)
+    messages = _with_skill(
+        db, user_id=user_id, conversation=conversation, messages=messages, tools=tools
+    )
     state = LoopState(seq=_last_seq(db, run))
 
     call: ToolCall = {
@@ -420,6 +427,27 @@ def _run_loop(
                 logger.exception("标记 agent 运行中断失败")
 
 
+def _with_skill(
+    db: Session,
+    *,
+    user_id: int,
+    conversation: Conversation,
+    messages: list[LLMMessage],
+    tools: ToolRegistry,
+) -> list[LLMMessage]:
+    """挂了技能就在最前面插一条 system 消息。
+
+    system 每次 run 现算、不落库：技能改了立刻生效，历史里也不会留着旧版本。
+    重放路径（resume_run）同样走这里，否则恢复后模型会「忘记」自己在执行什么方法。
+    """
+    prompt = skill_service.system_prompt_for(
+        db, user_id, conversation, tool_names=tools.enabled_names()
+    )
+    if prompt is None:
+        return messages
+    return [LLMMessage(role="system", content=prompt), *messages]
+
+
 def registry_for(db: Session, user_id: int, conversation_id: int | None = None) -> ToolRegistry:
     """按账号设置装配注册表：内置工具 + 用户启用的 MCP 服务器。
 
@@ -454,7 +482,19 @@ def registry_for(db: Session, user_id: int, conversation_id: int | None = None) 
         sources.append(source)
     db.flush()
 
-    return ToolRegistry.from_sources(sources, disabled=disabled)
+    registry = ToolRegistry.from_sources(sources, disabled=disabled)
+    # 会话挂了技能就按技能的工具白名单收窄（空白名单 = 不限制）。
+    # 放在这里而不是每个调用点，stream_run / resume_run / 接口层都自动一致。
+    if conversation_id is not None:
+        conversation = db.get(Conversation, conversation_id)
+        skill = (
+            skill_service.mounted_skill(db, user_id, conversation)
+            if conversation is not None
+            else None
+        )
+        if skill is not None and skill.tools:
+            registry = registry.only(skill.tools)
+    return registry
 
 
 def build_policy(

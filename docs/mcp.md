@@ -132,7 +132,7 @@ async with stdio_client(StdioServerParameters(command="uvx", args=[...])) as (re
 | 卡片网格（等高、间距、断点换行） | 只有单卡规格 | 新增 §5.3.1「卡片网格」：`repeat(auto-fill, minmax(228px, 1fr))`、`gap: 16px`、等高 `align-items: stretch` |
 | 开关 | 未收录（ToolsPanel 用 `el-switch` 但没写进规范） | 新增 §5.2.1「开关」：24×40、开 accent / 关 line-strong、过渡 0.15s |
 | 筛选 chip 组 | 未收录（设置里只有 `el-radio-group` 分段） | 新增 §5.7.1「筛选 chip」：圆角 999、选中 accent-soft、hover 用 `.u-tint--soft` |
-| 服务图标（48px 圆角方块） | 未收录（只有 16/20 的行内图标） | 新增 §5.8.1「服务图标」：48×48、radius 12、accent-soft 底 + 图标 accent |
+| 服务图标（48px 圆角方块） | 未收录（只有 16/20 的行内图标） | 新增 §5.7「工具市场」：48×48 服务图标、radius 14、accent-soft 底 + 图标 accent |
 | 状态胶囊（未连接/已连接/失败） | §5.7 有 | 复用，补 `--error` 变体 |
 | 空态（没有匹配的服务） | §5.7 有 | 复用，文案换成「没有匹配的服务」 |
 | 移除确认 | `MyMessageBox` 有 | 复用 |

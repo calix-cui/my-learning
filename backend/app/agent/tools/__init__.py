@@ -102,6 +102,17 @@ class ToolRegistry:
             self._metas[tool.name] = meta_of(tool)
         self._disabled = set(disabled)
 
+    def only(self, names: Iterable[str]) -> "ToolRegistry":
+        """按白名单收窄（技能用）。白名单外的工具既不展示也执行不了。
+
+        名字不存在就忽略，不报错：技能可能绑了还没接入的 MCP 工具。
+        """
+        keep = set(names)
+        return ToolRegistry(
+            [self._tools[name] for name in self._tools if name in keep],
+            disabled=self._disabled,
+        )
+
     @classmethod
     def from_sources(
         cls, sources: Iterable[ToolSource], *, disabled: Iterable[str] = ()

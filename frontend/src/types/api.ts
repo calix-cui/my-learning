@@ -31,6 +31,8 @@ export interface ChatConversation {
   title: string
   /** 预留的多 Agent 标识，当前恒为 default */
   agent_key: string
+  /** 挂载的技能标识；null 表示不挂 */
+  skill_slug: string | null
   update_time: string
   create_time: string
 }
@@ -227,4 +229,41 @@ export interface McpTestResult {
   message: string
   tools: McpToolBrief[]
   duration_ms: number
+}
+
+/** 技能来源：随代码发布的内置技能，或用户自建 */
+export type SkillSource = 'builtin' | 'custom'
+
+/** 技能元数据（列表项） */
+export interface ChatSkill {
+  slug: string
+  name: string
+  description: string
+  tools: string[]
+  tool_count: number
+  icon: string
+  source: SkillSource
+  skill_id: number | null
+  mounted: boolean
+}
+
+/** 技能详情，多一段 Markdown 正文 */
+export interface ChatSkillDetail extends ChatSkill {
+  instructions: string
+}
+
+/** 技能列表响应 */
+export interface ChatSkillList {
+  items: ChatSkill[]
+  mounted: string | null
+}
+
+/** 新建/修改技能的载荷 */
+export interface SkillPayload {
+  slug?: string
+  name?: string
+  description?: string
+  instructions?: string
+  tools?: string[]
+  icon?: string
 }

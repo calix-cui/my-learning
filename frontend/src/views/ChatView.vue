@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import AgentTimeline from '@/components/chat/AgentTimeline.vue'
 import ApprovalCard from '@/components/chat/ApprovalCard.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmpty from '@/components/chat/ChatEmpty.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ChatToolbar from '@/components/chat/ChatToolbar.vue'
+import { listSkills, mountSkill } from '@/api/skills'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
+import type { ChatSkill } from '@/types/api'
 
 const MAX_LENGTH = 4000
 
@@ -15,8 +18,37 @@ const chat = useChatStore()
 const settings = useSettingsStore()
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null)
 const scroller = ref<HTMLElement | null>(null)
+const skills = ref<ChatSkill[]>([])
 
 const hasConversation = computed(() => chat.activeId !== null)
+
+/** 技能列表跟着当前会话走：换会话要重拉，才能标出「哪个是挂着的」 */
+async function loadSkills() {
+  try {
+    const { items } = await listSkills(chat.activeId)
+    skills.value = items
+  } catch {
+    skills.value = []
+  }
+}
+
+const mountedSkill = computed(() => skills.value.find((item) => item.mounted) ?? null)
+const skillItems = computed(() => [
+  { key: 'none', label: '不挂技能' },
+  ...skills.value.map((item) => ({ key: item.slug, label: item.name })),
+])
+
+async function handleSelectSkill(slug: string | null) {
+  const id = chat.activeId
+  if (!id) return
+  try {
+    await mountSkill(id, slug)
+    await loadSkills()
+    ElMessage.success(slug ? '已挂上技能，下次提问生效' : '已取消技能')
+  } catch {
+    ElMessage.error('技能切换失败，请重试')
+  }
+}
 
 /** 优先显示账号里配置的模型；没配过才退回上一条回复用的模型 */
 const modelLabel = computed(() => {
@@ -66,7 +98,13 @@ async function handleSend() {
   scrollToBottom()
 }
 
-watch(() => chat.activeId, scrollToBottom)
+watch(
+  () => chat.activeId,
+  () => {
+    scrollToBottom()
+    void loadSkills()
+  },
+)
 // 深度回答的步骤是逐个到达的，来一步滚一次
 watch(
   () => chat.agentSteps.length,
@@ -91,12 +129,20 @@ onMounted(async () => {
   if (chat.activeId !== null) {
     await chat.loadAgentRuns(chat.activeId)
   }
+  await loadSkills()
 })
 </script>
 
 <template>
   <div class="chat">
-    <ChatToolbar :title="hasConversation ? chat.activeTitle : ''" :model="modelLabel" />
+    <ChatToolbar
+      :title="hasConversation ? chat.activeTitle : ''"
+      :model="modelLabel"
+      :skill-name="mountedSkill?.name ?? ''"
+      :skill-items="skillItems"
+      :skill-disabled="!hasConversation"
+      @select-skill="handleSelectSkill"
+    />
 
     <div ref="scroller" v-loading="chat.loadingMessages" class="chat__scroll">
       <ChatEmpty v-if="showEmptyState" />

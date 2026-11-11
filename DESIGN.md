@@ -323,7 +323,18 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 - **状态三态**：未连接（`canvas` + `muted`）、正常（`success-soft` + `success`）、失败（`danger` 12% 透明底 + `danger` 字）；失败时卡内补一行 12px 的原因，不用 tooltip 藏起来。
 - **不重复信息**：卡片里不再重复 chip 已经说明过的事（例如「本地 / 远程」）。
 
-### 5.8 状态与辅助元素
+### 5.8 技能
+
+技能是「方法包」，界面上只有两处：对话工具条上的挂载入口、设置里的技能清单与表单。
+
+- **工具条挂载胶囊**：高 24，`padding 3px 10px`，圆角 999，图标 14 + 文字 12，`max-width 120px` 省略号；未挂载时 `ink 6%` 底 + `muted` 字，挂上后 `accent-soft` 底 + `accent-ink` 字；草稿态（会话还没建）禁用，`opacity 0.6`。
+- **技能清单项**：与工具市场卡片同源但更薄——`surface` 底 + `padding 14px 16px` + 圆角 16 + `0 1px 2px rgb(23 32 27 / 4%)`，行内左右分布（内容 / 操作）；标题 14/600，说明 12.5/1.7 `muted`。
+- **来源标签**：内置用 `accent-soft` + `accent-ink`，自建用 `ink 6%` + `muted`；工具数同款灰 chip，不与来源标签抢色。
+- **行内操作**：文字按钮（详情 / 编辑 / 删除），高 28、圆角 8，hover `ink 6%` 底；删除用 `danger` 字。内置技能不给编辑与删除入口，而不是点了再报错。
+- **表单**：整块 `surface` + 圆角 18 + `--ma-shadow-soft`，字段纵向排列、间距 12；输入框与正文域 `canvas` 底、圆角 10，聚焦时换 `surface` 底 + 1px `accent` 边。正文域固定 8 行、`resize: none`。
+- **工具白名单**：chip 多选，行内换行排列，选中 `accent-soft`；不选时显式写「不限制」，避免用户以为是漏配。
+
+### 5.9 状态与辅助元素
 
 - **状态胶囊**：`success-soft` + `success`、`warn-soft` + `warn`、`danger-soft` + `danger`；pill 圆角，padding `0 10px`，高 24，字号 12–13。
 - **步骤 / 执行过程卡**：`surface` 底 + `--ma-shadow-soft`，圆角 18，标题 13/600 `muted`，每步一行（图标 + 文字 + 参数），参数用 `mono` 13。

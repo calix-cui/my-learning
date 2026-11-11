@@ -490,7 +490,43 @@ data: {"type":"run_finished","run_id":1,"content":"3 的 5 次方等于 243。",
 
 失败语义：连不上不会让对话失败——`registry_for()` 只记 `last_status=error` 与 `last_error` 并跳过这台服务器，模型继续用剩下的工具回答。
 
-## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages` / `agent_runs` / `agent_steps` / `agent_approvals`）
+### 6.6 技能（`/api/skills`）
+
+技能是一段可复用的「工作方法」，挂到会话上就会作为 system 消息注入这次运行（`docs/skills.md`）。内置 3 个只读，自建的按账号存。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/skills?conversation_id=` | 内置 + 自建清单；带会话时额外返回 `mounted`（当前挂的 slug） |
+| GET | `/api/skills/{slug}` | 详情（含正文 `instructions` 与白名单 `tools`） |
+| POST | `/api/skills` | 新建自建技能；slug 与内置或已有自建重复返回 400 |
+| PATCH | `/api/skills/{skill_id}` | 改名/改正文/改白名单；内置技能不可改（404） |
+| DELETE | `/api/skills/{skill_id}` | 删除自建技能，同时把挂着它的会话置回不挂 |
+| PUT | `/api/conversations/{conversation_id}/skill` | 挂载/卸载：`{"slug": "code-review"}` 或 `{"slug": null}` |
+
+```json
+{
+  "code": 200,
+  "message": "请求成功",
+  "data": {
+    "items": [
+      {
+        "slug": "code-review",
+        "name": "代码审查",
+        "description": "按四层顺序过一遍改动，每条给出位置与改法",
+        "icon": "sparkle",
+        "source": "builtin",
+        "tools": ["calculator"],
+        "tool_count": 1
+      }
+    ],
+    "mounted": "code-review"
+  }
+}
+```
+
+约束：`instructions` ≤ 4000 字，`tools` ≤ 20 个且只做减法——挂上技能后，工具注册表只会从「账号已启用的工具」里再筛掉不在白名单内的，**不会**因此多出任何工具，也不会跳过审批。
+
+## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages` / `agent_runs` / `agent_steps` / `agent_approvals` / `skills`）
 
 ```
 users
@@ -534,6 +570,7 @@ conversations
   user_id       int  FK → users.id ON DELETE CASCADE，有索引（数据隔离唯一维度）
   title         varchar(100)  默认「新会话」
   agent_key     varchar(50)   默认 default（为多 Agent 预留）
+  skill_slug    varchar(32)   nullable（挂着的技能，内置或自建的 slug）
   update_time   datetime      有索引，列表按它倒序
   create_time   datetime
 
@@ -587,9 +624,21 @@ agent_approvals
 
 删会话即删该会话全部消息（`ON DELETE CASCADE`），前端不需要逐条删；`messages` 不冗余 `user_id`，归属通过会话间接确定。
 
+skills
+  id            int  pk autoincrement
+  user_id       int  FK → users.id ON DELETE CASCADE，有索引
+  slug          varchar(32)   账号内唯一，正则 ^[a-z0-9][a-z0-9-]{0,31}$
+  name          varchar(30)
+  description   varchar(120)
+  instructions  text          技能正文，≤ 4000 字
+  tools         json          工具白名单，≤ 20 个
+  icon          varchar(32)   默认 sparkle
+  create_time / update_time datetime
+  唯一约束 (user_id, slug)
+
 ## 附录 B：本地起服务与自检
 
 - 起服务：项目根 `./scripts/dev.sh`（推荐）或 `cd backend && make run` + `cd frontend && pnpm dev`。
 - 自检：`cd backend && make check`；`cd frontend && pnpm lint && pnpm test && pnpm build`。
-- 端到端（需前后端在跑）：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:agent`（深度回答与工具时间线）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录）、`pnpm acceptance:settings`（模型设置→测试连接→改显示名→导出→注销）、`pnpm acceptance:tools`（工具启停→审批拒绝→审批批准→刷新复原）。
+- 端到端（需前后端在跑）：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:agent`（深度回答与工具时间线）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录）、`pnpm acceptance:settings`（模型设置→测试连接→改显示名→导出→注销）、`pnpm acceptance:tools`（工具启停→审批拒绝→审批批准→刷新复原）、`pnpm acceptance:mcp`（市场接入→试连→审批整链路）、`pnpm acceptance:skills`（内置只读→自建→挂载→删除回落）。
 - 第一个管理员：`cd backend && ADMIN_EMAIL=... ADMIN_PASSWORD='至少8位' uv run python -m app.create_admin`（存在则重置密码并升权）。

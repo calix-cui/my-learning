@@ -19,7 +19,8 @@ from app.schemas.chat import (
     MessageExchangeResponse,
     MessageResponse,
 )
-from app.services import chat_service
+from app.schemas.skill import SkillMountRequest
+from app.services import chat_service, skill_service
 
 router = APIRouter(prefix="/conversations", tags=["对话相关的接口"])
 
@@ -91,6 +92,24 @@ def rename_conversation(
 ):
     conversation = chat_service.rename_conversation(db, user.id, conversation_id, payload)
     return Response.success(data=ConversationResponse.model_validate(conversation))
+
+
+@router.put(
+    "/{conversation_id}/skill",
+    response_model=Response,
+    summary="挂载或卸载技能",
+    description="传 slug 挂上，传 null 卸载。会话或技能不存在都 404；技能挂了之后每次运行都会注入它的方法说明。",
+)
+def mount_skill(
+    conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
+    payload: SkillMountRequest,
+    user: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+):
+    conversation = skill_service.mount_skill(db, user.id, conversation_id, payload.slug)
+    return Response.success(
+        data={"conversation_id": conversation.id, "skill_slug": conversation.skill_slug}
+    )
 
 
 @router.delete(

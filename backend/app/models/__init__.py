@@ -14,6 +14,7 @@ from app.models.conversation import Conversation
 from app.models.mcp_server import McpServer
 from app.models.message import Message
 from app.models.session import LoginSession
+from app.models.skill import Skill
 from app.models.user import User
 from app.models.user_settings import UserSettings
 
@@ -24,6 +25,7 @@ __all__ = [
     "AgentStep",
     "Conversation",
     "LoginSession",
+    "Skill",
     "Message",
     "User",
     "UserSettings",

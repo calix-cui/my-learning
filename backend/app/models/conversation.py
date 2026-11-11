@@ -29,6 +29,9 @@ class Conversation(Base):
     agent_key: Mapped[str] = mapped_column(
         String(50), nullable=False, default="default", comment="所属代理标识（预留多代理）"
     )
+    skill_slug: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="挂载的技能 slug；NULL 表示不挂"
+    )
     update_time: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

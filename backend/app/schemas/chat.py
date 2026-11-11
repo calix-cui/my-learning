@@ -36,6 +36,7 @@ class ConversationResponse(BaseModel):
     id: int = Field(description="会话ID")
     title: str = Field(description="会话标题")
     agent_key: str = Field(description="所属代理标识")
+    skill_slug: str | None = Field(default=None, description="挂载的技能标识；空表示不挂")
     update_time: datetime = Field(description="最后活动时间")
     create_time: datetime = Field(description="创建时间")
 
