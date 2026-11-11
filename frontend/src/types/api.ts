@@ -150,3 +150,81 @@ export interface AgentRun {
 export interface AgentRunList {
   items: AgentRun[]
 }
+
+/** 工具市场里的一张卡片 */
+export interface McpCatalogItem {
+  slug: string
+  display_name: string
+  summary: string
+  transport: 'stdio' | 'http'
+  tags: string[]
+  icon: string
+  requires_path: boolean
+  docs_url: string | null
+  updated: string
+  installed_id: number | null
+  last_status: McpServerStatus | null
+}
+
+export interface McpCatalog {
+  items: McpCatalogItem[]
+  updated: string
+}
+
+/** 已接入的 MCP 服务器 */
+export interface McpToolBrief {
+  name: string
+  remote_name: string
+  description: string
+  read_only: boolean
+}
+
+export type McpServerStatus = 'unknown' | 'ok' | 'error'
+
+export interface McpServer {
+  id: number
+  slug: string
+  display_name: string
+  transport: 'stdio' | 'http'
+  command: string | null
+  args: string[]
+  url: string | null
+  env_keys: string[]
+  enabled: boolean
+  last_status: McpServerStatus
+  last_error: string | null
+  tool_count: number
+  last_connected_time: string | null
+  create_time: string | null
+  tools: McpToolBrief[]
+}
+
+export interface McpServerList {
+  items: McpServer[]
+}
+
+export interface McpCreatePayload {
+  slug: string
+  path?: string
+  env?: Record<string, string>
+  display_name?: string
+  transport?: 'stdio' | 'http'
+  command?: string
+  args?: string[]
+  url?: string
+}
+
+export interface McpUpdatePayload {
+  enabled?: boolean
+  display_name?: string
+  args?: string[]
+  url?: string
+  env?: Record<string, string>
+}
+
+export interface McpTestResult {
+  ok: boolean
+  message: string
+  tools: McpToolBrief[]
+  duration_ms: number
+}

@@ -6,12 +6,14 @@ import AppearancePanel from '@/components/settings/AppearancePanel.vue'
 import DataPanel from '@/components/settings/DataPanel.vue'
 import DevicesPanel from '@/components/settings/DevicesPanel.vue'
 import ModelPanel from '@/components/settings/ModelPanel.vue'
+import MarketPanel from '@/components/settings/MarketPanel.vue'
 import ToolsPanel from '@/components/settings/ToolsPanel.vue'
 
 /** 设置页分节；加新分节时往这里加一项并补组件即可 */
 const sections = [
   { key: 'model', label: '模型接入', component: ModelPanel },
   { key: 'tools', label: '工具', component: ToolsPanel },
+  { key: 'market', label: '工具市场', component: MarketPanel },
   { key: 'account', label: '账号资料', component: AccountPanel },
   { key: 'devices', label: '登录设备', component: DevicesPanel },
   { key: 'appearance', label: '外观', component: AppearancePanel },

@@ -280,6 +280,7 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 - 错误：1px `danger` 描边，下方 8px 处 13px `danger` 说明原因。
 - 多行输入盒（对话）：圆角 26，`padding 14px 16px 12px`，`--ma-shadow-soft`，聚焦升为 `--ma-shadow-float`；`textarea` 高度自适应 48–200px，不显示 resize 手柄。
 - 开关 / 单选 / 下拉：统一 40px 行高，标签在左、控件在右，间距 16。
+- **表单内的紧凑输入**（设置页的就地表单）：高 34，圆角 10，`canvas` 底、无边框，聚焦时才出现 1px `accent` 描边；字段标签 12px `muted`，与控件间距 6。
 
 ### 5.3 卡片与面板
 
@@ -308,7 +309,21 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 - 元信息（时间 · 模型名）：13px `muted`，在消息下方 6px。
 - 输入盒：见 §5.2；下方一行是字数（13px `muted`）与发送按钮。
 
-### 5.7 状态与辅助元素
+### 5.7 工具市场
+
+市场页是「挑卡片接入」，不是表格也不是列表，所以卡片规格单独定：
+
+- **网格**：`repeat(auto-fill, minmax(260px, 1fr))`，`gap 16`，`align-items: start`（卡片按内容高度，不强行拉齐等高）。
+- **卡片**：`surface` 底 + `padding 18` + 圆角 18 + `0 1px 2px rgb(23 32 27 / 4%)`；已接入的卡片加 1px `accent-soft` 边，作为唯一的「已装」信号。
+- **服务图标块**：48×48，圆角 14，`accent-soft` 底，图标 22px、颜色 `accent-ink`。
+- **标签 chip**：11px，`padding 1px 8px`，圆角 999，`canvas` 底，`muted` 字；一张卡最多两个。
+- **底栏**：第一行「状态胶囊 + 工具数」，第二行操作（开关 + 试连 + 移除）右对齐（`margin-left: auto`，`white-space: nowrap`）；操作按钮高 28、字号 12，文字按钮不带底色，危险操作用 `danger` 字。
+- **筛选 chip 组**：高 30，`padding 0 14`，圆角 999，`canvas` 底；选中 `accent-soft` 底 + `accent-ink` 字。
+- **就地展开的表单**（自定义接入、需要路径的条目）：`surface` 底 + 圆角 18 + `--ma-shadow-soft`，字段栅格 `repeat(auto-fit, minmax(200px, 1fr))`，整行字段 `grid-column: 1 / -1`，底部按钮右对齐。**不弹二级窗口**——设置本身已是浮层。
+- **状态三态**：未连接（`canvas` + `muted`）、正常（`success-soft` + `success`）、失败（`danger` 12% 透明底 + `danger` 字）；失败时卡内补一行 12px 的原因，不用 tooltip 藏起来。
+- **不重复信息**：卡片里不再重复 chip 已经说明过的事（例如「本地 / 远程」）。
+
+### 5.8 状态与辅助元素
 
 - **状态胶囊**：`success-soft` + `success`、`warn-soft` + `warn`、`danger-soft` + `danger`；pill 圆角，padding `0 10px`，高 24，字号 12–13。
 - **步骤 / 执行过程卡**：`surface` 底 + `--ma-shadow-soft`，圆角 18，标题 13/600 `muted`，每步一行（图标 + 文字 + 参数），参数用 `mono` 13。
