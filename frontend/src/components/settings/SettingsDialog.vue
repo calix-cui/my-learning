@@ -42,6 +42,7 @@ watch(
   <Teleport to="body">
     <Transition name="settings-fade">
       <div v-if="open" class="settings-layer">
+        <!-- 只有一层遮罩，且压在窗口下面：否则遮罩会盖住窗口，里面的按钮点不动 -->
         <button type="button" class="settings-layer__scrim" aria-label="关闭设置" @click="close" />
         <section class="settings-window" role="dialog" aria-modal="true" aria-label="设置">
           <header class="settings-window__head">
@@ -53,7 +54,6 @@ watch(
 
           <SettingsView class="settings-window__body" />
         </section>
-        <button type="button" class="settings-layer__scrim" aria-hidden="true" tabindex="-1" />
       </div>
     </Transition>
   </Teleport>
@@ -63,6 +63,7 @@ watch(
 .settings-layer__scrim {
   position: absolute;
   inset: 0;
+  z-index: 0;
   padding: 0;
   cursor: default;
   background: transparent;
@@ -82,6 +83,7 @@ watch(
 
 .settings-window {
   position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   width: min(920px, 100%);
