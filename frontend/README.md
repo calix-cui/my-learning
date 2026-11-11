@@ -60,7 +60,7 @@ pnpm type-check
 
 ### 3. 交互反馈统一用渐变
 
-hover 用 `linear-gradient(90deg, ink 7%, ink 3%)`：给元素加 `u-tint` 类（`u-tint--soft` / `u-tint--danger`），由全局 CSS 用伪元素 opacity 做 0.3s 淡入；**不要**直接写 `:hover { background: linear-gradient(...) }`（渐变不可动画，会瞬切）。按下 `12% → 7%`，禁止整块纯色 hover，也不做位移/放大（详见 `DESIGN.md` §8.2）。
+hover 用 `linear-gradient(90deg, ink 7%, ink 3%)`：给元素加 `u-tint` 类（`u-tint--soft` / `u-tint--danger`），由全局 CSS 用伪元素 opacity 做 0.15s 淡入；**不要**直接写 `:hover { background: linear-gradient(...) }`（渐变不可动画，会瞬切）。按下 `12% → 7%`，禁止整块纯色 hover，也不做位移/放大（详见 `DESIGN.md` §8.2）。
 
 ### 4. 不要轻易加分割线
 

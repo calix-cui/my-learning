@@ -16,5 +16,5 @@ export const staticTokens: StaticTokens = {
   sidebarWidth: '264px',
   contentWidth: '1080px',
   readingWidth: '720px',
-  motionHover: '0.3s',
+  motionHover: '0.15s',
 }

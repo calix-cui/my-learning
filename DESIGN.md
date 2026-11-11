@@ -268,7 +268,7 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 
 状态：
 
-- hover：横向渐变 `linear-gradient(90deg, ink 7%, ink 3%)`，用 `.u-tint` 实现 0.3s 淡入（§8.2）；实底按钮改为 `accent-hover`。
+- hover：横向渐变 `linear-gradient(90deg, ink 7%, ink 3%)`，用 `.u-tint` 实现 0.15s 淡入（§8.2）；实底按钮改为 `accent-hover`。
 - active / 选中：加深一档（12% → 7%）。
 - disabled：`opacity .45` + `cursor: not-allowed`，不做灰底变色。
 - 主按钮内 padding `0 18px`，图标与文字 gap 6px，字号 14–15px / 500。
@@ -318,7 +318,7 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 
 ## 6. 交互与动效
 
-1. **过渡时长**：hover 淡入 `0.3s`（`--ma-motion-hover`），浮层出现/关闭 `0.18s`，其余微调 `0.15–0.2s`；只过渡 `background-color` / `color` / `box-shadow` / `opacity`，**不直接过渡 `background-image`**（渐变不可动画，见 §8.2），不做位移放大。
+1. **过渡时长**：hover 淡入 `0.15s`（`--ma-motion-hover`），浮层出现/关闭 `0.18s`，其余微调 `0.15–0.2s`；只过渡 `background-color` / `color` / `box-shadow` / `opacity`，**不直接过渡 `background-image`**（渐变不可动画，见 §8.2），不做位移放大。
 2. **hover 用横向渐变**，不用整块纯色灰（见 §8.2）。
 3. **焦点可见**：键盘焦点用 3px `accent-soft` 外环 + 1px `accent` 描边。
 4. **加载**：流式回答显示「正在回复…」气泡 + 光标；按钮进 loading 态并禁用重复提交。
