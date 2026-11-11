@@ -1,18 +1,20 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-11 · 阶段 6 已落地（T1–T7） · 阶段 7 进行中（T1 客户端、T2 目录与表已完成） · 文档与代码做过一次精简，`DESIGN.md` 重写为设计规范
+> 最近更新：2026-11-11 · 阶段 7 已落地（T1–T7，MCP 工具市场 + 审批联调） · 阶段 1–7 全部完成 · 文档与代码做过一次精简，`DESIGN.md` 重写为设计规范
 
 ## 1. 现在在哪
 
-**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–6 已完成（阶段 4.5「账号体系」作为前置补强也已落地）；**阶段 7「MCP 客户端与工具生态扩展」进行中**：T1 客户端与同步桥、T2 市场清单与 `mcp_servers` 表已落地，T3–T7（装配、接口、市场页、审批联调、文档）待做。**
+**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–7 已完成**（阶段 4.5「账号体系」作为前置补强也已落地）；阶段 7「MCP 客户端与工具生态扩展」T1–T7 全部交付：官方 SDK 客户端与同步桥、内置市场清单、`mcp_servers` 表与迁移、连接池与 `mcp__<slug>__<tool>` 装配、6 个接口、工具市场页、审批链路联调、`acceptance:mcp` 11 项。
 
 阶段口径只以该文件为准。此前本文件里出现的「阶段 2 = MCP client / Agent PoC / Electron 骨架」是我自行归纳的临时说法（源自 `archive/REUSE_CANDIDATES.md` 的「MCP 建议尽早」与 ADR-0001 的 Electron 结论），**与 11 阶段计划无对应关系，已废弃**，勿再引用。
 
 已经有一个能跑、能测、能部署的最小闭环：
 
 - 后端 FastAPI（账号 9 + 对话 7 + 设置 4 + **Agent 2** + 运维 3 个操作；会话与消息按用户隔离落库，每个账号可自带模型配置）
-- **阶段 5 的 Agent 循环**：原生工具调用（`calculator` / `now` / `search_conversations`）、最多 8 步、过程落 `agent_runs` / `agent_steps`、SSE 逐步推送
+- **阶段 5 的 Agent 循环**：原生工具调用（`calculator` / `now` / `search_conversations` / `rename_conversation`）、最多 8 步、过程落 `agent_runs` / `agent_steps`、SSE 逐步推送
+- **阶段 6 的工具治理**：`ToolMeta`/`ToolLevel`/`ToolPolicy`（参数规则、日预算）+ `agent_approvals` 审批（写/外网工具挂起等确认，单 run ≤5 次、同工具被拒 ≤2 次）
+- **阶段 7 的 MCP 工具市场**：内置 7 条清单 + 自定义接入，`stdio`/`http` 两种传输，连接池（工具清单 5 分钟、空闲 15 分钟回收），MCP 工具一律 `EXTERNAL` + 审批
 - 前端 Vue 3：登录/注册页 + 聊天界面（会话列表 + 消息区 + SSE 逐字渲染 + Markdown + 「深度回答」开关与执行时间线），未登录只能进登录/注册；13 项账号 + 10 项对话 + **10 项 Agent** E2E 全过
 - 数据库迁移（Alembic）、依赖锁定（uv / pnpm）、质量门禁（ruff / ESLint / pytest / Vitest / CI）、容器化（Docker Compose）
 
@@ -22,6 +24,7 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-11 | **阶段 7：MCP 客户端与工具市场（T1–T7）**：官方 `mcp==2.3.0` + 线程内监督协程的同步门面、`mcp_servers` 表与迁移 `4f9edca19113`、内置 7 条市场清单、连接池与 `mcp__<slug>__<tool>` 装配（`EXTERNAL` 一律审批）、6 个接口、工具市场页（筛选 / 自定义接入 / 试连 / 启停 / 移除 / 工具清单）、`acceptance:mcp` 11 项、`mcp__*` 审批联调 3 例；后端 274 例 / 93.21%，前端 64 例 | [mcp.md](mcp.md)、[ADR-0012](adr/0012-mcp-client-uses-official-sdk.md)、[api.md](api.md) §6.5；截图 `docs/images/ui-15-tool-market.png`、`ui-16-tool-market-installed.png` |
 | 11-11 | **文档与代码精简**：删掉 3 份过程报告、`docs/setting design.md`、`docs/plan/TASKS.md`（共 976 行）；`TECHNICAL_DEBT.md` 只留当前未解决的 10 条；清空开发库 112 个演示账号（新增 `backend/scripts/cleanup_demo_accounts.py` + `make clean-demo`）；`:root` 兜底 token 与 `theme/pine.ts` 对齐 | [docs/README.md](README.md) §5 维护规则、[DESIGN.md](../DESIGN.md)、[TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) |
 | 11-11 | **`DESIGN.md` 重写为设计规范**：配色 18 个语义 token + 四套主题主色、字体 3 字族 9 档字号、间距与骨架尺寸、组件（按钮 6 型 / 卡片 / 导航 / 菜单 / 消息 / 状态）与三条硬规则、§9 变更流程、§10 自查清单；`AGENTS.md` §2.5 规定「UI 改动必须遵循并更新 DESIGN.md」 | [DESIGN.md](../DESIGN.md)、[design/README.md](design/README.md) |
 | 11-11 | **阶段 6：工具生态与权限治理（T1–T7）**：`ToolMeta`/`ToolLevel`/`ToolRegistry` + `ToolPolicy`（参数规则、日预算）、`agent_approvals` 四态审批与迁移 `2c0c6e7b3613`、执行器挂起与 `resume_run` 重放、写工具 `rename_conversation`、6 个接口、前端 `ApprovalCard` 与设置页「工具」节、`acceptance:tools` 9 项；后端 230 例 / 93.37%，前端 64 例 | [tools.md](tools.md)、[ADR-0011](adr/0011-tool-permissions-and-approvals.md)、[api.md](api.md) §6.4 |

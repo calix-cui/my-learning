@@ -31,11 +31,11 @@ def _spec(slug: str = "echo") -> McpServerSpec:
     )
 
 
-def _row(slug: str = "echo", *, enabled: bool = True) -> McpServer:
+def _row(slug: str = "echo", *, enabled: bool = True, user_id: int = 1) -> McpServer:
     """未入库的行对象：manager 只读它的属性，用不着数据库。"""
     return McpServer(
         id=hash(slug) % 10000,
-        user_id=1,
+        user_id=user_id,
         slug=slug,
         display_name="Echo 服务器",
         transport="stdio",
@@ -112,6 +112,23 @@ def test_manager_reuses_connection_and_closes_on_forget() -> None:
 
         manager.forget(row.id)
         assert manager.stats()["connections"] == 0
+    finally:
+        manager.close_all()
+
+
+def test_forget_user_closes_only_that_users_connections() -> None:
+    """注销账号时按 user_id 回收连接：别人的连接不能被误杀，自己的一定要关。"""
+    manager = McpManager()
+    mine = _row("echo", user_id=7)
+    other = _row("echo2", user_id=8)
+    try:
+        manager.source_for(mine)
+        manager.source_for(other)
+        assert manager.stats()["connections"] == 2
+
+        manager.forget_user(7)
+        assert manager.stats()["connections"] == 1
+        assert manager.source_for(other)._client.connected
     finally:
         manager.close_all()
 

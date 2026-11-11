@@ -15,6 +15,7 @@ from app.auth.passwords import hash_password, needs_rehash, verify_password
 from app.auth.tokens import hash_token, new_token
 from app.common.exceptions import BusinessError
 from app.config import settings
+from app.mcp.manager import get_manager
 from app.models import LoginSession, User
 
 # 每次请求都写一次 last_seen_time 没必要，超过这个间隔才刷新
@@ -179,5 +180,8 @@ def delete_account(db: Session, user: User, password: str) -> None:
     """注销账号：密码二次确认后整行删除，会话/设置由外键级联清理。"""
     if not verify_password(password, user.password_hash):
         raise BusinessError("密码不正确", code=400)
+    # 外键级联只清表，进程里缓存的 MCP 连接得显式关，否则留下孤儿子进程
+    if user.mcp_servers:
+        get_manager().forget_user(user.id)
     db.delete(user)
     db.commit()

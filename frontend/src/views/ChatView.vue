@@ -105,7 +105,7 @@ onMounted(async () => {
         <template v-for="(message, index) in chat.messages" :key="message.id">
           <ChatMessage :message="message" />
           <AgentTimeline
-            v-if="chat.agentMode && showTimeline && index === lastUserIndex"
+            v-if="showTimeline && index === lastUserIndex"
             class="chat__timeline"
             :steps="chat.agentSteps"
             :running="chat.agentRunning"

@@ -34,6 +34,7 @@ IDLE_SECONDS = 900.0
 
 @dataclass
 class _Connection:
+    user_id: int
     client: McpClient
     tools: list[McpToolInfo] = field(default_factory=list)
     tools_at: float = 0.0
@@ -66,7 +67,10 @@ class McpManager:
             if conn is not None and not conn.client.connected:
                 conn = None
             if conn is None:
-                conn = _Connection(client=McpClient(spec, self._runner))
+                conn = _Connection(
+                    user_id=server.user_id,
+                    client=McpClient(spec, self._runner),
+                )
                 conn.client.connect()
                 self._connections[server.id or -1] = conn
 
@@ -102,6 +106,13 @@ class McpManager:
         with self._lock:
             for server_id in list(self._connections):
                 self._drop(server_id)
+
+    def forget_user(self, user_id: int) -> None:
+        """账号注销时调用：把这台账号名下的连接全部关掉，别留孤儿进程。"""
+        with self._lock:
+            keys = [key for key, conn in self._connections.items() if conn.user_id == user_id]
+        for key in keys:
+            self.forget(key)
 
     def sweep(self, *, now: float | None = None) -> int:
         """回收空闲连接，返回关掉几个。由清理任务或设置页刷新时顺带调用。"""

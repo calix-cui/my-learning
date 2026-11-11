@@ -18,6 +18,7 @@
 | T-15 | 后端 | 会话列表 `total` 与 `items` 两次独立查询，并发下可能不一致 | P2 | S |
 | T-18 | 数据 | `create_time` 用 naive `datetime.now`，没有时区语义（容器 UTC / 本机 CST 混用） | P2 | S |
 | T-27 | 前端 | `styles/index.css` 的兜底 token 与 `theme/themes/pine.ts` 有细微不一致（success/warn），靠人工同步 | P2 | S |
+| T-28 | 后端 | MCP 连接池是**进程内**的：多 worker（`uvicorn --workers N`）部署时每个进程各连一份，stdio 服务器子进程数会翻 N 倍 | P2 | M |
 
 已随模块归档或已在实现中解决的条目（T-01/02/03/05/07/09/12/13/14/16/19/20/22/24/25）不再列出。
 

@@ -20,7 +20,8 @@
     "acceptance:auth": "node scripts/auth-acceptance.mjs",
     "acceptance:settings": "node scripts/settings-acceptance.mjs",
     "acceptance:agent": "node scripts/agent-acceptance.mjs",
-    "acceptance:tools": "node scripts/tools-acceptance.mjs"
+    "acceptance:tools": "node scripts/tools-acceptance.mjs",
+    "acceptance:mcp": "node scripts/mcp-acceptance.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

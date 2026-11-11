@@ -261,7 +261,7 @@ onMounted(load)
 </script>
 
 <template>
-  <section v-loading="loading" class="market">
+  <section class="market">
     <header class="market__head">
       <div>
         <h2 class="market__title">工具市场</h2>
@@ -378,7 +378,9 @@ onMounted(load)
       <button type="submit" class="market__cta">接入</button>
     </form>
 
-    <div class="market__grid">
+    <p v-if="loading" class="market__loading">正在读取工具市场…</p>
+
+    <div v-else class="market__grid">
       <article
         v-for="item in visible"
         :key="item.slug"
@@ -505,7 +507,7 @@ onMounted(load)
       </article>
     </div>
 
-    <div v-if="!visible.length && !customServers.length && !loading" class="market__empty">
+    <div v-if="!loading && !visible.length && !customServers.length" class="market__empty">
       <AppIcon name="sparkle" :size="18" />
       <span>这个筛选下还没有条目</span>
     </div>
@@ -906,6 +908,12 @@ onMounted(load)
   justify-content: flex-end;
   gap: 8px;
   width: 100%;
+}
+
+.market__loading {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ma-color-ink-muted);
 }
 
 .market__empty {

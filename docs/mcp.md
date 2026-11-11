@@ -1,6 +1,6 @@
 # 阶段 7 设计：MCP 接入与「工具市场」
 
-> **状态**：设计待确认（2026-11-11）。确认后按 T1–T7 逐个交付。
+> **状态**：已交付（2026-11-11，T1–T7 全部完成）。
 > **上游**：[`tools.md`](tools.md)（阶段 6 工具生态与权限治理）、[ADR-0011](adr/0011-tool-permissions-and-approvals.md)、[`agent-architecture.md`](agent-architecture.md) §6.5、[`playbooks/05`](playbooks/05-development-plan-and-mvp-tasks.md) 阶段 7。
 
 ## 1. 要解决的问题
@@ -200,16 +200,30 @@ erDiagram
 | T4 ✅ | 接口 | 6 个接口（`api/mcp.py` + `schemas/mcp.py` + `services/mcp_service.py`） | 契约测试 12 例：清单带已接入状态、接入市场条目、缺 path/重复 slug/命令不在白名单 400、启停与改配置断连接、越权与未登录、试连成功/失败落库、env 只存密文 |
 | T5 ✅ | 前端市场页 | `frontend/src/components/settings/MarketPanel.vue`、`frontend/src/api/mcp.ts`、`SettingsView` 新增「工具市场」节、`ui/icon-paths.ts`（图标表独立成文件，后端给的图标名要做类型收窄） | 卡片网格（`minmax(260px, 1fr)` / gap 16）、四种筛选、开关即时生效并失败回滚、点工具数展开清单（连接池冷的时候先试连一次）、移除走确认框；规格已回写 `DESIGN.md` §5.7；截图 `docs/images/ui-15-tool-market.png`、`ui-16-tool-market-installed.png` |
 | T6 ✅ | 审批联调 | `backend/tests/test_mcp_agent.py`（真 stdio server 走完 `registry_for → stream_run → approval_required → decide_approval → resume_run`） | 3 例：MCP 工具在注册表里是 `EXTERNAL` + `requires_approval`；调用挂起且 run 变 `waiting_approval`；批准后事件为 `tool_result` 且内容等于服务器回显、run 收尾 `completed`、服务器 `last_status=ok`；拒绝时回灌「用户拒绝…+理由」且工具未执行 |
-| T7 | 文档与 DESIGN 回写 | `docs/api.md` §6.5、`DESIGN.md` §5 新增 4 条规格、`acceptance:mcp` | 新页面完全按 DESIGN.md 实现；截图入 `docs/images/` |
+| T7 ✅ | 文档与 DESIGN 回写 | `docs/api.md` §6.5、`DESIGN.md` §5.7 + §5.2、`frontend/scripts/mcp-acceptance.mjs`、`backend/scripts/seed_mcp_approval.py` | `pnpm acceptance:mcp` 11/11（市场浏览→筛选→自定义接入→自动试连→展开工具→工具节可见→启停→移除→审批卡→批准执行→刷新无残留→控制台无报错）；截图 `docs/images/ui-15-tool-market.png`、`ui-16-tool-market-installed.png` |
 
 ## 8. 验收标准
 
 1. 设置页能浏览内置市场、接入一个服务器、看到工具数、关掉后模型看不到该工具。
 2. 模型调用 `mcp__*` 工具必定挂起审批；拒绝后时间线记 `ok=false` 且带理由。
 3. 服务器连不上时：市场页显示错误原因，run 不因此失败，其它工具照常。
-4. `DELETE` 后连接被回收，`ps` 里没有残留子进程。
+4. `DELETE` 后连接被回收，`ps` 里没有残留子进程（账号注销也会回收：`McpManager.forget_user()`）。
 5. `mcp` 只出现在 `backend/app/mcp/` 与 `pyproject.toml`；`agent/` 无 `import mcp`。
 6. 新页面只用 `var(--ma-*)` token；DESIGN.md §5 的 4 条新规格落地并可被下一个页面直接复用。
+
+### 8.1 怎么复现（2026-11-11 实测）
+
+```bash
+# 后端 + 前端都在跑（scripts/dev.sh）
+cd frontend && pnpm acceptance:mcp     # 11 项，约 60 秒
+```
+
+`acceptance:mcp` 用真浏览器、真后端、真 stdio 服务器跑两段：
+
+1. **市场页**：浏览 7 条内置清单 → 用「远程」筛一次 → 自定义接入一台 echo（`uv run --no-sync python tests/fixtures/mcp_echo_server.py`）→ 等自动试连变「正常」→ 展开工具清单 → 切到「工具」节确认 `mcp__echo__echo` 标着「需确认」→ `PATCH` 关掉后工具从清单消失 → 移除并刷新确认回到未接入。
+2. **审批链**：`backend/scripts/seed_mcp_approval.py` 直接造一条 `waiting_approval` 的 run（不赌模型这次肯不肯调工具，脚本会写 `Conversation` + `Message` + `AgentRun` + 两步 `AgentStep` + 一条 pending 审批）→ 前端点进该会话看到审批卡 → 点「批准执行」→ 后端 `resume_run` 重放并通过 MCP 真的调一次 echo → 时间线出现回显文本、卡片消失 → 刷新无残留。
+
+实测结果：11/11 通过；`ps` 里没有残留的 MCP 子进程（账号注销会走 `McpManager.forget_user()` 关掉该账号名下所有连接）。
 
 ## 9. 明确不做
 
