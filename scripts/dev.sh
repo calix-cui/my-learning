@@ -35,6 +35,24 @@ fi
 
 mkdir -p "$LOG_DIR"
 
+# 端口预检：被占用时别「起一半就退」——之前遇到过一次：dev.sh 被外部 kill 掉，
+# 但 Vite 已经独立成 node 进程继续占着 5173，下一次启动就会在起前端时失败并连带
+# 杀掉刚起来后端，看起来像「后端起不来」。
+port_busy() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti "tcp:$port" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    (exec 3<>"/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1
+  fi
+}
+
+for port in "$API_PORT" "$WEB_PORT"; do
+  if port_busy "$port"; then
+    die "端口 $port 已被占用，先停掉再跑：lsof -ti tcp:$port | xargs kill"
+  fi
+done
+
 pids=""
 cleanup() {
   trap - INT TERM EXIT
