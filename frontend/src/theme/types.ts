@@ -64,4 +64,5 @@ export interface StaticTokens {
   sidebarWidth: string
   contentWidth: string
   readingWidth: string
+  motionHover: string
 }

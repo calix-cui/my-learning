@@ -268,7 +268,7 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 
 状态：
 
-- hover：横向渐变 `linear-gradient(90deg, ink 7%, ink 3%)`（实底按钮改为 `accent-hover`）。
+- hover：横向渐变 `linear-gradient(90deg, ink 7%, ink 3%)`，用 `.u-tint` 实现 0.3s 淡入（§8.2）；实底按钮改为 `accent-hover`。
 - active / 选中：加深一档（12% → 7%）。
 - disabled：`opacity .45` + `cursor: not-allowed`，不做灰底变色。
 - 主按钮内 padding `0 18px`，图标与文字 gap 6px，字号 14–15px / 500。
@@ -318,7 +318,7 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 
 ## 6. 交互与动效
 
-1. **过渡 150ms**（复杂浮层 180ms），只过渡 `background` / `color` / `box-shadow` / `opacity`；不做位移放大。
+1. **过渡时长**：hover 淡入 `0.3s`（`--ma-motion-hover`），浮层出现/关闭 `0.18s`，其余微调 `0.15–0.2s`；只过渡 `background-color` / `color` / `box-shadow` / `opacity`，**不直接过渡 `background-image`**（渐变不可动画，见 §8.2），不做位移放大。
 2. **hover 用横向渐变**，不用整块纯色灰（见 §8.2）。
 3. **焦点可见**：键盘焦点用 3px `accent-soft` 外环 + 1px `accent` 描边。
 4. **加载**：流式回答显示「正在回复…」气泡 + 光标；按钮进 loading 态并禁用重复提交。
@@ -351,6 +351,34 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 4. 危险动作 hover 用 `danger 10% → 4%`。
 5. 已是选中色时，hover 保持选中色，不再叠灰。
 6. 不用 `background: #f5f5f5` 这类整块纯色 hover。
+
+**实现方式（必须这样写）**：渐变属于 `background-image`，浏览器无法在 `none ↔ gradient` 之间插值，直接写 `transition: background` 会**瞬切**。所以统一用全局工具类 `.u-tint`：
+
+```html
+<div class="chat__item u-tint">…</div>      <!-- 默认 7% → 3% -->
+<div class="devices__item u-tint u-tint--soft">…</div>   <!-- 6% → 2% -->
+<button class="u-tint u-tint--danger">删除</button>       <!-- danger 10% → 4% -->
+```
+
+```css
+/* 已封装在 src/styles/index.css，不要再自己写 */
+.u-tint { position: relative; isolation: isolate; }
+.u-tint::before {
+  content: '';
+  position: absolute;
+  z-index: -1;            /* 压在文字下面、背景上面（靠 isolation 建立层叠上下文） */
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(… 7%), color-mix(… 3%));
+  opacity: 0;
+  transition: opacity var(--ma-motion-hover) ease;
+  pointer-events: none;
+}
+.u-tint:hover::before { opacity: 1; }
+```
+
+7. 选中/激活态要压制遮罩：`.xxx--active::before { opacity: 0 }`；按下态用更深的实底色，同样压制遮罩。
+8. **禁止**再写 `:hover { background: linear-gradient(...) }`——那是这个 bug 的来源。
 
 ### 8.3 结构多用 div、少嵌套
 

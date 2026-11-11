@@ -43,7 +43,7 @@ input, textarea { font: inherit; color: inherit; }
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 40px; padding: 0 18px; border-radius: 6px;
   border: 1px solid transparent; font-size: 14px; font-weight: 500;
-  transition: background-color .15s, border-color .15s, color .15s;
+  transition: background-color .3s, border-color .3s, color .3s;
 }
 .btn-primary { background: var(--pine); color: #fff; }
 .btn-primary:hover { background: var(--pine-deep); }

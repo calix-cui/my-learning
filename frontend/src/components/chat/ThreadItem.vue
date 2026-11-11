@@ -25,7 +25,7 @@ function handleCommand(command: string) {
 </script>
 
 <template>
-  <div class="chat__item" :class="{ 'chat__item--active': active }">
+  <div class="chat__item u-tint" :class="{ 'chat__item--active': active }">
     <button
       type="button"
       class="chat__item-main"
@@ -53,24 +53,17 @@ function handleCommand(command: string) {
   display: flex;
   align-items: center;
   border-radius: var(--ma-radius-md);
-  transition: background-color 0.15s ease;
 }
 
-.chat__item:hover {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ma-color-ink) 7%, transparent),
-    color-mix(in srgb, var(--ma-color-ink) 3%, transparent)
-  );
-}
-
-/* 选中项 hover 时保持选中色，避免鼠标一划过就「看起来被取消选中」 */
-.chat__item--active:hover {
-  background: var(--ma-color-accent-soft);
-}
-
+/* 选中项不叠 hover 灰（否则像被取消选中） */
 .chat__item--active {
   background: var(--ma-color-accent-soft);
+}
+
+/* 选中项压掉 hover 遮罩（.u-tint:hover::before 与它同权重，这里再抬一档） */
+.chat__item.chat__item--active::before,
+.chat__item.chat__item--active:hover::before {
+  opacity: 0;
 }
 
 .chat__item-main {

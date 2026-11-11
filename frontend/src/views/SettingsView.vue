@@ -35,7 +35,7 @@ const activeComponent = computed(
         v-for="section in sections"
         :key="section.key"
         type="button"
-        class="settings__item"
+        class="settings__item u-tint"
         :class="{ 'is-active': section.key === active }"
         :aria-current="section.key === active ? 'page' : undefined"
         @click="active = section.key"
@@ -82,21 +82,22 @@ const activeComponent = computed(
   background: transparent;
   border: 0;
   border-radius: var(--ma-radius-md);
+  transition: color var(--ma-motion-hover) ease;
 }
 
 .settings__item:hover {
   color: var(--ma-color-ink);
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ma-color-ink) 7%, transparent),
-    color-mix(in srgb, var(--ma-color-ink) 3%, transparent)
-  );
 }
 
 .settings__item.is-active {
   font-weight: 600;
   color: var(--ma-color-accent);
   background: var(--ma-color-accent-soft);
+}
+
+.settings__item.settings__item.is-active::before,
+.settings__item.settings__item.is-active:hover::before {
+  opacity: 0;
 }
 
 .settings__item:focus-visible {

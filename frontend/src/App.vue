@@ -103,7 +103,7 @@ async function handleUserCommand(command: string) {
         <MyDropdownMenu :items="userMenuItems" align="start" @select="handleUserCommand">
           <template #default="{ toggle }">
             <div
-              class="layout__user-trigger"
+              class="layout__user-trigger u-tint"
               role="button"
               tabindex="0"
               aria-label="账号菜单"
@@ -196,14 +196,6 @@ async function handleUserCommand(command: string) {
   background: none;
   border: 0;
   border-radius: var(--ma-radius-md);
-}
-
-.layout__user-trigger:hover {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ma-color-ink) 7%, transparent),
-    color-mix(in srgb, var(--ma-color-ink) 3%, transparent)
-  );
 }
 
 .layout__user-trigger:focus-visible {

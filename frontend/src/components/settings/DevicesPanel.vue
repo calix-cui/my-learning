@@ -72,7 +72,7 @@ async function handleRevoke(item: LoginSession) {
     </header>
 
     <ul v-loading="loading" class="devices__list">
-      <li v-for="item in sessions" :key="item.id" class="devices__item">
+      <li v-for="item in sessions" :key="item.id" class="devices__item u-tint u-tint--soft">
         <div class="devices__meta">
           <span class="devices__name">
             {{ deviceName(item.user_agent) }}
@@ -124,15 +124,6 @@ async function handleRevoke(item: LoginSession) {
   justify-content: space-between;
   padding: 14px 16px;
   border-radius: var(--ma-radius-md);
-  transition: background-color 0.15s ease;
-}
-
-.devices__item:hover {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ma-color-ink) 6%, transparent),
-    color-mix(in srgb, var(--ma-color-ink) 2%, transparent)
-  );
 }
 
 .devices__meta {

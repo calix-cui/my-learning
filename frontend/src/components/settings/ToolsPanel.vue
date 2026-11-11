@@ -90,7 +90,7 @@ onMounted(load)
     </header>
 
     <ul class="tools__list">
-      <li v-for="tool in tools" :key="tool.name" class="tools__row">
+      <li v-for="tool in tools" :key="tool.name" class="tools__row u-tint">
         <div class="tools__main">
           <span class="tools__name">{{ tool.name }}</span>
           <span class="tools__level" :class="`tools__level--${tool.level}`">
@@ -178,15 +178,6 @@ onMounted(load)
   padding: 14px 16px;
   background: var(--ma-color-surface);
   border-radius: 14px;
-  transition: background 0.16s ease;
-}
-
-.tools__row:hover {
-  background: linear-gradient(
-    90deg,
-    var(--ma-color-ink-wash-strong),
-    var(--ma-color-ink-wash-weak)
-  );
 }
 
 .tools__main {

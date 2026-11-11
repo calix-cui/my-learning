@@ -46,7 +46,7 @@ function decide(decision: 'approve' | 'reject') {
       />
       <div class="approval__actions">
         <button
-          class="approval__btn approval__btn--ghost"
+          class="approval__btn approval__btn--ghost u-tint"
           :disabled="busy"
           @click="decide('reject')"
         >
@@ -154,19 +154,10 @@ function decide(decision: 'approve' | 'reject') {
   background: transparent;
   border: 0;
   border-radius: 10px;
-  transition: background 0.16s ease;
 }
 
 .approval__btn--ghost {
   border: 1px solid var(--ma-color-line);
-}
-
-.approval__btn--ghost:hover {
-  background: linear-gradient(
-    90deg,
-    var(--ma-color-ink-wash-strong),
-    var(--ma-color-ink-wash-weak)
-  );
 }
 
 .approval__btn--primary {

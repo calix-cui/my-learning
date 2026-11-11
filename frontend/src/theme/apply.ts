@@ -50,6 +50,7 @@ export function buildThemeVars(theme: ThemeDefinition, mode: ThemeMode): Record<
     '--ma-sidebar-width': staticTokens.sidebarWidth,
     '--ma-content-width': staticTokens.contentWidth,
     '--ma-reading-width': staticTokens.readingWidth,
+    '--ma-motion-hover': staticTokens.motionHover,
   }
 
   for (const key of COLOR_KEYS) {

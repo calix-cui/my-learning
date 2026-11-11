@@ -16,7 +16,7 @@ withDefaults(
 <template>
   <button
     type="button"
-    class="icon-button"
+    class="icon-button u-tint"
     :class="{ 'is-active': active }"
     :style="{ width: `${size}px`, height: `${size}px` }"
     :aria-label="label"
@@ -38,18 +38,11 @@ withDefaults(
   background: transparent;
   border: 0;
   border-radius: 999px;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
+  transition: color var(--ma-motion-hover) ease;
 }
 
 .icon-button:hover {
   color: var(--ma-color-ink);
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ma-color-ink) 7%, transparent),
-    color-mix(in srgb, var(--ma-color-ink) 3%, transparent)
-  );
 }
 
 .icon-button.is-active,
@@ -59,6 +52,12 @@ withDefaults(
     color-mix(in srgb, var(--ma-color-ink) 12%, transparent),
     color-mix(in srgb, var(--ma-color-ink) 7%, transparent)
   );
+}
+
+.icon-button.icon-button.is-active::before,
+.icon-button.icon-button.is-active:hover::before,
+.icon-button.icon-button:active::before {
+  opacity: 0;
 }
 
 .icon-button:focus-visible {

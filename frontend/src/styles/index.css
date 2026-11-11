@@ -41,6 +41,7 @@
   --ma-sidebar-width: 264px;
   --ma-content-width: 1080px;
   --ma-reading-width: 720px;
+  --ma-motion-hover: 0.3s;
   color-scheme: light;
 }
 
@@ -283,5 +284,58 @@ time,
 @media (width < 960px) {
   .auth {
     padding-bottom: 6vh;
+  }
+}
+
+/* ---------------------------------------------------------------
+   hover 渐变（全局工具类）
+   渐变是不可动画的（background-image 从 none 切到 gradient 只能瞬切），
+   所以 hover 底色用伪元素铺一层渐变，靠 opacity 过渡拿到真正的淡入。
+   用法：给元素加 `u-tint`（可选 `u-tint--soft` / `u-tint--danger`），
+   不要再写 `:hover { background: linear-gradient(...) }`。
+   --------------------------------------------------------------- */
+.u-tint {
+  --tint-color: var(--ma-color-ink);
+  --tint-from: 7%;
+  --tint-to: 3%;
+
+  position: relative;
+  isolation: isolate;
+}
+
+.u-tint::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tint-color) var(--tint-from), transparent),
+    color-mix(in srgb, var(--tint-color) var(--tint-to), transparent)
+  );
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--ma-motion-hover) ease;
+}
+
+.u-tint:hover::before {
+  opacity: 1;
+}
+
+.u-tint--soft {
+  --tint-from: 6%;
+  --tint-to: 2%;
+}
+
+.u-tint--danger {
+  --tint-color: var(--ma-color-danger);
+  --tint-from: 10%;
+  --tint-to: 4%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .u-tint::before {
+    transition: none;
   }
 }

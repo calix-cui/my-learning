@@ -128,8 +128,8 @@ onBeforeUnmount(detach)
         <li v-for="item in items" :key="item.key">
           <button
             type="button"
-            class="my-menu__item"
-            :class="{ 'my-menu__item--danger': item.variant === 'danger' }"
+            class="my-menu__item u-tint"
+            :class="{ 'my-menu__item--danger u-tint--danger': item.variant === 'danger' }"
             role="menuitem"
             @click="pick(item)"
           >
@@ -175,17 +175,9 @@ onBeforeUnmount(detach)
   background: transparent;
   border: 0;
   border-radius: var(--ma-radius-sm);
-  transition: background 0.15s ease;
 }
 
 /* hover 用一层很淡的渐变，避免整块死板的灰 */
-.my-menu__item:hover {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ma-color-ink) 7%, transparent),
-    color-mix(in srgb, var(--ma-color-ink) 3%, transparent)
-  );
-}
 
 .my-menu__item:active {
   background: color-mix(in srgb, var(--ma-color-ink) 9%, transparent);
@@ -193,14 +185,6 @@ onBeforeUnmount(detach)
 
 .my-menu__item--danger {
   color: var(--ma-color-danger);
-}
-
-.my-menu__item--danger:hover {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ma-color-danger) 10%, transparent),
-    color-mix(in srgb, var(--ma-color-danger) 4%, transparent)
-  );
 }
 
 .my-menu-fade-enter-active,
