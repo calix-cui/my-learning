@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from app.models.agent_approval import AgentApproval
     from app.models.agent_run import AgentRun
     from app.models.conversation import Conversation
+    from app.models.mcp_server import McpServer
     from app.models.session import LoginSession
     from app.models.user_settings import UserSettings
 
@@ -47,6 +48,10 @@ class User(Base):
     # SQLAlchemy 先把 user_id 置空（NOT NULL 列 → 1048 报错），而不是删行。
     agent_approvals: Mapped[list["AgentApproval"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+    mcp_servers: Mapped[list["McpServer"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
     agent_runs: Mapped[list["AgentRun"]] = relationship(
         back_populates="user",

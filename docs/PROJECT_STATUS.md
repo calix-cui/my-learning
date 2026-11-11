@@ -1,11 +1,11 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-11 · 阶段 6 已落地（T1–T7） · 文档与代码做过一次精简，`DESIGN.md` 重写为设计规范
+> 最近更新：2026-11-11 · 阶段 6 已落地（T1–T7） · 阶段 7 进行中（T1 客户端、T2 目录与表已完成） · 文档与代码做过一次精简，`DESIGN.md` 重写为设计规范
 
 ## 1. 现在在哪
 
-**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–6 已完成（阶段 4.5「账号体系」作为前置补强也已落地）；下一步是阶段 7「MCP 客户端与工具生态扩展」。**
+**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–6 已完成（阶段 4.5「账号体系」作为前置补强也已落地）；**阶段 7「MCP 客户端与工具生态扩展」进行中**：T1 客户端与同步桥、T2 市场清单与 `mcp_servers` 表已落地，T3–T7（装配、接口、市场页、审批联调、文档）待做。**
 
 阶段口径只以该文件为准。此前本文件里出现的「阶段 2 = MCP client / Agent PoC / Electron 骨架」是我自行归纳的临时说法（源自 `archive/REUSE_CANDIDATES.md` 的「MCP 建议尽早」与 ADR-0001 的 Electron 结论），**与 11 阶段计划无对应关系，已废弃**，勿再引用。
 

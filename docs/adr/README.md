@@ -17,6 +17,7 @@
 | [ADR-0009](./0009-per-user-model-settings.md) | 每用户模型配置与密钥加密 | 已接受 | 2026-11-09 |
 | [0010](0010-agent-execution-loop.md) | Agent 执行循环用自研最小实现，不引编排框架 | 提议（待确认） |
 | [0011](0011-tool-permissions-and-approvals.md) | 工具权限分级与人工审批 | 提议 | 2026-11-10 |
+| [0012](0012-mcp-client-uses-official-sdk.md) | 用官方 MCP SDK 做客户端 | 已确认 | 2026-11-11 |
 
 ## 什么时候写 ADR
 

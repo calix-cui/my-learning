@@ -11,6 +11,7 @@ from app.models.agent_approval import AgentApproval
 from app.models.agent_run import AgentRun
 from app.models.agent_step import AgentStep
 from app.models.conversation import Conversation
+from app.models.mcp_server import McpServer
 from app.models.message import Message
 from app.models.session import LoginSession
 from app.models.user import User
@@ -18,6 +19,7 @@ from app.models.user_settings import UserSettings
 
 __all__ = [
     "AgentApproval",
+    "McpServer",
     "AgentRun",
     "AgentStep",
     "Conversation",

@@ -28,6 +28,7 @@
 - 要改接口 → [`api.md`](api.md)（唯一契约，对话 / 账号 / 设置 / Agent 四组）
 - 要改对话逻辑 / 接模型 → [`chat.md`](chat.md)、[ADR-0006](adr/0006-llm-client-and-chat-storage.md)
 - 要加登录 / 鉴权 / 数据隔离 → [`auth.md`](auth.md)、[ADR-0008](adr/0008-auth-and-session.md)
+- 要接 MCP server / 改工具市场 → [`mcp.md`](mcp.md)、[ADR-0012](adr/0012-mcp-client-uses-official-sdk.md)
 - 要改界面 → [`../frontend/README.md`](../frontend/README.md) 与 `frontend/src/views/ChatView.vue`
 - 要改部署 → [`deploy.md`](deploy.md)
 - 想知道「当初为什么这么选」→ [`adr/`](adr/README.md)
@@ -46,6 +47,7 @@
 | [`api.md`](api.md) | 前后端 | 接口契约：对话 7 个操作 + 3 个运维路径（参数/响应/错误文案） | 调接口、改接口 |
 | [`agent.md`](agent.md) | 前后端 | **Agent 执行循环设计**：主流架构调研、步数与预算护栏、工具层、SSE 事件、任务拆分 | 要做工具调用、改执行流程时 |
 | [`tools.md`](tools.md) | 前后端 | **工具生态与权限治理设计**：分级、人工审批四态、可观测性、MCP 适配层 | 要加工具、改权限或做审批时 |
+| [`mcp.md`](mcp.md) | 前后端 | **阶段 7 设计：MCP 接入与「工具市场」**：传输、连接管理、`mcp__{server}__{tool}` 命名、EXTERNAL 一律审批、DESIGN §5 覆盖检验 | 要接 MCP server 或改工具市场页时 |
 | [`agent-architecture.md`](agent-architecture.md) | 前后端 | **阶段 6 Agent 技术架构（读代码手册）**：代码地图、五个核心结构、三条主流程、六个扩展点、六个手改练习 | 想读懂或动手改 Agent 代码时 |
 | [`chat.md`](chat.md) | 前后端 | **对话功能设计**：表结构、接口、模型抽象、任务拆分与验收 | 要改对话、接模型时 |
 | [`auth.md`](auth.md) | 前后端 | **账号体系设计**：个人助手绑哪些数据、会话鉴权选型、隔离规则、任务拆分 | 要加登录、查数据归属时 |

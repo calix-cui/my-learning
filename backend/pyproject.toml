@@ -17,6 +17,7 @@ dependencies = [
     "pydantic-settings==2.12.0",   # 读环境变量与 .env
     "argon2-cffi>=23.1",
     "cryptography>=50.0.2",
+    "mcp==2.3.0",
 ]
 
 [dependency-groups]
