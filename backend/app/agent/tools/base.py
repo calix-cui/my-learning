@@ -106,13 +106,20 @@ def meta_of(tool: Tool, *, source: str = "builtin") -> ToolMeta:
         description=tool.description,
         level=level,
         timeout_seconds=float(getattr(tool, "timeout_seconds", 2.0)),
-        source=source,
+        source=str(getattr(tool, "source", source)),
         requires_approval=bool(requires_approval),
     )
 
 
 def spec_of(tool: Tool) -> ToolSpec:
-    """由 pydantic 模型生成 JSON Schema，避免手写 schema 与校验不一致。"""
+    """给模型的声明。
+
+    内置工具由 pydantic 模型生成 JSON Schema（避免手写 schema 与校验不一致）；
+    外部工具（MCP）带自己的 schema，用 `raw_spec()` 原样透传，避免往返走样。
+    """
+    raw = getattr(tool, "raw_spec", None)
+    if callable(raw):
+        return raw()
     return ToolSpec(
         name=tool.name,
         description=tool.description,

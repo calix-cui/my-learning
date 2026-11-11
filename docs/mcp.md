@@ -196,7 +196,7 @@ erDiagram
 |---|---|---|---|
 | T1 ✅ | 客户端与同步桥 | `app/mcp/{client,runner,errors,specs}.py` + 测试用 stdio server 夹具 `tests/fixtures/mcp_echo_server.py` | 单测 9 例：真握手、`tools/list` 名与 schema、`tools/call` 文本、`isError` 不当异常、坏命令映射成 `McpError`、runner 超时 |
 | T2 ✅ | 目录与数据模型 | `catalog.py`（7 个内置条目，含 1 个远程）、`models/mcp_server.py`、迁移 `4f9edca19113` | 迁移在临时库 up→check→down→up 全绿；`UniqueConstraint(user_id, slug)` 生效；级联删除生效 |
-| T3 | 装配与连接管理 | `source.py`、`manager.py`，接进 `registry_for()` | 接入后 `settings/tools` 出现 `source=mcp` 的工具；断开不影响内置工具 |
+| T3 ✅ | 装配与连接管理 | `source.py`（`McpTool`/`McpSource`）、`manager.py`（连接池 + `probe`）、`registry_for()`、修掉 T-26（超时读 `meta.timeout_seconds`） | 单测 11 例：前缀 `mcp__<slug>__<tool>`、`EXTERNAL` 级别、schema 透传、`isError`→`ToolError`、连接复用与空闲回收、禁用服务器不出现、连不上只记 `last_status=error` 不打断对话 |
 | T4 | 接口 | 6 个接口 + schema | 单测：接入/启停/移除/测试/越权 404/自定义校验（命令白名单、https） |
 | T5 | 前端市场页 | `MarketPanel.vue` + `api/mcp.ts` + SettingsView 新节 | 卡片网格、筛选、开关即时生效、展开工具清单、移除确认 |
 | T6 | 审批联调 | `mcp__*` 工具挂起 → 批准后真实调用 | E2E：接入 → 让模型用一次 MCP 工具 → 审批 → 时间线出现结果 |

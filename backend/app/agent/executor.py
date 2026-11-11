@@ -27,11 +27,21 @@ from sqlalchemy.orm import Session
 
 from app.agent import events
 from app.agent import policy as policy_module
-from app.agent.tools import ToolRegistry, build_registry
+from app.agent.tools import BuiltinSource, ToolRegistry, ToolSource
 from app.common.exceptions import BusinessError
 from app.llm import LLMClient, LLMError
 from app.llm.base import LLMMessage, ToolCall
-from app.models import AgentApproval, AgentRun, AgentStep, Conversation, Message, UserSettings
+from app.mcp.errors import McpError
+from app.mcp.manager import get_manager
+from app.models import (
+    AgentApproval,
+    AgentRun,
+    AgentStep,
+    Conversation,
+    McpServer,
+    Message,
+    UserSettings,
+)
 from app.models.agent_approval import (
     APPROVAL_APPROVED,
     APPROVAL_PENDING,
@@ -45,6 +55,7 @@ from app.models.agent_step import (
     STEP_TOOL_RESULT,
     STEP_USER_MESSAGE,
 )
+from app.models.mcp_server import STATUS_ERROR, STATUS_OK
 from app.services import chat_service
 
 logger = logging.getLogger(__name__)
@@ -410,10 +421,40 @@ def _run_loop(
 
 
 def registry_for(db: Session, user_id: int, conversation_id: int | None = None) -> ToolRegistry:
-    """按账号设置装配注册表：被关掉的工具既不展示也执行不了。"""
+    """按账号设置装配注册表：内置工具 + 用户启用的 MCP 服务器。
+
+    MCP 连不上**不能**让整次对话失败：记一行 last_status/last_error、跳过这台服务器，
+    模型继续用剩下的工具回答。用户下次在设置页能看到失败原因。
+    """
     row = db.scalar(select(UserSettings).where(UserSettings.user_id == user_id))
     disabled = tuple(row.tools_disabled or []) if row is not None else ()
-    return build_registry(db, disabled=disabled, conversation_id=conversation_id)
+
+    sources: list[ToolSource] = [BuiltinSource(db, conversation_id)]
+    manager = get_manager()
+    servers = db.scalars(
+        select(McpServer).where(McpServer.user_id == user_id, McpServer.enabled.is_(True))
+    )
+    for server in servers:
+        try:
+            source = manager.source_for(server)
+        except McpError as exc:
+            server.last_status = STATUS_ERROR
+            server.last_error = str(exc)[:255]
+            logger.warning("MCP 服务器 %s 不可用：%s", server.slug, exc)
+            continue
+        except Exception:  # pragma: no cover - 兜底：任何异常都不该打断对话
+            server.last_status = STATUS_ERROR
+            server.last_error = "连接失败"
+            logger.exception("MCP 服务器 %s 连接异常", server.slug)
+            continue
+        server.last_status = STATUS_OK
+        server.last_error = None
+        server.tool_count = source.tool_count
+        server.last_connected_time = datetime.now()  # noqa: DTZ005
+        sources.append(source)
+    db.flush()
+
+    return ToolRegistry.from_sources(sources, disabled=disabled)
 
 
 def build_policy(
@@ -572,16 +613,22 @@ def _replay_messages(db: Session, run: AgentRun) -> tuple[list[LLMMessage], Agen
 
 
 def _execute(tools: ToolRegistry, call: ToolCall, *, user_id: int):
-    """执行单个工具，带超时。超时也返回结果，让模型知道发生了什么。"""
+    """执行单个工具，带超时。超时也返回结果，让模型知道发生了什么。
+
+    超时按工具自己声明的 `timeout_seconds` 走：内置工具 2 秒，MCP 这类外部工具
+    要等子进程与网络，给到 10 秒（T-26）。
+    """
+    meta = tools.meta(call["name"])
+    timeout = meta.timeout_seconds if meta is not None else TOOL_TIMEOUT_SECONDS
     future = _pool.submit(tools.execute, call["name"], call["arguments"], user_id=user_id)
     try:
-        return future.result(timeout=TOOL_TIMEOUT_SECONDS)
+        return future.result(timeout=timeout)
     except FutureTimeoutError:
         future.cancel()
         return {
             "ok": False,
-            "content": f"工具执行超过 {TOOL_TIMEOUT_SECONDS:g} 秒，已放弃",
-            "duration_ms": int(TOOL_TIMEOUT_SECONDS * 1000),
+            "content": f"工具执行超过 {timeout:g} 秒，已放弃",
+            "duration_ms": int(timeout * 1000),
             "args": None,
             "error": "timeout",
         }

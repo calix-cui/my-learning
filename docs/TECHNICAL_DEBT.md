@@ -17,7 +17,6 @@
 | T-23 | 后端 | 没有统一日志与 request id，排障只能看 uvicorn 默认输出 | P2 | M |
 | T-15 | 后端 | 会话列表 `total` 与 `items` 两次独立查询，并发下可能不一致 | P2 | S |
 | T-18 | 数据 | `create_time` 用 naive `datetime.now`，没有时区语义（容器 UTC / 本机 CST 混用） | P2 | S |
-| T-26 | Agent | `ToolMeta.timeout_seconds` 声明了但没人用，`_execute()` 固定用 `TOOL_TIMEOUT_SECONDS = 2.0` | P2 | S |
 | T-27 | 前端 | `styles/index.css` 的兜底 token 与 `theme/themes/pine.ts` 有细微不一致（success/warn），靠人工同步 | P2 | S |
 
 已随模块归档或已在实现中解决的条目（T-01/02/03/05/07/09/12/13/14/16/19/20/22/24/25）不再列出。
@@ -55,11 +54,6 @@
 - **建议**：`logging.config.dictConfig` + 中间件生成 `request_id`（响应头回传），把 `app/api/__init__.py` 的异常处理器接进来。
 
 ## 2. Agent 与工具
-
-### T-26 工具超时声明未生效（P2 · S）
-- **证据**：`backend/app/agent/tools/base.py` 的 `ToolMeta.timeout_seconds=2.0` 只是元数据；`backend/app/agent/executor.py` 的 `_execute()` 用模块常量 `TOOL_TIMEOUT_SECONDS = 2.0`。
-- **影响**：将来某个工具想声明更长/更短超时（比如 MCP 远程工具要 10s），改了 meta 也不会生效，是个静默陷阱。
-- **建议**：`_execute()` 改成读 `meta_of(tool).timeout_seconds`，MCP 来源再单独放宽上限。
 
 ## 3. 前端
 
