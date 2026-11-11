@@ -1,6 +1,6 @@
 """设置接口：模型配置的读、写与连通性自测。
 
-导出与注销放在账号侧（`/api/auth/me`、`/api/settings/export`），见 docs/setting design.md §五。
+导出与注销放在账号侧（`/api/auth/me`、`/api/settings/export`），见 `docs/api.md` §6。
 """
 
 from collections.abc import Iterator

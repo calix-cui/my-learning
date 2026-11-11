@@ -87,6 +87,12 @@ class McpManager:
                 tools=list(conn.tools),
             )
 
+    def cached_tools(self, server_id: int) -> list[McpToolInfo]:
+        """已连接时的工具清单；不为了展示去连一次服务器。"""
+        with self._lock:
+            conn = self._connections.get(server_id)
+            return list(conn.tools) if conn is not None else []
+
     def forget(self, server_id: int) -> None:
         """用户删除/修改了某台 server：关掉并丢弃它的连接。"""
         with self._lock:

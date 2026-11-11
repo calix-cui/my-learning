@@ -462,6 +462,34 @@ data: {"type":"run_finished","run_id":1,"content":"3 的 5 次方等于 243。",
 
 限制：单次运行最多 5 次审批、同一工具被拒 2 次后本次运行直接失败（403）；每天所有工具调用合计不超过 `daily_tool_budget`。
 
+### 6.5 MCP 工具市场（`/api/mcp`）
+
+接进来的 MCP 工具**不新开接口**：它们出现在 `GET /api/settings/tools` 里，`source="mcp"`、名字是 `mcp__{slug}__{tool}`、级别是 `external`（服务器标了只读才是 `read`）。开关、每日预算、审批、时间线全都复用阶段 6 那一套。
+
+`GET /api/mcp/catalog`：内置清单 + 每个条目是否已接入。
+
+```json
+{ "code": 200, "message": "请求成功", "data": {
+  "items": [
+    { "slug": "filesystem", "display_name": "文件系统", "summary": "读写你指定的目录…",
+      "transport": "stdio", "tags": ["本地", "文件"], "requires_path": true,
+      "installed_id": null, "last_status": null, "updated": "2026-11" }
+  ],
+  "updated": "2026-11" } }
+```
+
+`GET /api/mcp/servers`：已接入的服务器。`tools` 只在**当前有连接**时才有内容（不为了展示去连一次服务器），`env_keys` 只给键名。
+
+`POST /api/mcp/servers`：接入。内置条目只要 `{ "slug": "filesystem", "path": "/Users/me/repo" }`；自定义条目补齐 `display_name` / `transport` / `command`+`args`（stdio）或 `url`（http）。`env` 会加密入库，接口从不明文回显。重复 slug 400，缺 path 400，命令不在白名单 400，http 指向内网 400。
+
+`PATCH /api/mcp/servers/{id}`：`{ "enabled": false }` 启停，或改 `display_name` / `args` / `url` / `env`。改完会**断开旧连接**，下次运行重新连。
+
+`DELETE /api/mcp/servers/{id}`：移除并关连接。
+
+`POST /api/mcp/servers/{id}/test`：立即连一次、列一次工具、立刻关掉，返回 `{ "ok": true, "message": "连接成功，发现 2 个工具", "tools": [...], "duration_ms": 1240 }`，同时把 `last_status` / `tool_count` / `last_connected_time` 落库。
+
+失败语义：连不上不会让对话失败——`registry_for()` 只记 `last_status=error` 与 `last_error` 并跳过这台服务器，模型继续用剩下的工具回答。
+
 ## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages` / `agent_runs` / `agent_steps` / `agent_approvals`）
 
 ```
