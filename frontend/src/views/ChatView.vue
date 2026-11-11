@@ -179,6 +179,8 @@ onMounted(async () => {
 
 .chat__bubble--streaming {
   max-width: 100%;
+  /* 按内容收窄：三个点的占位才不会拉成一整条 */
+  width: fit-content;
   padding: 12px 16px;
   background: var(--ma-color-surface);
   border: 1px solid var(--ma-color-line);

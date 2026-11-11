@@ -297,6 +297,10 @@ await step('M-09 批准后时间线出现真实执行结果', async () => {
     { timeout: 90000 },
   )
   await page.waitForFunction(() => !document.querySelector('.approval'), { timeout: 30000 })
+  // 等流式结束，截图里才是完整的回答，而不是三个点
+  await page.waitForFunction(() => !document.querySelector('.chat__bubble--streaming'), {
+    timeout: 90000,
+  })
   await page.screenshot({ path: `${OUT}/mcp-03-approved.png` })
 })
 

@@ -40,6 +40,7 @@
 | 设置 · 工具治理 | `ui-13-tools-settings.png` |
 | 审批卡片（写工具挂起） | `ui-14-approval.png` |
 | 设置 · 工具市场（卡片网格 / 已接入态） | `ui-15-tool-market.png`、`ui-16-tool-market-installed.png` |
+| 对话 · MCP 工具审批（待确认 / 批准后时间线） | `ui-17-mcp-approval.png`、`ui-18-mcp-approved.png` |
 | 主题回归基线（浅 / 深 / 暖砂） | `theme-settings-light.png`、`theme-settings-dark.png`、`theme-settings-sand.png`、`theme-chat-dark.png` |
 | Agent 执行时间线 | `agent-timeline.png` |
 

@@ -225,6 +225,10 @@ cd frontend && pnpm acceptance:mcp     # 11 项，约 60 秒
 
 实测结果：11/11 通过；`ps` 里没有残留的 MCP 子进程（账号注销会走 `McpManager.forget_user()` 关掉该账号名下所有连接）。
 
+| 待审批 | 批准后 |
+|---|---|
+| ![MCP 工具挂起等确认](../docs/images/ui-17-mcp-approval.png) | ![批准后时间线](../docs/images/ui-18-mcp-approved.png) |
+
 ## 9. 明确不做
 
 - MCP 的 `resources` / `prompts` / `sampling` / `roots` / `elicitation`。
