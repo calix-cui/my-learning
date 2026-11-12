@@ -3,10 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
-import ThreadList from '@/components/chat/ThreadList.vue'
+import AsideView from '@/components/layout/AsideView.vue'
 import SettingsDialog from '@/components/settings/SettingsDialog.vue'
-import AppIcon from '@/components/ui/AppIcon.vue'
-import MyDropdownMenu, { type MenuItem } from '@/components/ui/MyDropdownMenu.vue'
 import MyMessageBox from '@/components/ui/MyMessageBox.vue'
 import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
@@ -68,20 +66,9 @@ async function handleLogout() {
   await router.replace({ name: 'login' })
 }
 
-const userMenuItems: MenuItem[] = [
-  { key: 'settings', label: '系统设置', icon: 'settings' },
-  { key: 'logout', label: '退出登录', icon: 'logout' },
-]
-
-async function handleUserCommand(command: string) {
-  if (command === 'logout') {
-    await handleLogout()
-    return
-  }
-  if (command === 'settings') {
-    settingsOpen.value = true
-    await router.replace({ path: '/chat', query: { settings: '1' } })
-  }
+async function openSettings() {
+  settingsOpen.value = true
+  await router.replace({ path: '/chat', query: { settings: '1' } })
 }
 </script>
 
@@ -90,37 +77,9 @@ async function handleUserCommand(command: string) {
 
   <router-view v-if="isAuthPage" />
 
-  <div v-else class="layout">
-    <aside class="layout__aside">
-      <div class="layout__brand">
-        <img class="layout__logo" src="/logo.png" alt="" width="28" height="28" />
-        <span class="layout__brand-text">My Agent</span>
-      </div>
-
-      <ThreadList class="layout__threads" />
-
-      <div class="layout__aside-footer">
-        <MyDropdownMenu :items="userMenuItems" align="start" @select="handleUserCommand">
-          <template #default="{ toggle }">
-            <div
-              class="layout__user-trigger u-tint"
-              role="button"
-              tabindex="0"
-              aria-label="账号菜单"
-              @click="toggle"
-              @keydown.enter.prevent="toggle"
-              @keydown.space.prevent="toggle"
-            >
-              <span class="layout__user-info">
-                <span class="layout__avatar">{{ session.avatarText }}</span>
-                <span class="layout__user-name">{{ session.displayName }}</span>
-              </span>
-              <AppIcon name="more" :size="16" class="layout__user-more" />
-            </div>
-          </template>
-        </MyDropdownMenu>
-      </div>
-    </aside>
+  <!-- 等路由与会话都就绪再挂外壳：未登录时挂出侧栏会先发一次 401 请求 -->
+  <div v-else-if="session.loaded && session.isLoggedIn" class="layout">
+    <AsideView @settings="openSettings" @logout="handleLogout" />
 
     <main class="layout__main">
       <div class="layout__content">
@@ -138,125 +97,6 @@ async function handleUserCommand(command: string) {
   height: 100vh;
   overflow: hidden;
   background: var(--ma-color-canvas);
-}
-
-.layout__aside {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  width: var(--ma-sidebar-width);
-  padding: 18px 14px 12px;
-  background: var(--ma-color-canvas);
-  border-right: 1px solid var(--ma-color-line);
-}
-
-.layout__brand {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 2px 10px 20px;
-}
-
-.layout__logo {
-  border-radius: 8px;
-}
-
-.layout__brand-text {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.layout__threads {
-  flex: 1;
-  min-height: 0;
-}
-
-.layout__aside-footer {
-  display: flex;
-  flex: none;
-  gap: 4px;
-  align-items: center;
-  padding-top: 8px;
-  margin-top: 8px;
-}
-
-.layout__user-trigger {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  padding: 8px 10px;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  background: none;
-  border: 0;
-  border-radius: var(--ma-radius-md);
-}
-
-.layout__user-trigger:focus-visible {
-  outline: 2px solid var(--ma-color-accent);
-  outline-offset: -2px;
-}
-
-.layout__avatar {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ma-color-accent);
-  background: var(--ma-color-accent-soft);
-  border-radius: 999px;
-}
-
-.layout__user-text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.4;
-}
-
-.layout__user-info {
-  display: flex;
-  flex: 1;
-  gap: 10px;
-  align-items: center;
-  min-width: 0;
-}
-
-.layout__user-name {
-  overflow: hidden;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.layout__user-mail {
-  overflow: hidden;
-  font-size: 12px;
-  color: var(--ma-color-faint);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.layout__user-arrow {
-  flex: none;
-  font-size: 12px;
-  color: var(--ma-color-faint);
-}
-
-.layout__settings-link {
-  flex: none;
-  color: var(--ma-color-muted);
 }
 
 .layout__main {
@@ -280,11 +120,5 @@ async function handleUserCommand(command: string) {
   width: 100%;
   max-width: var(--ma-content-width);
   margin: 0 auto;
-}
-
-@media (width < 960px) {
-  .layout__aside {
-    width: 220px;
-  }
 }
 </style>

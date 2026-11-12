@@ -179,6 +179,23 @@ describe('chat store：会话状态按会话隔离', () => {
   })
 })
 
+describe('chat store · 会话列表加载', () => {
+  it('侧栏和对话页同时要列表时只发一次请求', async () => {
+    const { listConversations } = await import('@/api/chat')
+    const chat = useChatStore()
+
+    await Promise.all([chat.ensureConversationsLoaded(), chat.ensureConversationsLoaded()])
+    await chat.ensureConversationsLoaded()
+
+    expect(vi.mocked(listConversations)).toHaveBeenCalledTimes(1)
+
+    // 登出后标记要清掉，再进应用才会重新拉
+    chat.reset()
+    await chat.ensureConversationsLoaded()
+    expect(vi.mocked(listConversations)).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('chat store · 工具审批', () => {
   it('写工具挂起后给出待审批卡片，批准后落最终答复', async () => {
     const chat = useChatStore()

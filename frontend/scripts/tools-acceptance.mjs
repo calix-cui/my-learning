@@ -74,7 +74,7 @@ const waitIdle = async (timeout = 120000) => {
 
 const openSettings = async () => {
   if (await page.$('.settings')) return
-  await page.click('.layout__user-trigger')
+  await page.click('.aside__user-trigger')
   await page.waitForSelector('.my-menu__item', { visible: true, timeout: 5000 })
   const clicked = await page.$$eval('.my-menu__item', (items) => {
     const target = items.find((item) => (item.textContent ?? '').includes('系统设置'))

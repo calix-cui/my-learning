@@ -141,7 +141,7 @@ try {
   )
 
   // 6. 退出登录 → 回登录页，且再访问 /chat 进不去
-  await page.click('.layout__user-trigger')
+  await page.click('.aside__user-trigger')
   await page.waitForSelector('.my-menu__item', { timeout: 5000 })
   await page.evaluate(() => {
     const items = [...document.querySelectorAll('.my-menu__item')]

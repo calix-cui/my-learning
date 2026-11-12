@@ -157,12 +157,13 @@ frontend/
 │   └── auth-acceptance.mjs    # 账号端到端验收（13 项：注册→刷新→退出→再登录）
 └── src/
     ├── main.ts                # 挂载 Element Plus（zh-cn）+ router
-    ├── App.vue                # 侧栏 + 对话区 + 设置悬浮窗（登录页不套外壳，没有顶栏）
+    ├── App.vue                # 外壳：左栏 + 对话区 + 设置悬浮窗（登录页不套外壳）
     ├── components/
+    │   ├── layout/            # AsideView（左栏：品牌 + 会话列表 + 账号区，挂载时拉一次会话列表）
     │   ├── ui/                # 通用组件库：AppIcon（内联 SVG）/ IconButton（圆形）/ SoftButton（阴影当边界）
     │   ├── chat/              # ThreadList / ThreadItem / ChatToolbar / ChatEmpty / ChatMessage / ChatComposer / AgentTimeline
     │   ├── theme/             # ThemeCard / ModeSwitch
-    │   └── settings/          # SettingsDialog（悬浮窗）+ Model/Account/Devices/Data/Appearance 五个面板
+    │   └── settings/          # SettingsDialog（悬浮窗）+ Model/Account/Devices/Data/Appearance/Tools/Market/Skills 面板
 
     ├── env.d.ts               # .vue 模块类型声明
     ├── router/index.ts        # 路由 + 登录守卫（未登录只能进 /login、/register）
@@ -175,6 +176,7 @@ frontend/
     ├── stores/
     │   ├── session.ts         # Pinia：登录态（user / loaded / 登录登出清除）
     │   ├── chat.ts            # Pinia：会话列表 + 当前会话 + 流式发送 + 深度回答（侧栏与对话页共用）
+    │   ├── settings.ts        # Pinia：模型标签、主题偏好
     │   └── theme.ts           # Pinia：主题（themeId / mode / 跟随系统 / 落盘）
     ├── theme/
     │   ├── types.ts           # 18 个语义色 schema + 静态 token 类型

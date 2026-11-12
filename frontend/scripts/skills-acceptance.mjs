@@ -77,7 +77,7 @@ const typeInto = async (selector, text) => {
 
 const openSettings = async () => {
   if (await page.$('.settings-window')) return
-  await page.click('.layout__user-trigger')
+  await page.click('.aside__user-trigger')
   await page.waitForSelector('.my-menu__item', { visible: true, timeout: 5000 })
   if (!(await clickByText('.my-menu__item', '系统设置')))
     throw new Error('用户菜单里没有「系统设置」')

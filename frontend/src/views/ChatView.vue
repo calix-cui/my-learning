@@ -117,9 +117,8 @@ watch(
 )
 
 onMounted(async () => {
-  if (!chat.conversations.length) {
-    await chat.loadConversations()
-  }
+  // 会话列表由侧栏负责加载（AsideView），这里只等它就绪：刷新页面时不重复请求
+  await chat.ensureConversationsLoaded()
   // 直接刷新页面时带回最后一个会话；没有就进草稿态（新会话界面）
   if (chat.activeId === null) {
     if (chat.conversations.length) await chat.openConversation(chat.conversations[0].id)

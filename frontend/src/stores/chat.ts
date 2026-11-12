@@ -182,6 +182,28 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 会话列表只拉一次。
+   *
+   * 侧栏和对话页都会在挂载时用到它，各自调用会造成两次请求；这里合并成同一个
+   * Promise，谁先到谁发请求，后来者等结果。登出时 `reset()` 把标记清掉。
+   */
+  let conversationsLoaded = false
+  let conversationsInFlight: Promise<void> | null = null
+
+  function ensureConversationsLoaded(): Promise<void> {
+    if (conversationsLoaded) return Promise.resolve()
+    if (conversationsInFlight) return conversationsInFlight
+    conversationsInFlight = loadConversations()
+      .then(() => {
+        conversationsLoaded = true
+      })
+      .finally(() => {
+        conversationsInFlight = null
+      })
+    return conversationsInFlight
+  }
+
   async function openConversation(id: number) {
     draft.value = false
     activeId.value = id
@@ -552,6 +574,8 @@ export const useChatStore = defineStore('chat', () => {
     threads.clear()
     activeId.value = null
     draft.value = false
+    conversationsLoaded = false
+    conversationsInFlight = null
   }
 
   return {
@@ -573,6 +597,7 @@ export const useChatStore = defineStore('chat', () => {
     modelLabel,
     isBusy,
     loadConversations,
+    ensureConversationsLoaded,
     openConversation,
     startNew,
     ensureConversation,

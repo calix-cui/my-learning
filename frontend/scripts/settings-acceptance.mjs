@@ -129,7 +129,7 @@ async function main() {
     buttons.find((button) => button.textContent?.trim() === '保存')?.click()
   })
   await page.waitForFunction(
-    () => document.querySelector('.layout__user-name')?.textContent?.includes('验收小张'),
+    () => document.querySelector('.aside__user-name')?.textContent?.includes('验收小张'),
     { timeout: 10000 },
   )
   record('显示名保存后侧栏同步', true)

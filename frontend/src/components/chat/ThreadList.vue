@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** 侧栏会话区：整宽「新建会话」+ 会话列表。 */
+import AppIcon from '@/components/ui/AppIcon.vue'
 import SoftButton from '@/components/ui/SoftButton.vue'
 import ThreadItem from '@/components/chat/ThreadItem.vue'
 import { useChatStore } from '@/stores/chat'
