@@ -3,6 +3,12 @@
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
 > 最近更新：2026-11-11 · 阶段 7 全部落地（MCP 工具市场 + 技能包） · 阶段 1–7 全部完成 · 文档与代码做过一次精简，`DESIGN.md` 重写为设计规范
 
+## 本轮接手核对（2026-11-13）
+
+已完成文档梳理与 CodeGraph SSE 静态追踪，基线 `d28d15a`，当前仍包含 Agent、MCP 和技能。交付见 [接手说明](PROJECT_HANDOFF.md)。本轮未复跑运行验收，以下历史阶段记录和测试数字待后续校准。下一步建议验证 SSE 断流与提交边界。
+
+已更新 [AGENTS.md](../AGENTS.md) 的工程目录入口和 CodeGraph 使用规则。用 CodeGraph MCP 验证了普通 SSE 的前端调用示例，文档变更通过 `git diff --check`。
+
 ## 1. 现在在哪
 
 **按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–7 已完成**（阶段 4.5「账号体系」作为前置补强也已落地）；阶段 7 的两半都交付了：**MCP**（官方 SDK 客户端与同步桥、内置市场清单、`mcp_servers` 表与迁移、连接池与 `mcp__<slug>__<tool>` 装配、6 个接口、工具市场页、审批链路联调、`acceptance:mcp` 11 项）和 **Skill**（`SKILL.md` 形状的技能包、3 个内置技能、`skills` 表与 `conversations.skill_slug`、system 消息注入与工具白名单收窄、5 个接口 + 挂载接口、设置页「技能」节与对话工具条胶囊、`acceptance:skills` 7 项）。

@@ -6,12 +6,34 @@
 
 本仓库的**长期目标**是 AI Agent 应用（见 §1），**当前实际交付**是 **My Agent 对话应用**：
 
-- 后端 `backend/`：FastAPI + SQLAlchemy 2.0 + MySQL + Alembic，账号 9 + 对话 7 + 设置 4 + Agent 2 个业务操作 + 3 个运维探针；模型层抽象为 `LLMClient`（`fake` 默认，可切 OpenAI 兼容服务），Agent 循环支持只读工具调用。
-- 前端 `frontend/`：Vue 3 + TS + Vite + Element Plus，只有对话页（`/chat`）。
+- 后端 `backend/`：FastAPI + SQLAlchemy 2.0 + MySQL + Alembic，提供账号、对话、设置、Agent、工具审批、MCP 和应用内技能接口。模型层抽象为 `LLMClient`，默认使用 `fake`，支持 OpenAI 兼容服务。
+- 前端 `frontend/`：Vue 3 + TypeScript + Vite + Element Plus + Pinia，包含登录、注册、对话和设置。对话页支持普通流式回复与「深度回答」。
 - 商品 / 分类 / 概览模块（前后端代码 + 需求/设计/验收文档）已于 2026-11-08 归档到 `archive/product-admin/`，**不参与构建、不要恢复进 `backend/` 或 `frontend/`**，除非用户明确要求。
-- **阶段口径以 [`docs/playbooks/05-development-plan-and-mvp-tasks.md`](docs/playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划为准**：阶段 1–5（AI 基建 / 前后端骨架 / 基础 API / LLM 接入与对话 / Agent 执行循环 + Tool Calling）已完成，下一个是阶段 6（工具生态与权限治理）；MCP 属阶段 7，桌面端属阶段 10。进度见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) §3.1。
+- 阶段定义以 [11 阶段计划](docs/playbooks/05-development-plan-and-mvp-tasks.md) 为准，交付进度见 [项目状态](docs/PROJECT_STATUS.md)。
 
 **据此行动**：除非任务明确要求做 Agent 能力，否则不要按「Agent 项目」预设立场写代码；不要动 `archive/` 里的归档代码。
+
+### 0.1 工程目录入口
+
+| 要了解的模块 | 优先定位的目录 |
+|---|---|
+| Web 页面、组件、状态与请求 | `frontend/src/views/`、`components/`、`stores/`、`api/`、`router/`（均在 `frontend/src/` 下） |
+| HTTP 接口、鉴权、业务与数据 | `backend/app/api/`、`auth/`、`schemas/`、`services/`、`models/`（均在 `backend/app/` 下） |
+| 模型、Agent、MCP 与应用内技能 | `backend/app/llm/`、`agent/`、`mcp/`、`skills/`（均在 `backend/app/` 下） |
+| 迁移、测试与验收 | `backend/migrations/`、`backend/tests/`、`frontend/src/` 下的 `*.test.ts`、`frontend/scripts/` |
+| 本地启动、部署与 CI | `scripts/`、`deploy/`、`docker-compose.yml`、`.github/workflows/` |
+| 项目文档、开发技能与归档 | `docs/`、`.agents/skills/`、`archive/` |
+
+### 0.2 优先使用 CodeGraph 分析代码
+
+<!-- CODEGRAPH_START -->
+仓库根目录存在 `.codegraph/` 时，理解代码、梳理目录职责、定位入口、追踪调用链或评估改动影响，先调用 CodeGraph，再按需搜索或读取文件。优先使用 MCP 的 `codegraph_explore`。工具若处于延迟加载状态，先按名称查找。MCP 不可用时用 `codegraph explore "<文件名、符号名或问题>"`。仓库没有索引时直接用 `rg`、`rg --files` 和文件读取，建立或重建索引由用户决定。
+<!-- CODEGRAPH_END -->
+
+- **梳理目录**。从上表选择相关入口文件，查询模块的主要符号、调用方和依赖，再沿结果定位实现、测试与相邻模块。核对完整目录清单、配置、迁移脚本或 Markdown 时，按需用文件列表和源码补足索引覆盖。
+- **追踪调用**。将入口、中间函数和目标函数放入同一次查询。跨前后端时，用请求方法与 URL 对齐客户端和服务端路由，再核对事件回调、数据库提交与界面更新。可从 `handleSend send sendMessageStream stream_message prepare_stream stream_reply` 开始追踪普通 SSE 对话。
+- **评估改动**。改公共接口或跨模块逻辑前，查询目标符号的调用方、下游依赖和相关测试，用结果确定改动与回归验证范围。实现后若调用关系发生变化，可用同一组符号复查。
+- **核对证据**。优先引用 CodeGraph 返回的当前源码及文件行号。索引过期、结果缺失或有多个候选时，缩小查询或只读相关源码补证。跨进程或运行时的连接可通过路由和事件契约核对，实际行为以运行验证为准。交付架构或调用链分析时，列出关键函数、文件位置和实际使用的 CodeGraph 工具。
 
 ## 1. 项目定位
 
@@ -218,7 +240,7 @@ Skill采用分层管理：全局、项目级、专项、外部工具
 每次开始任务之前：
 
 1. 阅读相关项目文档。
-2. 检查当前代码状态。
+2. 检查当前代码状态。涉及代码结构、目录职责、调用链或改动影响时，按 §0.2 优先使用 CodeGraph。
 3. 检查相关 Skill 和已有工具。
 4. 判断是否存在可复用实现。
 5. 明确本次任务边界。
