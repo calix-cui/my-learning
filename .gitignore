@@ -8,6 +8,7 @@
 secrets/
 .credentials/
 沉淀
+.codegraph
 
 # --- Python ---
 .venv/
