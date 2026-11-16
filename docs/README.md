@@ -18,7 +18,7 @@
 1. [`how-it-works.md`](how-it-works.md) —— 请求怎么走、为什么这样分层、数据长什么样（含 3 张图）
 2. [`toolchain.md`](toolchain.md) —— 每个工具解决什么问题、四条命令链路（含 3 张图）
 3. [`../README.md`](../README.md) 的「快速开始」，真的跑一遍
-4. `how-it-works.md` 第 6 节的「读代码顺序」，跟着走一遍
+4. [源码研读指南](code-reading-guide.md) —— 从登录和发送消息追到 Tool、Skill、审批与历史回放，每条链路附源码入口
 
 ### C. 要动手改功能：知道规矩在哪
 
