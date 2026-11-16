@@ -1,9 +1,32 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-11 · 阶段 7 全部落地（MCP 工具市场 + 技能包） · 阶段 1–7 全部完成 · 文档与代码做过一次精简，`DESIGN.md` 重写为设计规范
+> 最近更新：2026-11-16 · 阶段 1–4 自动化验证完成、本地迁移完成；真实模型验收受余额不足阻塞
 
-## 本轮接手核对（2026-11-13）
+## 本地交付核对（2026-11-16）
+
+- 本地 MySQL 已从 `a1b2c3d4e5f6` 升级到 `9d3e5f7a1b20`：审批指纹、Skill 快照两条迁移已应用，并补充第三条仅同步字段注释的迁移；`alembic check` 报告无漂移。未备份本地库，遵循此前用户指示。
+- 本机后端 `/healthz`、`/readyz` 和前端首页均返回 200；新建验收账号下 `/api/settings/model`、`/api/settings/appearance`、`/api/conversations` 均成功。
+- **真实模型验收未通过**：当前默认 DeepSeek 返回「模型服务余额不足」，自动模式在模型调用阶段产生 SSE error；手动/关闭场景未继续执行。临时账号及其运行记录已自动清理。新增可复用 `backend/scripts/skill_runtime_acceptance.py`，待可用模型凭据或余额恢复后重跑；不将模拟模型测试等同于真实模型验收。
+- 本轮按用户要求在 `codex/skill-tool-system` 整理本地提交：后端能力、前端交互、迁移与验收、架构与状态文档四部分。提交前复跑后端 333 项（覆盖率 92.20%）、前端 73 项测试，构建/类型检查/ESLint/Ruff 均通过；新增文件检查未发现密钥或环境配置文件。未推送远程。
+- 后续按「一个完整功能 + 对应测试」推进；每步交付后等待确认。下方 11-14 过程记录中的“迁移尚未应用”是历史状态，以本节为准。
+
+## 本轮接手核对（2026-11-14）
+
+- **本步完成：Skill 文本资源安全读取 + 对应测试**。新增 `app/skills/resources.py`，Provider/Registry 提供有限文本读取，Runtime 控制动作只读已加载技能清单；拒绝路径穿越、符号链接、管道、二进制和超限内容，首次读取固定快照，审批恢复及重复读取复用；同批普通工具延后重新规划。新增 `skill_resource` SSE/历史步骤与前端状态，会议纪要新增参考检查清单。后端全量 **333 passed / 92.20%**，前端 **73 passed**，构建/类型检查/ESLint、后端 Ruff 通过。本步新增后端 24 个用例，扩展前端 Store/组件用例；未新增依赖、表或迁移。限制：Windows 不支持当前安全读取方式时拒绝访问，自建数据库 Skill 无文件资源；未读资源以首次读取内容为准。下一功能建议完成本地数据库升级与实际 Skill 对话闭环验收，等待用户确认。
+
+- **本步完成：Skill 选择与执行过程的前端功能闭环**。修复切换会话时技能列表响应乱序；手动模式由后端读取挂载状态，避免列表请求失败误发 off；发送期间锁定模式与挂载入口，阻止重复发送。时间线显示可读来源，不显示内部版本哈希。新增页面与组件测试 4 项，前端总计 73 项通过，构建/类型检查/ESLint/格式检查通过；同步 DESIGN.md。验证基于组件 DOM 与模拟接口，未进行真实模型端到端或深浅主题浏览器视觉验收，本地数据库迁移仍待应用。下一功能建议完成 Skill 文本资源安全读取及对应测试（阶段 4），等待用户确认。
+
+- **本步完成：前端 Skill 数据链路验证**。通过 CodeGraph `codegraph_explore` 核对页面 → Store → SSE 请求和时间线映射；新增 4 项测试，覆盖 off/manual/auto 请求参数、逐字节 SSE 分片（含中文）、成功/失败事件会话隔离与历史步骤回放。前端 69 项测试、构建（含类型检查）、ESLint 通过；仅格式化 Store 调用，无业务行为调整。既有测试仍输出 localhost:3000 连接受限日志，构建仍有混合导入提示；不等同真实服务联调通过。本步未执行浏览器视觉/E2E 验收或数据库迁移。下一小步建议补页面交互与时间线组件验收，等待确认。
+
+- **最小步交付约定**：后续每步完成一个完整功能及对应测试，不把单独测试拆成一步；汇报后等待用户确认再进入下一功能，除非用户明确要求连续完成。
+- **本步完成：阶段 3 后端回归修正**。修复 Skill 加载失败时步骤计数晚于事务提交的问题，并增加下一轮模型调用前重读数据库的断言；修正自动加载测试，将 Runtime 加载控制动作与普通执行工具区分。执行器、Skill、Agent API、MCP Agent、Agent 模型共 64 项测试通过，改动文件 Ruff 检查和格式检查通过。本步未验收前端、未应用数据库迁移，阶段 3 整体验收仍未完成。下一小步建议核对前端模式传递与 Skill SSE 时间线并运行前端检查，等待用户确认。
+
+- Skill 与 Tool System 架构方案已获确认，按文档阶段计划执行。阶段 1 已完成执行安全边界，阶段 2 已完成 Skill Registry/Loader（内置文件与用户数据库两来源、元数据发现、按需正文加载）；阶段 3–4 的 Runtime/SSE/资源读取已实现并通过自动化验证，本地迁移与真实服务联调待验收。详见 [Skill 与 Tool 架构方案](agent-skill-tool-architecture.md)。
+
+- 已完成 Tools、MCP 工具市场和 Skill 的设计评估。44 项相关后端测试通过。后续优先处理 MCP 的接入权限与审批策略，并核对试连和实际运行的凭据传递。应用内 Skill 目前采用自定义格式和手动挂载。
+
+- 本地 MySQL 在本轮改造前已对齐到 `a1b2c3d4e5f6`；本轮新增的审批指纹迁移 `71c2a847d901` 与 Skill 快照迁移 `8c1a4d7e2f90` 尚未应用到数据库。当前只新增迁移文件，没有对本地库执行写操作；本地运行新代码前需完成迁移并验收。
 
 已完成文档梳理与 CodeGraph SSE 静态追踪，基线 `d28d15a`，当前仍包含 Agent、MCP 和技能。交付见 [接手说明](PROJECT_HANDOFF.md)。本轮未复跑运行验收，以下历史阶段记录和测试数字待后续校准。下一步建议验证 SSE 断流与提交边界。
 
@@ -11,7 +34,7 @@
 
 ## 1. 现在在哪
 
-**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–7 已完成**（阶段 4.5「账号体系」作为前置补强也已落地）；阶段 7 的两半都交付了：**MCP**（官方 SDK 客户端与同步桥、内置市场清单、`mcp_servers` 表与迁移、连接池与 `mcp__<slug>__<tool>` 装配、6 个接口、工具市场页、审批链路联调、`acceptance:mcp` 11 项）和 **Skill**（`SKILL.md` 形状的技能包、3 个内置技能、`skills` 表与 `conversations.skill_slug`、system 消息注入与工具白名单收窄、5 个接口 + 挂载接口、设置页「技能」节与对话工具条胶囊、`acceptance:skills` 7 项）。
+**按 [`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 的 11 阶段计划：阶段 1–7 的基础交付已完成**（阶段 4.5「账号体系」作为前置补强也已落地）。本轮在既有 Skill/MCP 交付上落实已确认的架构演进：安全阶段 1 与 Skill Registry/Loader 阶段 2 已完成，Runtime/SSE 阶段 3 与资源读取阶段 4 已通过代码和自动化验证，尚待本地迁移与联调。
 
 阶段口径只以该文件为准。此前本文件里出现的「阶段 2 = MCP client / Agent PoC / Electron 骨架」是我自行归纳的临时说法（源自 `archive/REUSE_CANDIDATES.md` 的「MCP 建议尽早」与 ADR-0001 的 Electron 结论），**与 11 阶段计划无对应关系，已废弃**，勿再引用。
 
@@ -31,6 +54,8 @@
 
 | 日期 | 交付 | 证据 |
 |---|---|---|
+| 11-14 | **Skill/Tool 架构演进阶段 1：执行安全边界**：审批决定原子写入，恢复时核对待执行步骤、工具定义指纹并重新检查 Policy；MCP 工具 Schema 做本地检查，忽略远端只读提示的授权效力；运行与试连共用解密凭据解析；未知状态超时终止后续循环。针对性测试 40 项通过；迁移尚未应用到本地库 | [Skill 与 Tool 架构方案](agent-skill-tool-architecture.md) §12；`backend/tests/test_agent_executor.py`、`test_agent_policy.py`、`test_mcp_source.py` |
+| 11-14 | **Skill/Tool 架构演进阶段 2：Skill Registry/Loader**：以请求级 Registry 聚合内置文件与用户数据库 Provider，发现只返回元数据，按稳定 key 加载正文；内置优先、来源隔离、坏文件隔离和内容版本校验。24 项 Skill 测试通过 | [Skill 与 Tool 架构方案](agent-skill-tool-architecture.md) §12；`backend/app/skills/`、`backend/tests/test_skills.py` |
 | 11-11 | **阶段 7：技能包（T1–T6）**：`app/skills/`（`SKILL.md` frontmatter 解析 + 3 个内置技能）、`skills` 表与迁移 `a1b2c3d4e5f6`、`conversations.skill_slug`、`build_system_prompt()` 注入 + `ToolRegistry.only()` 收窄、5 个接口 + `PUT /api/conversations/{id}/skill`、设置页「技能」节与工具条技能胶囊、`acceptance:skills` 7 项；后端 296 例 / 93.36% | [skills.md](skills.md)、[ADR-0013](adr/0013-skills-as-method-packages.md)、[api.md](api.md) §6.6；截图 `docs/images/ui-19-skills.png`、`ui-20-skill-mounted.png` |
 | 11-11 | **阶段 7：MCP 客户端与工具市场（T1–T7）**：官方 `mcp==2.3.0` + 线程内监督协程的同步门面、`mcp_servers` 表与迁移 `4f9edca19113`、内置 7 条市场清单、连接池与 `mcp__<slug>__<tool>` 装配（`EXTERNAL` 一律审批）、6 个接口、工具市场页（筛选 / 自定义接入 / 试连 / 启停 / 移除 / 工具清单）、`acceptance:mcp` 11 项、`mcp__*` 审批联调 3 例；后端 274 例 / 93.21%，前端 64 例 | [mcp.md](mcp.md)、[ADR-0012](adr/0012-mcp-client-uses-official-sdk.md)、[api.md](api.md) §6.5；截图 `docs/images/ui-15-tool-market.png`、`ui-16-tool-market-installed.png` |
 | 11-11 | **文档与代码精简**：删掉 3 份过程报告、`docs/setting design.md`、`docs/plan/TASKS.md`（共 976 行）；`TECHNICAL_DEBT.md` 只留当前未解决的 10 条；清空开发库 112 个演示账号（新增 `backend/scripts/cleanup_demo_accounts.py` + `make clean-demo`）；`:root` 兜底 token 与 `theme/pine.ts` 对齐 | [docs/README.md](README.md) §5 维护规则、[DESIGN.md](../DESIGN.md)、[TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) |
@@ -69,7 +94,7 @@
 | 4.5 | 账号体系（补强） | ✅ | [auth.md](auth.md)：users/sessions 两表 + Argon2id + 服务端会话 + 用户级数据隔离 + 登录页/守卫 |
 | 5 | **Agent 基础执行循环 + Tool Calling** | ✅ | [agent.md](agent.md) + [ADR-0010](adr/0010-agent-execution-loop.md)：T1 原生工具调用 / T2 两表 / T3 工具层 / T4 执行器 / T5 流式接口 / T6 前端时间线 / T7 文档与 E2E；后端 204 例 / 93.22%，Agent E2E 10 项 |
 | 6 | **工具生态与权限治理** | ✅ | [tools.md](tools.md) + [ADR-0011](adr/0011-tool-permissions-and-approvals.md)：注册表（`ToolSource`）、三级权限、审批暂停/恢复、工具设置与统计接口、前端审批卡片与「工具」节；后端 230 例 / 93.37%，前端 64 例，`acceptance:tools` 9 项 |
-| 7 | Skill 和 MCP | ⬜ | 依赖 6；MCP client 在此阶段做（不自造协议，用官方 SDK） |
+| 7 | Skill 和 MCP | ✅（基础交付）/ 演进实施中 | MCP 工具市场与 Skill 包已交付；当前按 [Skill 与 Tool 架构方案](agent-skill-tool-architecture.md) 补齐渐进式加载和运行边界 |
 | 8 | RAG 和 Memory | ⬜ | 依赖 7 |
 | 9 | Agent 应用功能完善 | ⬜ | 依赖 8 |
 | 10 | 桌面端集成 | ⬜ | 按 [ADR-0001](adr/0001-desktop-shell-electron.md)（Electron + PyInstaller onedir） |

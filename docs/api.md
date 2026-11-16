@@ -355,6 +355,7 @@ curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: applic
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `content` | string | 用户消息，1–4000 字，纯空白 400 |
+| `skill_mode` | `off` / `manual` / `auto` | 默认 manual：读取当前会话挂载；off：禁用 Skill；auto：挂载优先，允许模型按需加载目录中的其他 Skill |
 
 开流前就会拦下的错误（仍是普通 JSON，不是事件流）：
 
@@ -370,6 +371,9 @@ curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: applic
 | type | 负载 | 含义 |
 |---|---|---|
 | `run_started` | `run_id`、`conversation_id` | 运行开始 |
+| `skill_loaded` | `seq`、`skill_key`、`name`、`source`、`version` | 指引已加载 |
+| `skill_load_failed` | `seq`、`skill_key`、`error_code`、`message` | 加载失败，可继续回答 |
+| `skill_resource` | `seq`、`skill_key`、`name`（可空）、`path`、`ok`、`message` | 参考资料读取结果；不推送正文 |
 | `assistant_text` | `seq`、`content` | 模型「说完这句要调工具」的中间话 |
 | `tool_call` | `seq`、`tool`、`args` | 要调哪个工具、参数是什么 |
 | `tool_result` | `seq`、`tool`、`ok`、`content`、`duration_ms` | 工具执行结果；失败也是 `ok:false` 的这一步 |
@@ -642,3 +646,10 @@ skills
 - 自检：`cd backend && make check`；`cd frontend && pnpm lint && pnpm test && pnpm build`。
 - 端到端（需前后端在跑）：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:agent`（深度回答与工具时间线）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录）、`pnpm acceptance:settings`（模型设置→测试连接→改显示名→导出→注销）、`pnpm acceptance:tools`（工具启停→审批拒绝→审批批准→刷新复原）、`pnpm acceptance:mcp`（市场接入→试连→审批整链路）、`pnpm acceptance:skills`（内置只读→自建→挂载→删除回落）。
 - 第一个管理员：`cd backend && ADMIN_EMAIL=... ADMIN_PASSWORD='至少8位' uv run python -m app.create_admin`（存在则重置密码并升权）。
+
+
+### Skill 运行记录补充（2026-11-14）
+
+`GET /api/conversations/{id}/agent/runs` 的步骤增加可空 `skill_key`、`skill_name`、`skill_source`、`skill_version`；`kind` 支持 `skill_loaded`、`skill_load_failed`、`skill_resource`。资源步骤用 `ok` 表示结果、`tool_args.path` 保存相对路径、`content` 保存可读摘要。资源正文只保存于运行快照并进入模型上下文，不在 SSE 或运行列表中返回。
+
+模型通过 Runtime 控制动作 `__runtime_read_skill_resource({skill_key,path})` 请求读取；它不是业务 Tool 或独立 HTTP API。仅接受本次已加载 Skill 清单中的资源。与普通工具同批请求时，普通工具返回未执行，待模型读取指引后重新规划；原工具权限和审批策略不变。

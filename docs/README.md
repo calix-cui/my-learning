@@ -48,6 +48,7 @@
 | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | 所有人 | 现在完成到哪、下一步做什么、有哪些已知问题 | 每次开工前 |
 | [`api.md`](api.md) | 前后端 | 接口契约：对话 7 个操作 + 3 个运维路径（参数/响应/错误文案） | 调接口、改接口 |
 | [`agent.md`](agent.md) | 前后端 | **Agent 执行循环设计**：主流架构调研、步数与预算护栏、工具层、SSE 事件、任务拆分 | 要做工具调用、改执行流程时 |
+| [`agent-skill-tool-architecture.md`](agent-skill-tool-architecture.md) | 前后端 | **Skill 与 Tool System 架构方案（待确认）**：当前 Runtime 评估、渐进式 Skill 加载、工具授权边界、SSE 与持久化 | 评审下一阶段 Skill/Tool 架构时 |
 | [`tools.md`](tools.md) | 前后端 | **工具生态与权限治理设计**：分级、人工审批四态、可观测性、MCP 适配层 | 要加工具、改权限或做审批时 |
 | [`skills.md`](skills.md) | 阶段 7 下半：技能包（SKILL.md 形状、注入方式、工具白名单、内置 3 个） |
 | [`mcp.md`](mcp.md) | 前后端 | **阶段 7 设计：MCP 接入与「工具市场」**：传输、连接管理、`mcp__{server}__{tool}` 命名、EXTERNAL 一律审批、DESIGN §5 覆盖检验 | 要接 MCP server 或改工具市场页时 |
