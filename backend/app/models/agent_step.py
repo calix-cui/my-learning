@@ -19,6 +19,8 @@ STEP_USER_MESSAGE = "user_message"
 STEP_ASSISTANT_TEXT = "assistant_text"
 STEP_TOOL_CALL = "tool_call"
 STEP_TOOL_RESULT = "tool_result"
+STEP_SKILL_LOADED = "skill_loaded"
+STEP_SKILL_LOAD_FAILED = "skill_load_failed"
 STEP_FINAL_ANSWER = "final_answer"
 
 STEP_KINDS = (
@@ -26,7 +28,10 @@ STEP_KINDS = (
     STEP_ASSISTANT_TEXT,
     STEP_TOOL_CALL,
     STEP_TOOL_RESULT,
+    STEP_SKILL_LOADED,
+    STEP_SKILL_LOAD_FAILED,
     STEP_FINAL_ANSWER,
+    "skill_resource",
 )
 
 
@@ -49,10 +54,20 @@ class AgentStep(Base):
     kind: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
-        comment="user_message/assistant_text/tool_call/tool_result/final_answer",
+        comment="user_message/assistant_text/tool_call/tool_result/skill events/final_answer",
     )
     content: Mapped[str | None] = mapped_column(Text, nullable=True, comment="文本或工具结果摘要")
     tool_name: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="工具名")
+    skill_key: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, comment="Skill 稳定标识"
+    )
+    skill_name: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="Skill 名称")
+    skill_source: Mapped[str | None] = mapped_column(
+        String(24), nullable=True, comment="Skill 来源"
+    )
+    skill_version: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="Skill 版本"
+    )
     tool_args: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True, comment="已校验的工具参数"
     )

@@ -86,7 +86,13 @@ class ToolPolicy:
     approvals_used: int = 0
     rejects_by_tool: dict[str, int] = field(default_factory=dict)
 
-    def check(self, name: str, arguments: dict[str, Any] | None) -> Decision:
+    def check(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None,
+        *,
+        approval_granted: bool = False,
+    ) -> Decision:
         meta = self.registry.meta(name)
         if meta is None:
             return Decision("deny", f"没有名为 {name} 的工具")
@@ -99,7 +105,7 @@ class ToolPolicy:
         if violated is not None:
             return Decision("deny", violated)
 
-        if meta.requires_approval:
+        if meta.requires_approval and not approval_granted:
             if self.approvals_used >= MAX_APPROVALS_PER_RUN:
                 return Decision(
                     "deny",

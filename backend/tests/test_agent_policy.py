@@ -51,6 +51,19 @@ def test_write_and_external_tools_need_approval():
     assert policy.check("fetch", {}).needs_approval
 
 
+def test_granted_approval_skips_only_the_second_approval_gate():
+    registry = _registry(_StubTool("rename", ToolLevel.WRITE))
+    policy = ToolPolicy(registry, approvals_used=MAX_APPROVALS_PER_RUN)
+
+    assert policy.check("rename", {}, approval_granted=True).allowed
+
+    disabled = ToolPolicy(registry, disabled=frozenset({"rename"}))
+    assert disabled.check("rename", {}, approval_granted=True).action == "deny"
+
+    over_budget = ToolPolicy(registry, daily_budget=1, daily_used=1)
+    assert over_budget.check("rename", {}, approval_granted=True).action == "deny"
+
+
 def test_disabled_tool_is_denied_not_approved():
     policy = ToolPolicy(
         _registry(_StubTool("rename", ToolLevel.WRITE), disabled=("rename",)),

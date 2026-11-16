@@ -44,7 +44,7 @@ approvals_router = APIRouter(prefix="/agent", tags=["Agent 审批"])
     description=(
         "跑一次「模型 → 工具 → 模型」循环，以 SSE 逐步返回过程与最终答复。"
         "事件类型：run_started / assistant_text / tool_call / tool_result / "
-        "approval_required / run_finished / error。"
+        "skill_loaded / skill_load_failed / approval_required / run_finished / error。"
         "需要审批时流会在 approval_required 之后结束，决定后调用审批接口接着往下跑。"
     ),
     response_class=StreamingResponse,
@@ -59,9 +59,13 @@ def stream_agent_run(
 ):
     # 先同步做校验与落库：404/400/409 仍是普通 JSON，只有真正开始循环后才进 SSE
     conversation, run, messages, is_first = prepare_run(
-        db, user_id=user.id, conversation_id=conversation_id, content=payload.content
+        db,
+        user_id=user.id,
+        conversation_id=conversation_id,
+        content=payload.content,
+        skill_mode=payload.skill_mode,
     )
-    registry = registry_for(db, user.id, conversation.id)
+    registry = registry_for(db, user.id, conversation.id, skill_mode=payload.skill_mode)
     events = stream_run(
         db,
         run=run,
@@ -149,7 +153,8 @@ def decide(
         approved=payload.decision == "approve",
         note=payload.note,
     )
-    registry = registry_for(db, user.id, run.conversation_id)
+    # The run snapshot, not the conversation's current mount, determines its Skill limits.
+    registry = registry_for(db, user.id, run.conversation_id, skill_mode="off")
     events = resume_run(
         db,
         run=run,

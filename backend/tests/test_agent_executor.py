@@ -3,6 +3,7 @@
 全部用 FakeLLM 的剧本驱动，不联网；`db_session` 是内存 SQLite。
 """
 
+import json
 from collections.abc import Iterator
 from typing import Any
 
@@ -12,9 +13,11 @@ from sqlalchemy.orm import Session
 
 from app.agent.executor import (
     MAX_STEPS,
+    SKILL_LOAD_TOOL_NAME,
     build_policy,
     decide_approval,
     prepare_run,
+    registry_for,
     resume_run,
     stream_run,
 )
@@ -26,6 +29,7 @@ from app.common.exceptions import BusinessError
 from app.llm.base import ToolCallReply
 from app.llm.fake import FakeLLM, final_reply, tool_reply
 from app.models import AgentApproval, AgentRun, AgentStep, Conversation, Message
+from app.services import skill_service
 
 
 def _setup(db: Session, email: str = "exec@example.com", title: str = "测试"):
@@ -270,6 +274,44 @@ def test_llm_failure_marks_run_failed(db_session: Session):
     assert roles == ["user"]
 
 
+def test_uncertain_tool_timeout_stops_the_run(db_session: Session, monkeypatch):
+    import app.agent.executor as executor
+
+    user, conversation = _setup(db_session, email="exec-timeout@example.com")
+    llm = FakeLLM(tool_script=[tool_reply("now", {})])
+    _, run, messages, is_first = prepare_run(
+        db_session, user_id=user.id, conversation_id=conversation.id, content="现在几点"
+    )
+    monkeypatch.setattr(
+        executor,
+        "_execute",
+        lambda *_args, **_kwargs: {
+            "ok": False,
+            "content": "工具执行超时；执行仍可能在后台继续，状态未知",
+            "duration_ms": 2000,
+            "args": None,
+            "error": "timeout_uncertain",
+        },
+    )
+
+    events = _drain(
+        stream_run(
+            db_session,
+            run=run,
+            conversation=conversation,
+            messages=messages,
+            llm=llm,
+            is_first_message=is_first,
+            user_id=user.id,
+        )
+    )
+
+    assert _types(events) == ["run_started", "tool_call", "tool_result", "error"]
+    assert events[-1]["code"] == 504
+    db_session.expire_all()
+    assert db_session.get(AgentRun, run.id).status == "failed"
+
+
 def test_missing_conversation_and_empty_content(db_session: Session):
     user, _ = _setup(db_session, email="exec-guard@example.com")
     # 不存在或不属于当前用户的会话一律 404
@@ -383,6 +425,41 @@ def test_approve_resumes_run_and_runs_the_tool(db_session: Session):
     assert "新名字" in results
 
 
+def test_approval_is_rejected_if_tool_definition_changes(db_session: Session):
+    user, conversation, _, run, _ = _suspend(db_session, "changed-tool@example.com")
+    approval = db_session.query(AgentApproval).filter_by(run_id=run.id).one()
+    run, approval = decide_approval(
+        db_session,
+        user_id=user.id,
+        run_id=run.id,
+        approval_id=approval.id,
+        approved=True,
+        note=None,
+    )
+    changed_tool = _RenameTool()
+    changed_tool.description = "定义已变化"
+    changed_registry = ToolRegistry([changed_tool])
+
+    events = _drain(
+        resume_run(
+            db_session,
+            run=run,
+            approval=approval,
+            llm=FakeLLM(),
+            user_id=user.id,
+            registry=changed_registry,
+            policy=ToolPolicy(registry=changed_registry),
+        )
+    )
+
+    assert events == [
+        {"type": "error", "code": 409, "message": "工具定义在审批后发生变化，请重新发起任务"}
+    ]
+    assert db_session.query(AgentStep).filter_by(run_id=run.id, kind="tool_result").count() == 0
+    db_session.expire_all()
+    assert db_session.get(AgentRun, run.id).status == "failed"
+
+
 def test_reject_feeds_refusal_back_to_the_model(db_session: Session):
     user, conversation, registry, run, _ = _suspend(db_session, "reject@example.com")
     approval = db_session.query(AgentApproval).filter_by(run_id=run.id).one()
@@ -451,3 +528,411 @@ def test_disabled_setting_hides_the_tool_from_the_registry(db_session: Session):
     registry = registry_for(db_session, user.id)
     assert "calculator" not in registry.enabled_names()
     assert registry.execute("calculator", '{"expression": "1+1"}', user_id=user.id)["ok"] is False
+
+
+def test_auto_skill_is_discovered_as_metadata_then_loaded_on_request(db_session: Session):
+    user, conversation = _setup(db_session, "auto-skill@example.com")
+    skill_service.create_skill(
+        db_session,
+        user.id,
+        slug="auto-guide",
+        name="自动指引",
+        description="只在需要时读取的流程说明。",
+        instructions="AUTO_GUIDE_PRIVATE_INSTRUCTIONS",
+        tools=["now"],
+    )
+    descriptor = next(
+        item
+        for item in skill_service.registry_for(db_session, user.id).discover()
+        if item.slug == "auto-guide"
+    )
+    _, run, messages, is_first = prepare_run(
+        db_session,
+        user_id=user.id,
+        conversation_id=conversation.id,
+        content="按自动指引处理",
+        skill_mode="auto",
+    )
+
+    class Recorder(FakeLLM):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.messages_seen = []
+            self.tool_names_seen = []
+
+        def chat_with_tools(self, messages, tools, **kwargs):
+            self.messages_seen.append(list(messages))
+            self.tool_names_seen.append([item["name"] for item in tools])
+            return super().chat_with_tools(messages, tools, **kwargs)
+
+    llm = Recorder(
+        tool_script=[
+            tool_reply(SKILL_LOAD_TOOL_NAME, {"skill_key": descriptor.key}),
+            final_reply("已按指引完成"),
+        ]
+    )
+    events = _drain(
+        stream_run(
+            db_session,
+            run=run,
+            conversation=conversation,
+            messages=messages,
+            llm=llm,
+            is_first_message=True,
+            user_id=user.id,
+            registry=registry_for(db_session, user.id, conversation.id, skill_mode="auto"),
+        )
+    )
+
+    assert _types(events) == ["run_started", "skill_loaded", "run_finished"]
+    assert events[1]["skill_key"] == descriptor.key
+    assert SKILL_LOAD_TOOL_NAME in llm.tool_names_seen[0]
+    assert [name for name in llm.tool_names_seen[1] if name != SKILL_LOAD_TOOL_NAME] == ["now"]
+    # 其他 Skill 仍可发现；加载控制动作不属于被白名单收窄的执行工具。
+    assert SKILL_LOAD_TOOL_NAME in llm.tool_names_seen[1]
+    assert descriptor.description in llm.messages_seen[0][0]["content"]
+    assert "AUTO_GUIDE_PRIVATE_INSTRUCTIONS" not in llm.messages_seen[0][0]["content"]
+    assert "AUTO_GUIDE_PRIVATE_INSTRUCTIONS" in llm.messages_seen[1][0]["content"]
+    db_session.refresh(run)
+    assert run.skill_snapshot["loaded"][0]["instructions"] == "AUTO_GUIDE_PRIVATE_INSTRUCTIONS"
+    loaded_step = db_session.query(AgentStep).filter_by(run_id=run.id, kind="skill_loaded").one()
+    assert loaded_step.skill_key == descriptor.key
+    assert loaded_step.skill_name == "自动指引"
+
+
+def test_auto_skill_load_failure_is_reported_and_model_can_continue(db_session: Session):
+    user, conversation = _setup(db_session, "auto-skill-failure@example.com")
+    _, run, messages, is_first = prepare_run(
+        db_session,
+        user_id=user.id,
+        conversation_id=conversation.id,
+        content="尝试加载技能",
+        skill_mode="auto",
+    )
+    llm = FakeLLM(
+        tool_script=[
+            tool_reply(SKILL_LOAD_TOOL_NAME, {"skill_key": "builtin:does-not-exist"}),
+            final_reply("我会直接回答"),
+        ]
+    )
+
+    stream = stream_run(
+        db_session,
+        run=run,
+        conversation=conversation,
+        messages=messages,
+        llm=llm,
+        is_first_message=True,
+        user_id=user.id,
+        registry=registry_for(db_session, user.id, conversation.id, skill_mode="auto"),
+    )
+    assert next(stream)["type"] == "run_started"
+    failed = next(stream)
+    assert failed["type"] == "skill_load_failed"
+    # 在下一轮模型执行前从数据库重读，避免后续提交掩盖计数未持久化。
+    db_session.refresh(run)
+    assert run.step_count == failed["seq"]
+    events = _drain(stream)
+    assert failed["error_code"] == "unknown_skill"
+    assert events[-1]["type"] == "run_finished"
+    step = db_session.query(AgentStep).filter_by(run_id=run.id, kind="skill_load_failed").one()
+    assert step.skill_key == "builtin:does-not-exist"
+
+
+def test_off_mode_ignores_mounted_skill_and_does_not_expose_skill_control(db_session: Session):
+    user, conversation = _setup(db_session, "off-skill@example.com")
+    skill_service.mount_skill(db_session, user.id, conversation.id, "meeting-notes")
+    _, run, messages, is_first = prepare_run(
+        db_session,
+        user_id=user.id,
+        conversation_id=conversation.id,
+        content="普通深度回答",
+        skill_mode="off",
+    )
+
+    class Recorder(FakeLLM):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.messages_seen = []
+            self.tool_names_seen = []
+
+        def chat_with_tools(self, messages, tools, **kwargs):
+            self.messages_seen.append(list(messages))
+            self.tool_names_seen.append([item["name"] for item in tools])
+            return super().chat_with_tools(messages, tools, **kwargs)
+
+    llm = Recorder(tool_script=[final_reply("已回答")])
+    events = _drain(
+        stream_run(
+            db_session,
+            run=run,
+            conversation=conversation,
+            messages=messages,
+            llm=llm,
+            is_first_message=True,
+            user_id=user.id,
+            registry=registry_for(db_session, user.id, conversation.id, skill_mode="off"),
+        )
+    )
+
+    assert _types(events) == ["run_started", "run_finished"]
+    assert all(item["role"] != "system" for item in llm.messages_seen[0])
+    assert SKILL_LOAD_TOOL_NAME not in llm.tool_names_seen[0]
+    assert run.skill_snapshot == {"catalog": [], "loaded": []}
+
+
+def test_loaded_skill_snapshot_is_replayed_after_approval(db_session: Session):
+    user, conversation = _setup(db_session, "skill-approval-resume@example.com")
+    skill = skill_service.create_skill(
+        db_session,
+        user.id,
+        slug="approval-guide",
+        name="审批指引",
+        description="用于审批恢复测试。",
+        instructions="ORIGINAL_SKILL_SNAPSHOT",
+        tools=[],
+    )
+    descriptor = next(
+        item
+        for item in skill_service.registry_for(db_session, user.id).discover()
+        if item.slug == "approval-guide"
+    )
+    registry = registry_for(db_session, user.id, conversation.id, skill_mode="auto")
+    _, run, messages, is_first = prepare_run(
+        db_session,
+        user_id=user.id,
+        conversation_id=conversation.id,
+        content="读取技能并改名",
+        skill_mode="auto",
+    )
+    llm = FakeLLM(
+        tool_script=[
+            tool_reply(SKILL_LOAD_TOOL_NAME, {"skill_key": descriptor.key}),
+            tool_reply("rename_conversation", {"title": "审批后改名"}),
+            final_reply("已完成"),
+        ]
+    )
+    initial_events = _drain(
+        stream_run(
+            db_session,
+            run=run,
+            conversation=conversation,
+            messages=messages,
+            llm=llm,
+            is_first_message=True,
+            user_id=user.id,
+            registry=registry,
+            policy=ToolPolicy(registry=registry),
+        )
+    )
+    assert initial_events[-1]["type"] == "approval_required"
+    approval = db_session.query(AgentApproval).filter_by(run_id=run.id).one()
+
+    skill_service.update_skill(
+        db_session, user.id, skill.skill_id, instructions="UPDATED_SKILL_CONTENT"
+    )
+    run, approval = decide_approval(
+        db_session,
+        user_id=user.id,
+        run_id=run.id,
+        approval_id=approval.id,
+        approved=True,
+        note=None,
+    )
+    base_registry = registry_for(db_session, user.id, conversation.id, skill_mode="off")
+    resumed_events = _drain(
+        resume_run(
+            db_session,
+            run=run,
+            approval=approval,
+            llm=llm,
+            user_id=user.id,
+            registry=base_registry,
+            policy=build_policy(db_session, user_id=user.id, registry=base_registry, run=run),
+        )
+    )
+
+    assert _types(resumed_events) == ["tool_result", "run_finished"]
+    resumed_messages = llm.tool_calls_seen[-1]
+    system = next(item for item in resumed_messages if item["role"] == "system")
+    assert "ORIGINAL_SKILL_SNAPSHOT" in system["content"]
+    assert "UPDATED_SKILL_CONTENT" not in system["content"]
+    assert any(
+        call["function"]["name"] == SKILL_LOAD_TOOL_NAME
+        for item in resumed_messages
+        if item.get("role") == "assistant"
+        for call in item.get("tool_calls", [])
+    )
+
+
+def test_skill_resources_survive_approval_and_do_not_reread_files(
+    db_session, tmp_path, monkeypatch
+):
+    from app.agent.executor import SKILL_RESOURCE_TOOL_NAME
+    from app.skills.providers.filesystem import FileSystemSkillProvider
+    from app.skills.registry import SkillRegistry
+
+    root = tmp_path.resolve() / "skills"
+    package = root / "resource-guide"
+    (package / "references").mkdir(parents=True)
+    (package / "SKILL.md").write_text(
+        "---\nname: Resource Guide\ndescription: Guide with references\n---\nRead the reference.",
+        encoding="utf-8",
+    )
+    reference = package / "references" / "guide.md"
+    reference.write_text("ORIGINAL_RESOURCE_CONTENT", encoding="utf-8")
+    monkeypatch.setattr(
+        skill_service, "registry_for", lambda *_: SkillRegistry([FileSystemSkillProvider(root)])
+    )
+    user, conversation = _setup(db_session, "resources@example.com")
+    _, run, messages, _ = prepare_run(
+        db_session,
+        user_id=user.id,
+        conversation_id=conversation.id,
+        content="读取资料并改名",
+        skill_mode="auto",
+    )
+    args = {"skill_key": "builtin:resource-guide", "path": "references/guide.md"}
+    resource_call = tool_reply(SKILL_RESOURCE_TOOL_NAME, args)
+    resource_call["tool_calls"].extend(
+        tool_reply("rename_conversation", {"title": "不应执行"}, call_id="deferred")["tool_calls"]
+    )
+    llm = FakeLLM(
+        tool_script=[
+            tool_reply(SKILL_LOAD_TOOL_NAME, {"skill_key": args["skill_key"]}),
+            resource_call,
+            tool_reply("rename_conversation", {"title": "新标题"}),
+            tool_reply(SKILL_RESOURCE_TOOL_NAME, args),
+            final_reply("完成"),
+        ]
+    )
+    registry = registry_for(db_session, user.id, conversation.id, skill_mode="off")
+    initial = list(
+        stream_run(
+            db_session,
+            run=run,
+            conversation=conversation,
+            messages=messages,
+            llm=llm,
+            is_first_message=True,
+            user_id=user.id,
+            registry=registry,
+            policy=ToolPolicy(registry=registry),
+        )
+    )
+    assert initial[-1]["type"] == "approval_required"
+    resource_event = next(event for event in initial if event["type"] == "skill_resource")
+    assert resource_event["ok"] is True
+    assert conversation.title != "不应执行"
+    assert any(event["type"] == "tool_result" and event["ok"] is False for event in initial)
+    assert "ORIGINAL_RESOURCE_CONTENT" not in str(resource_event)
+    assert "ORIGINAL_RESOURCE_CONTENT" not in llm.tool_calls_seen[0][0]["content"]
+    assert "ORIGINAL_RESOURCE_CONTENT" in llm.tool_calls_seen[2][0]["content"]
+    reference.write_text("CHANGED_RESOURCE_CONTENT", encoding="utf-8")
+    approval = db_session.query(AgentApproval).filter_by(run_id=run.id).one()
+    run, approval = decide_approval(
+        db_session,
+        user_id=user.id,
+        run_id=run.id,
+        approval_id=approval.id,
+        approved=True,
+        note=None,
+    )
+    resumed = list(
+        resume_run(
+            db_session,
+            run=run,
+            approval=approval,
+            llm=llm,
+            user_id=user.id,
+            registry=registry,
+            policy=ToolPolicy(registry=registry),
+        )
+    )
+    assert resumed[-1]["type"] == "run_finished"
+    assert next(event for event in resumed if event["type"] == "skill_resource")["ok"] is True
+    system = llm.tool_calls_seen[-1][0]["content"]
+    assert "ORIGINAL_RESOURCE_CONTENT" in system
+    assert "CHANGED_RESOURCE_CONTENT" not in system
+    db_session.refresh(run)
+    assert run.skill_snapshot["loaded"][0]["resource_contents"] == {
+        args["path"]: "ORIGINAL_RESOURCE_CONTENT"
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        '{"skill_key":"builtin:missing","path":"references/guide.md"}',
+        '{"skill_key":42,"path":"references/guide.md"}',
+        '{"skill_key":"x","path":"references/guide.md","extra":true}',
+        "[]",
+    ],
+)
+def test_resource_requests_without_loaded_skill_fail_without_tool_execution(db_session, arguments):
+    from app.agent.executor import SKILL_RESOURCE_TOOL_NAME
+
+    user, conversation = _setup(db_session)
+    _, run, messages, _ = prepare_run(
+        db_session,
+        user_id=user.id,
+        conversation_id=conversation.id,
+        content="读资源",
+        skill_mode="off",
+    )
+    reply = tool_reply(SKILL_RESOURCE_TOOL_NAME, {})
+    reply["tool_calls"][0]["arguments"] = arguments
+    llm = FakeLLM(tool_script=[reply, final_reply("直接回答")])
+    result = list(
+        stream_run(
+            db_session,
+            run=run,
+            conversation=conversation,
+            messages=messages,
+            llm=llm,
+            is_first_message=True,
+            user_id=user.id,
+        )
+    )
+    event = next(item for item in result if item["type"] == "skill_resource")
+    assert event["ok"] is False
+    assert result[-1]["type"] == "run_finished"
+    assert not db_session.query(AgentStep).filter_by(run_id=run.id, kind="tool_call").count()
+
+
+@pytest.mark.parametrize(
+    "limit_name, limit", [("MAX_RESOURCES_PER_RUN", 0), ("MAX_RESOURCE_CONTEXT_BYTES", 1)]
+)
+def test_resource_budgets_reject_without_saving_content(
+    db_session, tmp_path, monkeypatch, limit_name, limit
+):
+    import app.agent.executor as executor
+    from app.skills.providers.filesystem import FileSystemSkillProvider
+    from app.skills.registry import SkillRegistry
+
+    package = tmp_path.resolve() / "guide"
+    (package / "references").mkdir(parents=True)
+    (package / "SKILL.md").write_text(
+        "---\nname: Guide\ndescription: Test\n---\nRead.", encoding="utf-8"
+    )
+    (package / "references" / "a.md").write_text("CONTENT", encoding="utf-8")
+    registry = SkillRegistry([FileSystemSkillProvider(tmp_path.resolve())])
+    descriptor = registry.discover()[0]
+    loaded = registry.load(descriptor.key)
+    user, conversation = _setup(db_session)
+    _, run, _, _ = prepare_run(
+        db_session, user_id=user.id, conversation_id=conversation.id, content="读资源"
+    )
+    state = executor.LoopState(loaded_skills=[loaded])
+    monkeypatch.setattr(executor, limit_name, limit)
+    event = executor._read_skill_resource(
+        db_session,
+        run,
+        state,
+        registry,
+        json.dumps({"skill_key": descriptor.key, "path": "references/a.md"}),
+    )
+    assert event["ok"] is False
+    assert state.loaded_skills[0].resource_contents == {}
+    db_session.refresh(run)
+    assert run.step_count == event["seq"]

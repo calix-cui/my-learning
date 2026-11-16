@@ -7,6 +7,7 @@
   只有「工具不存在」「参数不是合法 JSON」这类**协议级**错误才由注册表统一处理。
 """
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -125,6 +126,22 @@ def spec_of(tool: Tool) -> ToolSpec:
         description=tool.description,
         parameters=tool.args_model.model_json_schema(),
     )
+
+
+def fingerprint_of(tool: Tool) -> str:
+    """绑定审批到当前工具定义，防止等待期间定义或风险级别发生变化。"""
+    meta = meta_of(tool)
+    payload = {
+        "spec": spec_of(tool),
+        "meta": {
+            "source": meta.source,
+            "level": meta.level.value,
+            "timeout_seconds": meta.timeout_seconds,
+            "requires_approval": meta.requires_approval,
+        },
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def parse_arguments(raw: str) -> tuple[dict[str, Any] | None, str | None]:

@@ -12,7 +12,15 @@ from sqlalchemy.orm import Session
 from app.common.exceptions import BusinessError
 from app.models import Conversation
 from app.models import Skill as SkillRow
-from app.skills import BUILTIN_SKILLS, MAX_INSTRUCTIONS_CHARS, Skill, build_system_prompt
+from app.skills import (
+    MAX_INSTRUCTIONS_CHARS,
+    DatabaseSkillProvider,
+    FileSystemSkillProvider,
+    Skill,
+    SkillRegistry,
+    SkillSummary,
+    build_system_prompt,
+)
 from app.skills.models import (
     MAX_DESCRIPTION_CHARS,
     MAX_NAME_CHARS,
@@ -35,20 +43,29 @@ def _row_to_skill(row: SkillRow) -> Skill:
     )
 
 
-def list_skills(db: Session, user_id: int) -> list[Skill]:
-    """内置 + 自定义。同名时内置优先（建的时候已挡住重名，这里只是兜底）。"""
-    rows = db.scalars(select(SkillRow).where(SkillRow.user_id == user_id).order_by(SkillRow.id))
-    custom = [_row_to_skill(row) for row in rows]
-    taken = set(BUILTIN_SKILLS)
-    return list(BUILTIN_SKILLS.values()) + [item for item in custom if item.slug not in taken]
+def _registry(db: Session, user_id: int) -> SkillRegistry:
+    """每次请求创建用户作用域目录，不缓存用户正文或全局数据库状态。"""
+    return SkillRegistry([FileSystemSkillProvider(), DatabaseSkillProvider(db, user_id)])
+
+
+def registry_for(db: Session, user_id: int) -> SkillRegistry:
+    """返回本次请求的用户作用域目录，供 Agent Runtime 发现和按需加载。"""
+    return _registry(db, user_id)
+
+
+def describe_skill(db: Session, user_id: int, slug: str):
+    """只取 Skill 元数据，避免为了权限收窄而提前读取正文。"""
+    return next((item for item in _registry(db, user_id).discover() if item.slug == slug), None)
+
+
+def list_skills(db: Session, user_id: int) -> list[SkillSummary]:
+    """返回目录元数据；列表接口不加载 Skill 正文。"""
+    return [item.summary() for item in _registry(db, user_id).discover()]
 
 
 def get_skill(db: Session, user_id: int, slug: str) -> Skill | None:
-    builtin = BUILTIN_SKILLS.get(slug)
-    if builtin is not None:
-        return builtin
-    row = db.scalar(select(SkillRow).where(SkillRow.user_id == user_id, SkillRow.slug == slug))
-    return _row_to_skill(row) if row is not None else None
+    loaded = _registry(db, user_id).get_by_slug(slug)
+    return loaded.as_skill() if loaded is not None else None
 
 
 def _validate(
@@ -92,7 +109,7 @@ def create_skill(
         instructions=instructions,
         tools=tools,
     )
-    if slug in BUILTIN_SKILLS:
+    if _registry(db, user_id).contains_slug(slug):
         raise BusinessError("这个标识被内置技能占用了，换一个")
     exists = db.scalar(
         select(SkillRow.id).where(SkillRow.user_id == user_id, SkillRow.slug == slug)
@@ -178,7 +195,7 @@ def mount_skill(db: Session, user_id: int, conversation_id: int, slug: str | Non
     if conversation is None:
         raise BusinessError("会话不存在", code=404)
     if slug is not None:
-        if get_skill(db, user_id, slug) is None:
+        if not _registry(db, user_id).contains_slug(slug):
             raise BusinessError("技能不存在", code=404)
         conversation.skill_slug = slug
     else:

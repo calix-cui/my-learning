@@ -1,7 +1,7 @@
 """内置技能的加载：读 `app/skills/<slug>/SKILL.md`，解析 frontmatter 与正文。
 
-只做「读文件 + 校验」，不碰数据库。文件在导入时读一次，进程内缓存；
-内置技能随代码发布，改完重启即生效（开发期 `--reload` 自动重载）。
+只做「读文件 + 校验」，不碰数据库、不保留导入时的正文缓存；目录扫描由请求级
+Skill Provider 发起，完整正文只在显式加载时返回。
 """
 
 from __future__ import annotations
@@ -18,10 +18,12 @@ from app.skills.models import (
     SKILL_SLUG_PATTERN,
     SOURCE_BUILTIN,
     Skill,
+    SkillSummary,
 )
 
 SKILLS_DIR = Path(__file__).resolve().parent
 SKILL_FILE = "SKILL.md"
+MAX_SKILL_FILE_BYTES = 65_536
 
 
 class SkillFormatError(ValueError):
@@ -43,11 +45,10 @@ def _split_frontmatter(text: str, *, origin: str) -> tuple[dict, str]:
     return meta, parts[2].strip()
 
 
-def parse_skill(text: str, *, origin: str = "SKILL.md") -> Skill:
-    """把一份 SKILL.md 解析成 `Skill`，顺手校验长度与 slug 规则。"""
-    meta, body = _split_frontmatter(text, origin=origin)
-
-    slug = str(meta.get("slug", "")).strip()
+def _metadata_fields(
+    meta: dict, *, origin: str, default_slug: str | None = None
+) -> tuple[str, str, str, tuple[str, ...], str]:
+    slug = str(meta.get("slug", default_slug or "")).strip()
     if not SKILL_SLUG_PATTERN.match(slug):
         raise SkillFormatError(f"{origin}: slug 不合法（{slug!r}），只允许小写字母数字与连字符")
 
@@ -59,11 +60,6 @@ def parse_skill(text: str, *, origin: str = "SKILL.md") -> Skill:
     if not description or len(description) > MAX_DESCRIPTION_CHARS:
         raise SkillFormatError(f"{origin}: description 必填且不超过 {MAX_DESCRIPTION_CHARS} 字")
 
-    if not body:
-        raise SkillFormatError(f"{origin}: 正文不能为空")
-    if len(body) > MAX_INSTRUCTIONS_CHARS:
-        raise SkillFormatError(f"{origin}: 正文超过 {MAX_INSTRUCTIONS_CHARS} 字")
-
     raw_tools = meta.get("tools") or []
     if not isinstance(raw_tools, list):
         raise SkillFormatError(f"{origin}: tools 必须是列表")
@@ -71,15 +67,44 @@ def parse_skill(text: str, *, origin: str = "SKILL.md") -> Skill:
     if len(tools) > MAX_TOOLS:
         raise SkillFormatError(f"{origin}: tools 最多 {MAX_TOOLS} 个")
 
-    return Skill(
+    icon = str(meta.get("icon", "sparkle")).strip() or "sparkle"
+    return slug, name, description, tools, icon
+
+
+def parse_skill_metadata(
+    text: str, *, origin: str = "SKILL.md", default_slug: str | None = None
+) -> SkillSummary:
+    """只返回元数据，供目录发现使用；正文不会进入返回值或模型上下文。"""
+    meta, body = _split_frontmatter(text, origin=origin)
+    slug, name, description, tools, icon = _metadata_fields(
+        meta, origin=origin, default_slug=default_slug
+    )
+    if not body:
+        raise SkillFormatError(f"{origin}: 正文不能为空")
+    if len(body) > MAX_INSTRUCTIONS_CHARS:
+        raise SkillFormatError(f"{origin}: 正文超过 {MAX_INSTRUCTIONS_CHARS} 字")
+    return SkillSummary(
         slug=slug,
         name=name,
         description=description,
-        instructions=body,
         tools=tools,
-        icon=str(meta.get("icon", "sparkle")).strip() or "sparkle",
+        icon=icon,
         source=SOURCE_BUILTIN,
     )
+
+
+def parse_skill(text: str, *, origin: str = "SKILL.md", default_slug: str | None = None) -> Skill:
+    """把一份 SKILL.md 解析成 `Skill`，顺手校验长度与 slug 规则。"""
+    meta, body = _split_frontmatter(text, origin=origin)
+    slug, name, description, tools, icon = _metadata_fields(
+        meta, origin=origin, default_slug=default_slug
+    )
+
+    if not body:
+        raise SkillFormatError(f"{origin}: 正文不能为空")
+    if len(body) > MAX_INSTRUCTIONS_CHARS:
+        raise SkillFormatError(f"{origin}: 正文超过 {MAX_INSTRUCTIONS_CHARS} 字")
+    return Skill(slug, name, description, body, tools, icon, SOURCE_BUILTIN)
 
 
 def load_builtin_skills(directory: Path | None = None) -> dict[str, Skill]:
@@ -89,15 +114,14 @@ def load_builtin_skills(directory: Path | None = None) -> dict[str, Skill]:
     if not root.is_dir():  # pragma: no cover - 正常安装不会缺目录
         return skills
     for path in sorted(root.glob(f"*/{SKILL_FILE}")):
-        skill = parse_skill(path.read_text(encoding="utf-8"), origin=str(path))
+        skill = parse_skill(
+            path.read_text(encoding="utf-8"), origin=str(path), default_slug=path.parent.name
+        )
         if skill.slug in skills:  # pragma: no cover - 目录名唯一，防手滑
             raise SkillFormatError(f"内置技能 slug 重复：{skill.slug}")
         skills[skill.slug] = skill
     return skills
 
 
-BUILTIN_SKILLS: dict[str, Skill] = load_builtin_skills()
-
-
 def builtin_skill(slug: str) -> Skill | None:
-    return BUILTIN_SKILLS.get(slug)
+    return load_builtin_skills().get(slug)

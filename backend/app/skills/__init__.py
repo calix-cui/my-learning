@@ -9,20 +9,28 @@
 `app/skills/<slug>/SKILL.md`（随代码走、只读），用户自定义的存 `skills` 表。
 """
 
-from app.skills.loader import BUILTIN_SKILLS, builtin_skill, load_builtin_skills
+from app.skills.loader import builtin_skill, load_builtin_skills
 from app.skills.models import (
     MAX_INSTRUCTIONS_CHARS,
     SKILL_SLUG_PATTERN,
+    LoadedSkill,
     Skill,
+    SkillDescriptor,
     SkillSummary,
     build_system_prompt,
 )
+from app.skills.providers import DatabaseSkillProvider, FileSystemSkillProvider
+from app.skills.registry import SkillRegistry
 
 __all__ = [
-    "BUILTIN_SKILLS",
+    "DatabaseSkillProvider",
+    "FileSystemSkillProvider",
+    "LoadedSkill",
     "MAX_INSTRUCTIONS_CHARS",
     "SKILL_SLUG_PATTERN",
     "Skill",
+    "SkillDescriptor",
+    "SkillRegistry",
     "SkillSummary",
     "build_system_prompt",
     "builtin_skill",

@@ -10,7 +10,7 @@
 3. **最终答复才写 `messages`**：中间的工具往返属于运行过程，留在 `agent_steps`。
 4. **失败也留痕**：run 标 `failed` 并写 `error_message`，不静默吞掉。
 5. **审批不阻塞进程**：需要审批时把 run 标成 `waiting_approval` 并结束生成器，
-   客户端决定后再从库里重放上下文继续——所以重放必须只依赖 `agent_steps`。
+   客户端决定后再从库里重放上下文继续——所以重放依赖持久化步骤与 Skill 快照。
 """
 
 import json
@@ -18,11 +18,11 @@ import logging
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.agent import events
@@ -30,7 +30,7 @@ from app.agent import policy as policy_module
 from app.agent.tools import BuiltinSource, ToolRegistry, ToolSource
 from app.common.exceptions import BusinessError
 from app.llm import LLMClient, LLMError
-from app.llm.base import LLMMessage, ToolCall
+from app.llm.base import LLMMessage, ToolCall, ToolSpec
 from app.mcp.errors import McpError
 from app.mcp.manager import get_manager
 from app.models import (
@@ -51,18 +51,29 @@ from app.models.agent_run import RUN_COMPLETED, RUN_FAILED, RUN_RUNNING, RUN_WAI
 from app.models.agent_step import (
     STEP_ASSISTANT_TEXT,
     STEP_FINAL_ANSWER,
+    STEP_SKILL_LOAD_FAILED,
+    STEP_SKILL_LOADED,
     STEP_TOOL_CALL,
     STEP_TOOL_RESULT,
     STEP_USER_MESSAGE,
 )
 from app.models.mcp_server import STATUS_ERROR, STATUS_OK
-from app.services import chat_service, skill_service
+from app.services import chat_service, mcp_service, skill_service
+from app.skills.models import LoadedSkill, SkillDescriptor, build_runtime_skill_prompt
+from app.skills.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
 MAX_STEPS = 8
 TOOL_TIMEOUT_SECONDS = 2.0
 MAX_CONSECUTIVE_FAILURES = 3
+MAX_SKILL_CATALOG = 50
+MAX_SKILLS_PER_RUN = 3
+MAX_SKILL_INSTRUCTIONS_CHARS = 12_000
+SKILL_LOAD_TOOL_NAME = "__runtime_request_skill_load"
+SKILL_RESOURCE_TOOL_NAME = "__runtime_read_skill_resource"
+MAX_RESOURCE_CONTEXT_BYTES = 32_768
+MAX_RESOURCES_PER_RUN = 8
 
 # 工具都是本地的只读实现，正常远快于 2s；这里只防「意外卡住」而不是做并发调度
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-tool")
@@ -74,18 +85,28 @@ class LoopState:
 
     seq: int = 1
     failures: dict[str, int] = field(default_factory=dict)
+    skill_catalog: list[SkillDescriptor] = field(default_factory=list)
+    loaded_skills: list[LoadedSkill] = field(default_factory=list)
+    skill_mode: str = "manual"
     suspended: bool = False
     finished: bool = False
 
 
 def prepare_run(
-    db: Session, *, user_id: int, conversation_id: int, content: str
+    db: Session,
+    *,
+    user_id: int,
+    conversation_id: int,
+    content: str,
+    skill_mode: str = "manual",
 ) -> tuple[Conversation, AgentRun, list[LLMMessage], bool]:
     """开流前的准备：校验、建 run、记第一步。错误以普通异常抛出（接口层转 JSON）。"""
     conversation = chat_service.get_conversation(db, user_id, conversation_id)
     text = content.strip()
     if not text:
         raise BusinessError("消息内容不能只包含空白")
+    if skill_mode not in {"off", "manual", "auto"}:
+        raise BusinessError("Skill 使用方式无效")
 
     running = db.scalar(
         select(AgentRun.id).where(
@@ -103,7 +124,29 @@ def prepare_run(
 
     # 与项目其他表一致：存 naive 本地时间（全库统一，不在这里单独引入时区）
     now = datetime.now()  # noqa: DTZ005
-    run = AgentRun(conversation_id=conversation_id, user_id=user_id, started_time=now)
+    catalog: list[SkillDescriptor] = []
+    if skill_mode == "auto" or (skill_mode == "manual" and conversation.skill_slug):
+        discovered = skill_service.registry_for(db, user_id).discover()
+        if skill_mode == "auto":
+            mounted = next(
+                (item for item in discovered if item.slug == conversation.skill_slug), None
+            )
+            catalog = ([mounted] if mounted is not None else []) + [
+                item for item in discovered if item is not mounted
+            ][: MAX_SKILL_CATALOG - (1 if mounted is not None else 0)]
+        elif conversation.skill_slug:
+            selected = next(
+                (item for item in discovered if item.slug == conversation.skill_slug), None
+            )
+            catalog = [selected] if selected is not None else []
+
+    run = AgentRun(
+        conversation_id=conversation_id,
+        user_id=user_id,
+        started_time=now,
+        skill_mode=skill_mode,
+        skill_snapshot=_snapshot_payload(catalog, []),
+    )
     db.add(run)
     db.flush()
     _add_step(db, run, seq=1, kind=STEP_USER_MESSAGE, content=text)
@@ -133,14 +176,25 @@ def stream_run(
     policy: policy_module.ToolPolicy | None = None,
 ) -> Iterator[dict]:
     """跑循环并逐个产出事件。生成器被关闭（客户端断流）时把 run 标成 cancelled。"""
-    tools = registry or registry_for(db, user_id, conversation.id)
+    tools = registry or registry_for(db, user_id, conversation.id, skill_mode=run.skill_mode)
     tool_policy = policy or build_policy(db, user_id=user_id, registry=tools, run=run)
-
-    messages = _with_skill(
-        db, user_id=user_id, conversation=conversation, messages=messages, tools=tools
-    )
+    state = _loop_state(db, run)
+    skill_registry = skill_service.registry_for(db, user_id)
 
     yield events.run_started(run.id, conversation.id)
+    if run.skill_mode in {"manual", "auto"} and conversation.skill_slug and not state.loaded_skills:
+        descriptor = next(
+            (item for item in state.skill_catalog if item.slug == conversation.skill_slug), None
+        )
+        key = descriptor.key if descriptor is not None else f"missing:{conversation.skill_slug}"
+        _, event = _load_skill(
+            db,
+            run=run,
+            state=state,
+            registry=skill_registry,
+            key=key,
+        )
+        yield event
     yield from _run_loop(
         db,
         run=run,
@@ -151,7 +205,8 @@ def stream_run(
         user_id=user_id,
         tools=tools,
         policy=tool_policy,
-        state=LoopState(seq=_last_seq(db, run)),
+        state=state,
+        skill_registry=skill_registry,
     )
 
 
@@ -168,13 +223,42 @@ def resume_run(
 ) -> Iterator[dict]:
     """用户做出决定后继续跑：重放上下文 → 补上这次调用的结果 → 接着循环。"""
     conversation = chat_service.get_conversation(db, user_id, run.conversation_id)
-    tools = registry or registry_for(db, user_id, conversation.id)
+    if (
+        run.skill_mode == "manual"
+        and conversation.skill_slug
+        and not isinstance(run.skill_snapshot, dict)
+    ):
+        _fail(db, run, "本次运行缺少 Skill 版本快照，已停止恢复执行")
+        yield events.error(409, "本次运行缺少 Skill 快照，请重新发起任务")
+        return
+    base_tools = registry or registry_for(db, user_id, conversation.id, skill_mode="off")
+    state = _loop_state(db, run)
+    tools = _tools_for_skills(base_tools, state.loaded_skills)
     tool_policy = policy or build_policy(db, user_id=user_id, registry=tools, run=run)
+    tool_policy.registry = tools
+    skill_registry = skill_service.registry_for(db, user_id)
     messages, pending = _replay_messages(db, run)
-    messages = _with_skill(
-        db, user_id=user_id, conversation=conversation, messages=messages, tools=tools
-    )
-    state = LoopState(seq=_last_seq(db, run))
+    if approval.status not in {APPROVAL_APPROVED, APPROVAL_REJECTED}:
+        _fail(db, run, "审批状态无效，已拒绝恢复执行")
+        yield events.error(409, "审批状态无效，无法继续此运行")
+        return
+    if (
+        pending is None
+        or pending.seq != approval.seq
+        or pending.tool_name != approval.tool_name
+        or pending.tool_args != approval.tool_args
+    ):
+        _fail(db, run, "审批与待恢复的工具调用不匹配")
+        yield events.error(409, "审批记录与待执行的工具调用不匹配，已停止运行")
+        return
+    current_fingerprint = base_tools.fingerprint(approval.tool_name)
+    if approval.status == APPROVAL_APPROVED and (
+        approval.tool_fingerprint is None or current_fingerprint != approval.tool_fingerprint
+    ):
+        _fail(db, run, "审批后的工具定义发生变化，已拒绝执行")
+        yield events.error(409, "工具定义在审批后发生变化，请重新发起任务")
+        return
+    messages = _messages_with_runtime_skills(messages, state, tools)
 
     call: ToolCall = {
         "id": f"call_{pending.seq if pending else approval.seq}",
@@ -187,8 +271,22 @@ def resume_run(
         content = f"用户拒绝执行 {approval.tool_name}：{reason}"
         result = {"ok": False, "content": content, "duration_ms": 0, "args": approval.tool_args}
     else:
-        result = _execute(tools, call, user_id=user_id)
-        tool_policy.daily_used += 1
+        # 该待审批调用已计入当日 tool_call 数；恢复检查时先扣回本次，再按授权复核。
+        tool_policy.daily_used = max(0, tool_policy.daily_used - 1)
+        decision = tool_policy.check(
+            approval.tool_name,
+            approval.tool_args,
+            approval_granted=True,
+        )
+        if decision.action == "deny":
+            result = _denied(decision.reason)
+            if decision.fatal:
+                _fail(db, run, decision.reason)
+                yield events.error(403, decision.reason)
+                return
+        else:
+            result = _execute(tools, call, user_id=user_id)
+            tool_policy.daily_used += 1
 
     if pending is not None:
         # 补回「模型要调用这个工具」的那条 assistant 消息，tool 消息必须紧跟着它
@@ -228,6 +326,12 @@ def resume_run(
         result["duration_ms"],
     )
 
+    if result.get("error") == "timeout_uncertain":
+        message = "工具执行超时且状态未知，已停止本次运行以避免重复执行"
+        _fail(db, run, message)
+        yield events.error(504, message)
+        return
+
     if not result["ok"]:
         state.failures[approval.tool_name] = state.failures.get(approval.tool_name, 0) + 1
 
@@ -239,9 +343,10 @@ def resume_run(
         llm=llm,
         is_first_message=_is_first_message(db, conversation.id),
         user_id=user_id,
-        tools=tools,
+        tools=base_tools,
         policy=tool_policy,
         state=state,
+        skill_registry=skill_registry,
     )
 
 
@@ -257,17 +362,33 @@ def _run_loop(
     tools: ToolRegistry,
     policy: policy_module.ToolPolicy,
     state: LoopState,
+    skill_registry: SkillRegistry,
 ) -> Iterator[dict]:
     """真正的循环体：`stream_run` 与 `resume_run` 共用。"""
-    specs = tools.specs()
+    base_tools = tools
     # 每轮重新确认状态：恢复时 run 还是 waiting_approval，要先改回 running
     run.status = RUN_RUNNING
     db.commit()
 
     try:
         for _ in range(MAX_STEPS):
+            tools = _tools_for_skills(base_tools, state.loaded_skills)
+            policy.registry = tools
+            specs = tools.specs()
+            loaded_keys = {item.descriptor.key for item in state.loaded_skills}
+            skill_control_enabled = (
+                run.skill_mode == "auto"
+                and any(item.key not in loaded_keys for item in state.skill_catalog)
+                and SKILL_LOAD_TOOL_NAME not in tools.names()
+            )
+            if skill_control_enabled:
+                specs.append(_skill_load_tool_spec())
+            if any(item.resources for item in state.loaded_skills):
+                specs.append(_skill_resource_tool_spec())
             try:
-                reply = llm.chat_with_tools(messages, specs)
+                reply = llm.chat_with_tools(
+                    _messages_with_runtime_skills(messages, state, tools), specs
+                )
             except LLMError as exc:
                 _fail(db, run, str(exc))
                 yield events.error(exc.code, str(exc))
@@ -328,6 +449,78 @@ def _run_loop(
                 )
             )
 
+            if any(
+                call["name"] in {SKILL_LOAD_TOOL_NAME, SKILL_RESOURCE_TOOL_NAME} for call in calls
+            ):
+                # A Skill changes the instructions for the next model turn. Calls planned
+                # in the same response are returned as deferred observations, never run.
+                for call in calls:
+                    if call["name"] == SKILL_RESOURCE_TOOL_NAME:
+                        event = _read_skill_resource(
+                            db, run, state, skill_registry, call["arguments"]
+                        )
+                        yield event
+                        messages.append(
+                            LLMMessage(
+                                role="tool", content=event["message"], tool_call_id=call["id"]
+                            )
+                        )
+                        continue
+                    if call["name"] == SKILL_LOAD_TOOL_NAME:
+                        args = _safe_json(call["arguments"]) or {}
+                        key = args.get("skill_key")
+                        key = key if isinstance(key, str) else ""
+                        loaded, event = _load_skill(
+                            db,
+                            run=run,
+                            state=state,
+                            registry=skill_registry,
+                            key=key,
+                            model_requested=True,
+                        )
+                        yield event
+                        observation = (
+                            f"Skill 已加载：{loaded.descriptor.name}。请阅读指引后重新规划。"
+                            if loaded is not None
+                            else str(event.get("message", "Skill 加载失败"))
+                        )
+                        messages.append(
+                            LLMMessage(role="tool", content=observation, tool_call_id=call["id"])
+                        )
+                        continue
+
+                    state.seq += 1
+                    args = _safe_json(call["arguments"])
+                    _add_step(
+                        db,
+                        run,
+                        seq=state.seq,
+                        kind=STEP_TOOL_CALL,
+                        tool_name=call["name"],
+                        tool_args=args,
+                    )
+                    db.commit()
+                    yield events.tool_call(state.seq, call["name"], args)
+                    deferred = "本轮同时请求 Skill 指引或资源，此工具未执行；请读取后重新规划"
+                    state.seq += 1
+                    _add_step(
+                        db,
+                        run,
+                        seq=state.seq,
+                        kind=STEP_TOOL_RESULT,
+                        content=deferred,
+                        tool_name=call["name"],
+                        tool_args=args,
+                        ok=False,
+                        duration_ms=0,
+                    )
+                    db.commit()
+                    yield events.tool_result(state.seq, call["name"], False, deferred, 0)
+                    messages.append(
+                        LLMMessage(role="tool", content=deferred, tool_call_id=call["id"])
+                    )
+                continue
+
             for call in calls:
                 state.seq += 1
                 _add_step(
@@ -353,6 +546,7 @@ def _run_loop(
                         seq=state.seq,
                         call=call,
                         reason=decision.reason,
+                        tool_fingerprint=tools.fingerprint(call["name"]),
                     )
                     state.suspended = True
                     yield events.approval_required(
@@ -396,6 +590,12 @@ def _run_loop(
                     result["duration_ms"],
                 )
 
+                if result.get("error") == "timeout_uncertain":
+                    message = "工具执行超时且状态未知，已停止本次运行以避免重复执行"
+                    _fail(db, run, message)
+                    yield events.error(504, message)
+                    return
+
                 messages.append(
                     LLMMessage(
                         role="tool",
@@ -427,28 +627,365 @@ def _run_loop(
                 logger.exception("标记 agent 运行中断失败")
 
 
-def _with_skill(
+def _snapshot_descriptor(item: SkillDescriptor) -> dict[str, Any]:
+    return {
+        "key": item.key,
+        "slug": item.slug,
+        "name": item.name,
+        "description": item.description,
+        "source": item.source,
+        "trust": item.trust,
+        "version": item.version,
+        "tools": list(item.tools),
+        "icon": item.icon,
+        "skill_id": item.skill_id,
+    }
+
+
+def _restore_descriptor(raw: Any) -> SkillDescriptor | None:
+    if not isinstance(raw, dict):
+        return None
+    required = ("key", "slug", "name", "description", "source", "trust", "version")
+    if any(not isinstance(raw.get(key), str) for key in required):
+        return None
+    tools = raw.get("tools")
+    return SkillDescriptor(
+        key=raw["key"],
+        slug=raw["slug"],
+        name=raw["name"],
+        description=raw["description"],
+        source=raw["source"],
+        trust=raw["trust"],
+        version=raw["version"],
+        tools=tuple(item for item in tools if isinstance(item, str))
+        if isinstance(tools, list)
+        else (),
+        icon=raw.get("icon") if isinstance(raw.get("icon"), str) else "sparkle",
+        skill_id=raw.get("skill_id") if isinstance(raw.get("skill_id"), int) else None,
+    )
+
+
+def _snapshot_payload(catalog: list[SkillDescriptor], loaded: list[LoadedSkill]) -> dict[str, Any]:
+    return {
+        "catalog": [_snapshot_descriptor(item) for item in catalog],
+        "loaded": [
+            {
+                "descriptor": _snapshot_descriptor(item.descriptor),
+                "instructions": item.instructions,
+                "content_hash": item.content_hash,
+                "resources": list(item.resources),
+                "resource_contents": dict(item.resource_contents),
+            }
+            for item in loaded
+        ],
+    }
+
+
+def _loop_state(db: Session, run: AgentRun) -> LoopState:
+    raw = run.skill_snapshot if isinstance(run.skill_snapshot, dict) else {}
+    catalog = [
+        item
+        for raw_item in raw.get("catalog", [])
+        if (item := _restore_descriptor(raw_item)) is not None
+    ]
+    loaded: list[LoadedSkill] = []
+    for raw_item in raw.get("loaded", []):
+        if not isinstance(raw_item, dict) or not isinstance(raw_item.get("instructions"), str):
+            continue
+        descriptor = _restore_descriptor(raw_item.get("descriptor"))
+        if descriptor is None:
+            continue
+        instructions = raw_item["instructions"]
+        if len(instructions) > MAX_SKILL_INSTRUCTIONS_CHARS:
+            continue
+        resources = raw_item.get("resources")
+        loaded.append(
+            LoadedSkill(
+                descriptor=descriptor,
+                instructions=instructions,
+                content_hash=str(raw_item.get("content_hash") or ""),
+                resource_contents=raw_item.get("resource_contents", {}),
+                resources=tuple(item for item in resources if isinstance(item, str))
+                if isinstance(resources, list)
+                else (),
+            )
+        )
+    return LoopState(
+        seq=_last_seq(db, run),
+        skill_catalog=catalog[:MAX_SKILL_CATALOG],
+        loaded_skills=loaded[:MAX_SKILLS_PER_RUN],
+        skill_mode=run.skill_mode or "manual",
+    )
+
+
+def _record_skill_failure(
+    db: Session,
+    run: AgentRun,
+    state: LoopState,
+    *,
+    key: str,
+    code: str,
+    message: str,
+    model_requested: bool = False,
+) -> dict:
+    state.seq += 1
+    _add_step(
+        db,
+        run,
+        seq=state.seq,
+        kind=STEP_SKILL_LOAD_FAILED,
+        content=message,
+        tool_name=SKILL_LOAD_TOOL_NAME if model_requested else None,
+        tool_args={"skill_key": key[:128]} if model_requested else None,
+        skill_key=key[:128] or None,
+    )
+    run.step_count = state.seq
+    db.commit()
+    return events.skill_load_failed(state.seq, key=key[:128], error_code=code, message=message)
+
+
+def _load_skill(
     db: Session,
     *,
-    user_id: int,
-    conversation: Conversation,
-    messages: list[LLMMessage],
-    tools: ToolRegistry,
-) -> list[LLMMessage]:
-    """挂了技能就在最前面插一条 system 消息。
+    run: AgentRun,
+    state: LoopState,
+    registry: SkillRegistry,
+    key: str,
+    model_requested: bool = False,
+) -> tuple[LoadedSkill | None, dict]:
+    key = key[:128]
+    expected = next((item for item in state.skill_catalog if item.key == key), None)
+    if expected is None:
+        message = "目录中没有这个 Skill，模型可以选择其他 Skill 或直接回答"
+        return None, _record_skill_failure(
+            db,
+            run,
+            state,
+            key=key,
+            code="unknown_skill",
+            message=message,
+            model_requested=model_requested,
+        )
+    if any(item.descriptor.key == key for item in state.loaded_skills):
+        message = "这个 Skill 已加载，无需重复加载"
+        return None, _record_skill_failure(
+            db,
+            run,
+            state,
+            key=key,
+            code="already_loaded",
+            message=message,
+            model_requested=model_requested,
+        )
+    if len(state.loaded_skills) >= MAX_SKILLS_PER_RUN:
+        message = f"本次最多加载 {MAX_SKILLS_PER_RUN} 个 Skill，请使用已加载内容继续"
+        return None, _record_skill_failure(
+            db,
+            run,
+            state,
+            key=key,
+            code="skill_limit",
+            message=message,
+            model_requested=model_requested,
+        )
 
-    system 每次 run 现算、不落库：技能改了立刻生效，历史里也不会留着旧版本。
-    重放路径（resume_run）同样走这里，否则恢复后模型会「忘记」自己在执行什么方法。
-    """
-    prompt = skill_service.system_prompt_for(
-        db, user_id, conversation, tool_names=tools.enabled_names()
+    try:
+        loaded = registry.load(key)
+    except Exception:
+        logger.exception("加载 Skill 失败：%s", key)
+        loaded = None
+    if loaded is None:
+        message = "Skill 当前不可用，请选择其他 Skill 或直接回答"
+        return None, _record_skill_failure(
+            db,
+            run,
+            state,
+            key=key,
+            code="unavailable",
+            message=message,
+            model_requested=model_requested,
+        )
+    if loaded.descriptor.version != expected.version:
+        message = "Skill 内容已更新，请重新发起任务以使用新版本"
+        return None, _record_skill_failure(
+            db,
+            run,
+            state,
+            key=key,
+            code="version_changed",
+            message=message,
+            model_requested=model_requested,
+        )
+    total_chars = sum(len(item.instructions) for item in state.loaded_skills) + len(
+        loaded.instructions
     )
-    if prompt is None:
-        return messages
-    return [LLMMessage(role="system", content=prompt), *messages]
+    if total_chars > MAX_SKILL_INSTRUCTIONS_CHARS:
+        message = "Skill 指引总长度超过本次运行限制，请选择更精简的 Skill"
+        return None, _record_skill_failure(
+            db,
+            run,
+            state,
+            key=key,
+            code="context_limit",
+            message=message,
+            model_requested=model_requested,
+        )
+
+    state.loaded_skills.append(loaded)
+    run.skill_snapshot = _snapshot_payload(state.skill_catalog, state.loaded_skills)
+    state.seq += 1
+    observation = f"Skill 已加载：{loaded.descriptor.name}。请阅读指引后重新规划。"
+    _add_step(
+        db,
+        run,
+        seq=state.seq,
+        kind=STEP_SKILL_LOADED,
+        content=observation if model_requested else None,
+        tool_name=SKILL_LOAD_TOOL_NAME if model_requested else None,
+        tool_args={"skill_key": loaded.descriptor.key} if model_requested else None,
+        skill_key=loaded.descriptor.key,
+        skill_name=loaded.descriptor.name,
+        skill_source=loaded.descriptor.source,
+        skill_version=loaded.descriptor.version,
+    )
+    run.step_count = state.seq
+    db.commit()
+    return loaded, events.skill_loaded(
+        state.seq,
+        key=loaded.descriptor.key,
+        name=loaded.descriptor.name,
+        source=loaded.descriptor.source,
+        version=loaded.descriptor.version,
+    )
 
 
-def registry_for(db: Session, user_id: int, conversation_id: int | None = None) -> ToolRegistry:
+def _tools_for_skills(tools: ToolRegistry, skills: list[LoadedSkill]) -> ToolRegistry:
+    restrictions = [set(item.descriptor.tools) for item in skills if item.descriptor.tools]
+    if not restrictions:
+        return tools
+    allowed = set.intersection(*restrictions)
+    return tools.only(allowed)
+
+
+def _skill_resource_tool_spec() -> ToolSpec:
+    return ToolSpec(
+        name=SKILL_RESOURCE_TOOL_NAME,
+        description="读取已加载 Skill 清单中的文本资源。仅提供参考内容，不执行脚本或授予权限。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "skill_key": {"type": "string", "maxLength": 128},
+                "path": {"type": "string", "maxLength": 240},
+            },
+            "required": ["skill_key", "path"],
+            "additionalProperties": False,
+        },
+    )
+
+
+def _read_skill_resource(
+    db: Session, run: AgentRun, state: LoopState, registry: SkillRegistry, arguments: str
+) -> dict:
+    from app.skills.resources import SkillResourceError
+
+    args = _safe_json(arguments)
+    key, path = "", ""
+    loaded = None
+    ok = False
+    try:
+        if (
+            not isinstance(args, dict)
+            or set(args) != {"skill_key", "path"}
+            or not isinstance(args["skill_key"], str)
+            or not isinstance(args["path"], str)
+            or len(args["skill_key"]) > 128
+            or len(args["path"]) > 240
+        ):
+            raise SkillResourceError("资源请求参数无效")
+        key, path = args["skill_key"], args["path"]
+        loaded = next((item for item in state.loaded_skills if item.descriptor.key == key), None)
+        if loaded is None or state.skill_mode == "off":
+            raise SkillResourceError("只能读取本次已加载 Skill 的资源")
+        if path not in loaded.resource_contents:
+            count = sum(len(item.resource_contents) for item in state.loaded_skills)
+            if count >= MAX_RESOURCES_PER_RUN:
+                raise SkillResourceError("本次已达到资源数量上限")
+            content = registry.read_resource(loaded, path)
+            size = sum(
+                len(value.encode("utf-8"))
+                for item in state.loaded_skills
+                for value in item.resource_contents.values()
+            ) + len(content.encode("utf-8"))
+            if size > MAX_RESOURCE_CONTEXT_BYTES:
+                raise SkillResourceError("资源总内容超过本次运行限制")
+            updated = replace(loaded, resource_contents={**loaded.resource_contents, path: content})
+            state.loaded_skills[state.loaded_skills.index(loaded)] = updated
+            run.skill_snapshot = _snapshot_payload(state.skill_catalog, state.loaded_skills)
+        ok = True
+        message = f"已读取参考资料：{path}"
+    except SkillResourceError as exc:
+        message = str(exc)
+    except Exception:
+        logger.exception("Skill 资源读取失败")
+        message = "资源当前不可用，请使用已有指引继续"
+    state.seq += 1
+    name = loaded.descriptor.name if loaded else None
+    _add_step(
+        db,
+        run,
+        seq=state.seq,
+        kind="skill_resource",
+        content=message,
+        tool_name=SKILL_RESOURCE_TOOL_NAME,
+        tool_args={"skill_key": key, "path": path},
+        skill_key=key or None,
+        skill_name=name,
+        ok=ok,
+    )
+    run.step_count = state.seq
+    db.commit()
+    return events.skill_resource(state.seq, key=key, name=name, path=path, ok=ok, message=message)
+
+
+def _skill_load_tool_spec() -> ToolSpec:
+    return ToolSpec(
+        name=SKILL_LOAD_TOOL_NAME,
+        description="按目录 key 加载一个相关 Skill 的完整工作指引。Skill 只提供指引，不授予工具权限。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "skill_key": {"type": "string", "description": "可选 Skill 目录中的稳定 key"}
+            },
+            "required": ["skill_key"],
+            "additionalProperties": False,
+        },
+    )
+
+
+def _messages_with_runtime_skills(
+    messages: list[LLMMessage], state: LoopState, tools: ToolRegistry
+) -> list[LLMMessage]:
+    loaded_keys = {item.descriptor.key for item in state.loaded_skills}
+    catalog = (
+        [item for item in state.skill_catalog if item.key not in loaded_keys]
+        if state.skill_mode == "auto"
+        else []
+    )
+    prompt = build_runtime_skill_prompt(
+        state.loaded_skills,
+        tool_names=tools.enabled_names(),
+        catalog=catalog,
+    )
+    return [LLMMessage(role="system", content=prompt), *messages] if prompt else messages
+
+
+def registry_for(
+    db: Session,
+    user_id: int,
+    conversation_id: int | None = None,
+    *,
+    skill_mode: str = "manual",
+) -> ToolRegistry:
     """按账号设置装配注册表：内置工具 + 用户启用的 MCP 服务器。
 
     MCP 连不上**不能**让整次对话失败：记一行 last_status/last_error、跳过这台服务器，
@@ -464,7 +1001,8 @@ def registry_for(db: Session, user_id: int, conversation_id: int | None = None) 
     )
     for server in servers:
         try:
-            source = manager.source_for(server)
+            spec = mcp_service.spec_of_row(server)
+            source = manager.source_for(server, env=spec.env)
         except McpError as exc:
             server.last_status = STATUS_ERROR
             server.last_error = str(exc)[:255]
@@ -483,17 +1021,16 @@ def registry_for(db: Session, user_id: int, conversation_id: int | None = None) 
     db.flush()
 
     registry = ToolRegistry.from_sources(sources, disabled=disabled)
-    # 会话挂了技能就按技能的工具白名单收窄（空白名单 = 不限制）。
-    # 放在这里而不是每个调用点，stream_run / resume_run / 接口层都自动一致。
-    if conversation_id is not None:
+    # 兼容既有手动挂载：只依据元数据做能力收窄，不读取正文。
+    if conversation_id is not None and skill_mode == "manual":
         conversation = db.get(Conversation, conversation_id)
-        skill = (
-            skill_service.mounted_skill(db, user_id, conversation)
-            if conversation is not None
+        descriptor = (
+            skill_service.describe_skill(db, user_id, conversation.skill_slug)
+            if conversation is not None and conversation.skill_slug
             else None
         )
-        if skill is not None and skill.tools:
-            registry = registry.only(skill.tools)
+        if descriptor is not None and descriptor.tools:
+            registry = registry.only(descriptor.tools)
     return registry
 
 
@@ -570,10 +1107,26 @@ def decide_approval(
     if run.status != RUN_WAITING_APPROVAL:
         raise BusinessError("这个运行不在等待审批的状态", code=409)
 
-    approval.status = APPROVAL_APPROVED if approved else APPROVAL_REJECTED
-    approval.note = (note or "")[:255] or None
-    approval.decided_time = datetime.now()  # noqa: DTZ005
+    result = db.execute(
+        update(AgentApproval)
+        .where(
+            AgentApproval.id == approval.id,
+            AgentApproval.run_id == run.id,
+            AgentApproval.user_id == user_id,
+            AgentApproval.status == APPROVAL_PENDING,
+            AgentApproval.run.has(AgentRun.status == RUN_WAITING_APPROVAL),
+        )
+        .values(
+            status=APPROVAL_APPROVED if approved else APPROVAL_REJECTED,
+            note=(note or "")[:255] or None,
+            decided_time=datetime.now(),  # noqa: DTZ005
+        )
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        raise BusinessError("这次审批已被处理或运行状态已变化", code=409)
     db.commit()
+    db.refresh(approval)
     return run, approval
 
 
@@ -585,6 +1138,7 @@ def _open_approval(
     seq: int,
     call: ToolCall,
     reason: str,
+    tool_fingerprint: str | None,
 ) -> AgentApproval:
     approval = AgentApproval(
         run_id=run.id,
@@ -592,6 +1146,7 @@ def _open_approval(
         seq=seq,
         tool_name=call["name"],
         tool_args=_safe_json(call["arguments"]),
+        tool_fingerprint=tool_fingerprint,
         status=APPROVAL_PENDING,
         note=reason[:255] or None,
     )
@@ -622,6 +1177,34 @@ def _replay_messages(db: Session, run: AgentRun) -> tuple[list[LLMMessage], Agen
         elif step.kind == STEP_ASSISTANT_TEXT or step.kind == STEP_FINAL_ANSWER:
             pending = None
             messages.append(LLMMessage(role="assistant", content=step.content or ""))
+        elif step.kind in {
+            STEP_SKILL_LOADED,
+            STEP_SKILL_LOAD_FAILED,
+            "skill_resource",
+        } and step.tool_name in {SKILL_LOAD_TOOL_NAME, SKILL_RESOURCE_TOOL_NAME}:
+            # Runtime Skill control calls are persisted as one completed step so replay can
+            # restore the required assistant/tool message pair after an approval pause.
+            call_id = f"call_skill_{step.seq}"
+            messages.append(
+                LLMMessage(
+                    role="assistant",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": step.tool_name,
+                                "arguments": json.dumps(step.tool_args or {}, ensure_ascii=False),
+                            },
+                        }
+                    ],
+                )
+            )
+            messages.append(
+                LLMMessage(role="tool", content=step.content or "", tool_call_id=call_id)
+            )
+            pending = None
         elif step.kind == STEP_TOOL_CALL:
             pending = step
         elif step.kind == STEP_TOOL_RESULT and pending is not None:
@@ -664,13 +1247,14 @@ def _execute(tools: ToolRegistry, call: ToolCall, *, user_id: int):
     try:
         return future.result(timeout=timeout)
     except FutureTimeoutError:
-        future.cancel()
+        cancelled = future.cancel()
+        state = "任务尚未开始，已取消" if cancelled else "执行仍可能在后台继续，状态未知"
         return {
             "ok": False,
-            "content": f"工具执行超过 {timeout:g} 秒，已放弃",
+            "content": f"工具执行超过 {timeout:g} 秒；{state}",
             "duration_ms": int(timeout * 1000),
             "args": None,
-            "error": "timeout",
+            "error": "timeout_cancelled" if cancelled else "timeout_uncertain",
         }
 
 
@@ -706,6 +1290,10 @@ def _add_step(
     content: str | None = None,
     tool_name: str | None = None,
     tool_args: dict | None = None,
+    skill_key: str | None = None,
+    skill_name: str | None = None,
+    skill_source: str | None = None,
+    skill_version: str | None = None,
     ok: bool | None = None,
     duration_ms: int | None = None,
 ) -> AgentStep:
@@ -716,6 +1304,10 @@ def _add_step(
         content=content,
         tool_name=tool_name,
         tool_args=tool_args,
+        skill_key=skill_key,
+        skill_name=skill_name,
+        skill_source=skill_source,
+        skill_version=skill_version,
         ok=ok,
         duration_ms=duration_ms,
     )

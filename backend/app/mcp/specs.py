@@ -7,10 +7,13 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 from urllib.parse import urlparse
+
+from jsonschema.validators import validator_for
 
 from app.mcp.errors import McpError, McpErrorKind
 
@@ -24,6 +27,7 @@ SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 
 # 不允许指向内网/本机：远端服务器应当是可公开访问的 HTTPS 端点。
 _BLOCKED_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal"})
+MAX_INPUT_SCHEMA_BYTES = 65_536
 
 
 @dataclass(frozen=True)
@@ -75,6 +79,40 @@ class McpCallResult:
     ok: bool
     text: str
     raw: list[dict[str, Any]] = field(default_factory=list)
+
+
+def input_schema_validator(schema: dict[str, Any]):
+    """Compile an MCP input schema without allowing remote reference resolution."""
+    try:
+        serialized = json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError) as exc:
+        raise McpError(McpErrorKind.PROTOCOL, "工具参数 Schema 不是有效 JSON") from exc
+    if len(serialized.encode("utf-8")) > MAX_INPUT_SCHEMA_BYTES:
+        raise McpError(McpErrorKind.PROTOCOL, "工具参数 Schema 超过大小限制")
+    if not isinstance(schema, dict):
+        raise McpError(McpErrorKind.PROTOCOL, "工具参数 Schema 必须是对象")
+
+    def reject_remote_refs(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in {"$ref", "$dynamicRef", "$recursiveRef"} and (
+                    not isinstance(item, str) or not item.startswith("#")
+                ):
+                    raise McpError(McpErrorKind.PROTOCOL, "不支持远程 Schema 引用")
+                if key == "$id" and isinstance(item, str) and urlparse(item).scheme:
+                    raise McpError(McpErrorKind.PROTOCOL, "不支持带远程标识的 Schema")
+                reject_remote_refs(item)
+        elif isinstance(value, list):
+            for item in value:
+                reject_remote_refs(item)
+
+    reject_remote_refs(schema)
+    try:
+        validator_type = validator_for(schema)
+        validator_type.check_schema(schema)
+        return validator_type(schema)
+    except Exception as exc:
+        raise McpError(McpErrorKind.PROTOCOL, "工具参数 Schema 不合法") from exc
 
 
 def validate_spec(spec: McpServerSpec) -> None:

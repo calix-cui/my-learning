@@ -21,7 +21,7 @@ from app.mcp.client import McpClient
 from app.mcp.errors import McpError
 from app.mcp.runner import AsyncRunner
 from app.mcp.source import McpSource
-from app.mcp.specs import McpServerSpec, McpToolInfo
+from app.mcp.specs import McpServerSpec, McpToolInfo, input_schema_validator
 
 if TYPE_CHECKING:
     from app.models.mcp_server import McpServer
@@ -77,6 +77,8 @@ class McpManager:
             if conn.stale(now):
                 try:
                     conn.tools = conn.client.list_tools()
+                    for tool in conn.tools:
+                        input_schema_validator(tool.input_schema)
                     conn.tools_at = now
                 except McpError:
                     # 列工具失败说明连接已坏：丢掉，下次重连（不要留半死连接）
@@ -168,6 +170,8 @@ def probe(spec: McpServerSpec) -> tuple[bool, str, list[McpToolInfo]]:
     try:
         client.connect()
         tools = client.list_tools()
+        for tool in tools:
+            input_schema_validator(tool.input_schema)
     except McpError as exc:
         return False, str(exc), []
     finally:

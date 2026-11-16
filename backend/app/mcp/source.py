@@ -4,10 +4,10 @@
 「这是哪个服务器给的」，两个服务器有同名工具时不会互相覆盖（注册表遇到重名会直接报错）。
 
 三个刻意的取舍：
-- **级别不猜**：MCP 的 `readOnlyHint` 只用来**降级**到 READ；没有这个标注一律按
-  EXTERNAL（出站访问外部服务），默认要用户确认。
-- **schema 透传**：参数声明用服务器给的原样 JSON Schema，不用 pydantic 重新生成，
-  否则 enum / oneOf / 嵌套对象会在往返中走样。校验交给服务器，我们只负责传。
+- **风险本地判定**：忽略服务器提供的 `readOnlyHint` 授权含义，MCP 工具统一按
+  EXTERNAL 处理并要求用户确认。
+- **schema 透传并本地校验**：参数声明沿用服务器的 JSON Schema，避免 enum / oneOf /
+  嵌套对象在往返中走样；执行前本地校验，服务器仍可再次校验。
 - **超时 10 秒**：内置工具 2 秒，外部工具要等网络与子进程，给到 10 秒。
 """
 
@@ -15,11 +15,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from jsonschema.exceptions import ValidationError
 from pydantic import BaseModel, ConfigDict
 
 from app.agent.tools.base import ToolError, ToolLevel, ToolSpec
 from app.mcp.client import McpClient
-from app.mcp.specs import McpToolInfo
+from app.mcp.specs import McpToolInfo, input_schema_validator
 
 PREFIX = "mcp__"
 MCP_TOOL_TIMEOUT_SECONDS = 10.0
@@ -31,7 +32,7 @@ def tool_name(slug: str, remote_name: str) -> str:
 
 
 class McpArgs(BaseModel):
-    """任意参数都放行：真正的校验在 MCP server 那边。"""
+    """先保留远端参数形状，McpTool 再按原始 MCP Schema 校验。"""
 
     model_config = ConfigDict(extra="allow")
 
@@ -61,8 +62,9 @@ class McpTool:
         self.description = (
             f"{server_name} · {info.description}" if info.description else server_name
         )
-        # 服务器声明「只读」才降级为 READ；其余一律 EXTERNAL，默认走审批
-        self.level = ToolLevel.READ if info.read_only else ToolLevel.EXTERNAL
+        # 远端注解不可信；MCP 工具都按外部调用处理，统一要求审批。
+        self.level = ToolLevel.EXTERNAL
+        self._input_validator = input_schema_validator(info.input_schema)
 
     def raw_spec(self) -> ToolSpec:
         """原样透传服务器的 input schema（注册表会优先用它）。"""
@@ -76,6 +78,11 @@ class McpTool:
         # 远端工具自己决定怎么用参数；`user_id` 由本地内置工具用来做数据隔离
         del user_id
         payload = args.model_dump()
+        try:
+            self._input_validator.validate(payload)
+        except ValidationError as exc:
+            path = ".".join(str(part) for part in exc.absolute_path) or "参数"
+            raise ToolError(f"参数不符合 MCP Schema：{path}") from exc
         result = self._client.call_tool(self._remote_name, payload or None)
         if not result.ok:
             # `isError` 是工具自己报告的业务失败，按 ToolError 交给执行器转成 ok=False

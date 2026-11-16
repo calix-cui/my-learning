@@ -8,9 +8,9 @@
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -59,6 +59,16 @@ class AgentRun(Base):
         Integer, nullable=False, default=0, comment="已执行的步骤数"
     )
     model: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="实际使用的模型名")
+    skill_mode: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="manual",
+        server_default="manual",
+        comment="off/manual/auto",
+    )
+    skill_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, comment="本次运行发现的 Skill 元数据与已加载内容快照"
+    )
     started_time: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.now, comment="开始时间"
     )

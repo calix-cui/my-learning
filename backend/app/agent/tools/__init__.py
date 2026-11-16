@@ -28,6 +28,7 @@ from app.agent.tools.base import (
     ToolMeta,
     ToolResult,
     ToolSpec,
+    fingerprint_of,
     meta_of,
     run_tool,
     spec_of,
@@ -140,6 +141,10 @@ class ToolRegistry:
 
     def meta(self, name: str) -> ToolMeta | None:
         return self._metas.get(name)
+
+    def fingerprint(self, name: str) -> str | None:
+        tool = self._tools.get(name)
+        return fingerprint_of(tool) if tool is not None else None
 
     def metas(self) -> list[ToolMeta]:
         return [self._metas[name] for name in self._tools]

@@ -38,6 +38,27 @@ def tool_result(seq: int, tool: str, ok: bool, content: str, duration_ms: int) -
     }
 
 
+def skill_loaded(seq: int, *, key: str, name: str, source: str, version: str) -> AgentEvent:
+    return {
+        "type": "skill_loaded",
+        "seq": seq,
+        "skill_key": key,
+        "name": name,
+        "source": source,
+        "version": version,
+    }
+
+
+def skill_load_failed(seq: int, *, key: str, error_code: str, message: str) -> AgentEvent:
+    return {
+        "type": "skill_load_failed",
+        "seq": seq,
+        "skill_key": key,
+        "error_code": error_code,
+        "message": message,
+    }
+
+
 def approval_required(
     run_id: int,
     approval_id: int,
@@ -70,3 +91,17 @@ def run_finished(run_id: int, content: str, steps: int, model: str | None) -> Ag
 
 def error(code: int, message: str) -> AgentEvent:
     return {"type": "error", "code": code, "message": message}
+
+
+def skill_resource(
+    seq: int, *, key: str, name: str | None, path: str, ok: bool, message: str
+) -> AgentEvent:
+    return {
+        "type": "skill_resource",
+        "seq": seq,
+        "skill_key": key,
+        "name": name,
+        "path": path,
+        "ok": ok,
+        "message": message,
+    }

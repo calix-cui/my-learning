@@ -17,8 +17,10 @@ from app.common.exceptions import BusinessError
 from app.llm.fake import FakeLLM, final_reply
 from app.models import Conversation
 from app.services import skill_service
-from app.skills import BUILTIN_SKILLS, build_system_prompt, builtin_skill, load_builtin_skills
+from app.skills import build_system_prompt, builtin_skill, load_builtin_skills
 from app.skills.loader import SkillFormatError, parse_skill
+from app.skills.providers.filesystem import FileSystemSkillProvider
+from app.skills.registry import SkillRegistry
 
 VALID = """---
 slug: demo-skill
@@ -68,6 +70,49 @@ def test_builtin_skills_load_three_packages():
         assert skill.description.strip()
 
 
+def test_skill_registry_discovers_metadata_then_loads_content(tmp_path):
+    root = tmp_path / "skills"
+    package = root / "quick-start"
+    package.mkdir(parents=True)
+    path = package / "SKILL.md"
+    path.write_text(
+        "---\nname: Quick Start\ndescription: A short guide.\n---\n\nFull instructions.",
+        encoding="utf-8",
+    )
+    registry = SkillRegistry([FileSystemSkillProvider(root)])
+
+    [descriptor] = registry.discover()
+    assert descriptor.key == "builtin:quick-start"
+    assert descriptor.name == "Quick Start"
+    assert not hasattr(descriptor, "instructions")
+
+    loaded = registry.load(descriptor.key)
+    assert loaded is not None
+    assert loaded.instructions == "Full instructions."
+    assert loaded.content_hash
+
+
+def test_filesystem_skill_discovery_refreshes_and_isolates_invalid_files(tmp_path):
+    root = tmp_path / "skills"
+    first = root / "first"
+    first.mkdir(parents=True)
+    (first / "SKILL.md").write_text(
+        "---\nname: First\ndescription: first version\n---\nbody", encoding="utf-8"
+    )
+    invalid = root / "invalid"
+    invalid.mkdir()
+    (invalid / "SKILL.md").write_text("not frontmatter", encoding="utf-8")
+    provider = FileSystemSkillProvider(root)
+
+    assert [item.slug for item in provider.discover()] == ["first"]
+    (root / "second").mkdir()
+    (root / "second" / "SKILL.md").write_text(
+        "---\nname: Second\ndescription: second skill\n---\nbody", encoding="utf-8"
+    )
+
+    assert [item.slug for item in provider.discover()] == ["first", "second"]
+
+
 def test_system_prompt_lists_tools_and_rules():
     skill = builtin_skill("meeting-notes")
     assert skill is not None
@@ -92,7 +137,8 @@ def test_list_skills_merges_builtin_and_custom(db_session: Session, user):
     )
     skills = skill_service.list_skills(db_session, user.id)
     slugs = [item.slug for item in skills]
-    assert slugs[: len(BUILTIN_SKILLS)] == list(BUILTIN_SKILLS)
+    builtin_slugs = list(load_builtin_skills())
+    assert slugs[: len(builtin_slugs)] == builtin_slugs
     assert "my-own" in slugs
     assert next(item for item in skills if item.slug == "my-own").source == "custom"
 

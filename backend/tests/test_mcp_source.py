@@ -7,15 +7,18 @@
 from __future__ import annotations
 
 import pathlib
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
 
 from app.agent.executor import registry_for
-from app.agent.tools.base import ToolLevel, meta_of, spec_of
+from app.agent.tools.base import ToolError, ToolLevel, meta_of, spec_of
 from app.mcp import AsyncRunner, McpClient, McpServerSpec
+from app.mcp.errors import McpError
 from app.mcp.manager import McpManager, get_manager, reset_manager
-from app.mcp.source import McpSource, tool_name
+from app.mcp.source import McpSource, McpTool, tool_name
+from app.mcp.specs import McpToolInfo, input_schema_validator
 from app.models import McpServer
 
 FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "mcp_echo_server.py"
@@ -84,6 +87,30 @@ def test_meta_marks_source_and_timeout(source: McpSource) -> None:
     assert meta.source == "mcp"
     assert meta.timeout_seconds == 10.0
     assert meta.requires_approval is True
+
+
+def test_remote_read_only_hint_does_not_lower_risk() -> None:
+    tool = McpTool(
+        None,  # type: ignore[arg-type]
+        slug="echo",
+        server_name="Echo",
+        info=McpToolInfo("read", "read", {"type": "object"}, read_only=True),
+    )
+
+    assert tool.level is ToolLevel.EXTERNAL
+    assert meta_of(tool).requires_approval is True
+
+
+def test_mcp_schema_is_validated_before_remote_call(source: McpSource) -> None:
+    tool = {item.name: item for item in source.list()}["mcp__echo__echo"]
+
+    with pytest.raises(ToolError, match="MCP Schema"):
+        tool.run(tool.args_model.model_validate({}), user_id=1)
+
+
+def test_remote_schema_references_are_rejected() -> None:
+    with pytest.raises(McpError, match="远程 Schema 引用"):
+        input_schema_validator({"type": "object", "properties": {"x": {"$ref": "https://x"}}})
 
 
 def test_mcp_tool_runs_through_adapter(source: McpSource) -> None:
@@ -171,6 +198,47 @@ def test_registry_for_wires_enabled_servers(db_session, user) -> None:
     assert row.tool_count == 2
     assert row.last_connected_time is not None
     reset_manager()
+
+
+def test_registry_for_passes_decrypted_credentials_to_runtime(
+    db_session, user, monkeypatch
+) -> None:
+    import app.agent.executor as executor
+
+    db_session.add(
+        McpServer(
+            user_id=user.id,
+            slug="echo",
+            display_name="Echo 服务器",
+            transport="stdio",
+            command="uv",
+            args=["run", "--no-sync", "python", str(FIXTURE)],
+        )
+    )
+    db_session.commit()
+    seen: list[dict[str, str]] = []
+
+    class _EmptySource:
+        tool_count = 0
+
+        def list(self) -> list:
+            return []
+
+    class _Manager:
+        def source_for(self, _server, *, env):
+            seen.append(env)
+            return _EmptySource()
+
+    monkeypatch.setattr(executor, "get_manager", lambda: _Manager())
+    monkeypatch.setattr(
+        executor,
+        "mcp_service",
+        SimpleNamespace(spec_of_row=lambda _row: SimpleNamespace(env={"TOKEN": "decrypted"})),
+    )
+
+    registry_for(db_session, user.id)
+
+    assert seen == [{"TOKEN": "decrypted"}]
 
 
 def test_registry_for_skips_disabled_server(db_session, user) -> None:

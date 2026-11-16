@@ -8,16 +8,25 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 class AgentMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=4000, description="用户消息")
+    skill_mode: Literal["off", "manual", "auto"] = Field(
+        default="manual", description="Skill 使用方式"
+    )
 
 
 class AgentStepResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     seq: int = Field(description="第几步，从 1 开始")
-    kind: str = Field(description="user_message/assistant_text/tool_call/tool_result/final_answer")
+    kind: str = Field(
+        description="user_message/assistant_text/tool_call/tool_result/skill_loaded/skill_load_failed/final_answer"
+    )
     content: str | None = Field(default=None, description="文本或工具结果")
     tool_name: str | None = Field(default=None, description="工具名")
     tool_args: dict | None = Field(default=None, description="工具参数")
+    skill_key: str | None = Field(default=None, description="Skill 稳定标识")
+    skill_name: str | None = Field(default=None, description="Skill 名称")
+    skill_source: str | None = Field(default=None, description="Skill 来源")
+    skill_version: str | None = Field(default=None, description="Skill 内容版本")
     ok: bool | None = Field(default=None, description="工具是否成功")
     duration_ms: int | None = Field(default=None, description="工具耗时毫秒")
     create_time: datetime

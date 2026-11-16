@@ -53,6 +53,9 @@ class AgentApproval(Base):
     tool_args: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True, comment="调用参数，给用户看清楚要做什么"
     )
+    tool_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="审批时的工具定义摘要，恢复执行前复核"
+    )
     status: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
