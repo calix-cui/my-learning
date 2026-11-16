@@ -205,32 +205,38 @@ export const useChatStore = defineStore('chat', () => {
     return conversationsInFlight
   }
 
+  let conversationRequest = 0
+
   async function openConversation(id: number) {
+    const request = ++conversationRequest
     draft.value = false
     activeId.value = id
     const thread = threadOf(id)
     // 已有缓存先显示（切回来是瞬时的），后台再刷新一次拿最新数据
     const firstLoad = !thread.loaded
-    if (firstLoad) loadingMessages.value = true
+    loadingMessages.value = firstLoad && !thread.sending
+    if (thread.sending) return
     try {
       const detail = await getConversation(id)
+      if (threads.get(id) !== thread || thread.sending) return
       thread.messages = detail.messages
       thread.loaded = true
       patchConversation(id, { title: detail.title })
     } catch {
       // 会话可能已被别处删除：只有当前还停在这个会话时才退回空态
-      threads.delete(id)
-      if (activeId.value === id) {
+      if (request === conversationRequest && activeId.value === id) {
         startNew()
         await loadConversations()
       }
     } finally {
-      if (firstLoad) loadingMessages.value = false
+      if (request === conversationRequest) loadingMessages.value = false
     }
   }
 
   /** 进入新会话草稿态：不发任何请求，界面先空着，等第一条消息再建 */
   function startNew() {
+    conversationRequest += 1
+    loadingMessages.value = false
     threads.delete(DRAFT_KEY)
     draft.value = true
     activeId.value = null
@@ -239,16 +245,16 @@ export const useChatStore = defineStore('chat', () => {
   /** 草稿态发出第一条消息时才真正建会话；失败返回 null */
   async function ensureConversation(): Promise<number | null> {
     if (activeId.value !== null) return activeId.value
+    const draftThread = threadOf(DRAFT_KEY)
     const created = await createConversation()
     conversations.value = [{ ...created, message_count: 0 }, ...conversations.value]
     // 草稿里已经写好的用户消息搬到真实会话下，避免视觉上「跳一下」
-    const draftThread = threads.get(DRAFT_KEY)
-    if (draftThread?.messages.length) {
-      threadOf(created.id).messages = draftThread.messages
+    threadOf(created.id).draftText = draftThread.draftText
+    if (activeId.value === null && threads.get(DRAFT_KEY) === draftThread) {
+      threads.delete(DRAFT_KEY)
+      activeId.value = created.id
+      draft.value = false
     }
-    threads.delete(DRAFT_KEY)
-    activeId.value = created.id
-    draft.value = false
     return created.id
   }
 
@@ -551,14 +557,16 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 打开会话时拉一次最近的运行，刷新后仍能看到上次的工具过程 */
   async function loadAgentRuns(conversationId: number) {
-    const data = await listAgentRuns(conversationId)
-    const latest = data.items[0]
     const thread = threadOf(conversationId)
+    const data = await listAgentRuns(conversationId)
+    if (thread.sending) return
+    const latest = data.items[0]
     thread.steps = latest ? latest.steps.filter((step) => step.kind !== 'final_answer') : []
 
     // 刷新前挂起的审批要能复原，否则用户永远点不到那张卡片
     if (latest?.status === 'waiting_approval') {
       const pending = await listApprovals(latest.id)
+      if (thread.sending) return
       const waiting = pending.find((item) => item.status === 'pending')
       thread.approval = waiting
         ? {

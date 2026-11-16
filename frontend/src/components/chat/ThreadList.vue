@@ -1,20 +1,27 @@
 <script setup lang="ts">
 /** 侧栏会话区：整宽「新建会话」+ 会话列表。 */
+import { useRouter } from 'vue-router'
+
 import AppIcon from '@/components/ui/AppIcon.vue'
 import SoftButton from '@/components/ui/SoftButton.vue'
 import ThreadItem from '@/components/chat/ThreadItem.vue'
 import { useChatStore } from '@/stores/chat'
 
 const chat = useChatStore()
+const router = useRouter()
 
 function open(id: number) {
-  void chat.openConversation(id)
+  void router.push({ name: 'chat', params: { conversationId: id } })
+}
+function startNew() {
+  if (chat.activeId === null) chat.startNew()
+  void router.push({ name: 'chat', params: { conversationId: '' } })
 }
 </script>
 
 <template>
   <div class="threads">
-    <SoftButton class="chat__new" block @click="chat.startNew()">
+    <SoftButton class="chat__new" block @click="startNew">
       <AppIcon name="plus" :size="16" />
       新建会话
     </SoftButton>

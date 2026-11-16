@@ -37,7 +37,11 @@ watch(
 
 function closeSettings() {
   settingsOpen.value = false
-  if (route.query.settings) void router.replace({ path: '/chat' })
+  if (route.query.settings) {
+    const query = { ...route.query }
+    delete query.settings
+    void router.replace({ path: route.path, query, hash: route.hash })
+  }
 }
 
 /**
@@ -68,7 +72,11 @@ async function handleLogout() {
 
 async function openSettings() {
   settingsOpen.value = true
-  await router.replace({ path: '/chat', query: { settings: '1' } })
+  await router.replace({
+    path: route.path,
+    query: { ...route.query, settings: '1' },
+    hash: route.hash,
+  })
 }
 </script>
 

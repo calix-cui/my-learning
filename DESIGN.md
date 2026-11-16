@@ -292,6 +292,7 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 
 - **侧边栏**：264px，底色 `canvas`（与内容区同色，不靠线分隔），内部 padding 18–20。
 - **会话项**：高 44–48，圆角 12，padding `10px`；标题 14px/500 单行省略；hover 横向渐变；选中 `accent-soft` 底（不加左侧竖条）；右侧「…」按钮仅 hover/选中时出现。
+- **会话导航**：侧栏会话对应 `/chat/:conversationId`，空白草稿对应 `/chat`；直接打开、刷新或使用浏览器历史时按地址选择会话。设置浮层保留当前会话地址。
 - **设置二级导航**：208px，项高 40，圆角 12，padding `10px 12px`，14px；选中 `accent-soft` 底。
 - **对话工具条**：内容区顶部一行，`padding 14px 32px 6px`，标题 16/600 单行省略，右侧模型胶囊 + 图标按钮；不加底边框，靠留白分隔。
 

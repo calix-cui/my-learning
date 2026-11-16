@@ -24,7 +24,7 @@ const router = createRouter({
       meta: { title: '注册', public: true },
     },
     {
-      path: '/chat',
+      path: '/chat/:conversationId([1-9]\\d*)?',
       name: 'chat',
       component: ChatView,
       meta: { title: '对话' },

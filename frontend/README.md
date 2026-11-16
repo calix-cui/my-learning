@@ -17,6 +17,10 @@ My Agent 的聊天界面，基于 Vue 3 + TypeScript + Vite + Element Plus 实�
 | Markdown | markdown-it 15 + DOMPurify 3（只用于助手消息渲染） |
 | 主题 | 自研 `src/theme/`（18 个语义色 × light/dark，4 套主题，运行时可切） |
 
+## 会话地址
+
+`/chat` 打开空白草稿。首次发送创建会话后，地址更新为 `/chat/:conversationId`，例如 `/chat/123`。打开已有会话、刷新或使用浏览器历史时，按地址加载会话及执行记录。需要登录时，登录成功后回到原地址。
+
 ## 启动方式
 
 ```bash

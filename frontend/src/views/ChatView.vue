@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AgentTimeline from '@/components/chat/AgentTimeline.vue'
 import ApprovalCard from '@/components/chat/ApprovalCard.vue'
@@ -15,6 +16,8 @@ import type { ChatSkill } from '@/types/api'
 const MAX_LENGTH = 4000
 
 const chat = useChatStore()
+const route = useRoute()
+const router = useRouter()
 const settings = useSettingsStore()
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null)
 const scroller = ref<HTMLElement | null>(null)
@@ -94,7 +97,7 @@ async function handleApproval(decision: 'approve' | 'reject', note?: string) {
 
 async function handleSend() {
   const content = chat.composerText
-  if (!content.trim() || chat.sending) return
+  if (!content.trim() || chat.sending || chat.loadingMessages) return
   // 失败时保留草稿，用户不用重打；成功由 store 清掉自己会话的草稿
   const skillMode = autoSkills.value ? 'auto' : 'manual'
   const ok = chat.agentMode
@@ -124,20 +127,45 @@ watch(
   () => scrollToBottom(),
 )
 
-onMounted(async () => {
-  // 会话列表由侧栏负责加载（AsideView），这里只等它就绪：刷新页面时不重复请求
-  await chat.ensureConversationsLoaded()
-  // 直接刷新页面时带回最后一个会话；没有就进草稿态（新会话界面）
-  if (chat.activeId === null) {
-    if (chat.conversations.length) await chat.openConversation(chat.conversations[0].id)
-    else chat.startNew()
-  }
-  // 刷新回来时把上一次的工具过程也带回来
-  if (chat.activeId !== null) {
-    await chat.loadAgentRuns(chat.activeId)
-  }
-  await loadSkills()
-})
+// 深链、刷新和历史导航都以路由参数为准。
+watch(
+  () => route.params.conversationId,
+  async (param) => {
+    if (route.name !== 'chat') return
+    if (!param) {
+      if (chat.activeId !== null || !chat.draft) chat.startNew()
+      return
+    }
+    const id = Number(param)
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      await router.replace({ name: 'chat', params: { conversationId: '' } })
+      return
+    }
+    if (chat.activeId === id && chat.sending) return
+    await chat.openConversation(id)
+    if (chat.activeId === id && !chat.sending) {
+      await chat.loadAgentRuns(id).catch(() => undefined)
+    }
+  },
+  { immediate: true },
+)
+
+// 首条消息建库后更新草稿地址；删除或无法打开当前会话时回到草稿地址。
+watch(
+  () => chat.activeId,
+  (id, previousId) => {
+    if (route.name !== 'chat') return
+    const param = route.params.conversationId
+    if (id !== null && !param && previousId === null) {
+      void router.replace({ name: 'chat', params: { conversationId: id }, query: route.query })
+    } else if (id === null && param === String(previousId)) {
+      void router.replace({ name: 'chat', params: { conversationId: '' }, query: route.query })
+    }
+  },
+  { flush: 'sync' },
+)
+
+void loadSkills()
 </script>
 
 <template>
@@ -199,7 +227,7 @@ onMounted(async () => {
       ref="composer"
       v-model="chat.composerText"
       :sending="chat.sending"
-      :disabled="false"
+      :disabled="chat.loadingMessages"
       :max-length="MAX_LENGTH"
       :agent-mode="chat.agentMode"
       :auto-skills="autoSkills"
