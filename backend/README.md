@@ -245,3 +245,16 @@ make check       # lint + 测试，提交前跑这个
 
 - 聊天不再用全局 `get_llm()`，改用 `get_user_llm()`（`app/llm/__init__.py`）：按当前登录用户解析配置，缺项时错误提示会指向设置页而不是环境变量。
 - 线上更换主密钥会让已存 Key 无法解密（按未配置处理，用户重填即可），所以 `APP_SECRET_KEY` 要跟数据库一样按「不可随意更换」对待。
+
+
+### 本地 Skill Runtime 实际验收
+
+先启动本地服务并执行 `alembic upgrade head`、`alembic check`，再在 `backend/` 运行：
+
+```bash
+.venv/bin/python -m scripts.skill_runtime_acceptance
+```
+
+脚本只访问本机服务和本地数据库，创建临时账号，用虚构会议记录验证 auto/manual/off 模式、SSE、MySQL 快照与消息/历史回放；使用服务当前配置的真实模型，会产生模型调用用量。结束或断言失败时通过注销接口清理临时账号及其数据。脚本不修改已有用户设置，真实模型不可用时明确失败，不退回 FakeLLM。
+
+2026-11-16 本地迁移到 `9d3e5f7a1b20`，一致性检查通过；实际模型调用返回余额不足，因此真实模型闭环仍待复验。
