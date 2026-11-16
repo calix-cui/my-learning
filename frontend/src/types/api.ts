@@ -132,6 +132,10 @@ export interface AgentStep {
   content: string | null
   tool_name: string | null
   tool_args: Record<string, unknown> | null
+  skill_key: string | null
+  skill_name: string | null
+  skill_source: string | null
+  skill_version: string | null
   ok: boolean | null
   duration_ms: number | null
   create_time: string

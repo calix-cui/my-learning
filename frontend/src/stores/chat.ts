@@ -15,6 +15,7 @@ import {
   listAgentRuns,
   listApprovals,
   sendAgentStream,
+  type AgentSkillMode,
   type AgentStreamEvent,
 } from '@/api/agent'
 import { confirmDialog, promptDialog } from '@/components/ui/messageBox'
@@ -373,6 +374,10 @@ export const useChatStore = defineStore('chat', () => {
       content: null,
       tool_name: null,
       tool_args: null,
+      skill_key: null,
+      skill_name: null,
+      skill_source: null,
+      skill_version: null,
       ok: null,
       duration_ms: null,
       create_time: formatNow(),
@@ -405,6 +410,44 @@ export const useChatStore = defineStore('chat', () => {
       thread.steps = [
         ...thread.steps,
         { ...base, seq: event.seq, kind: 'assistant_text', content: event.content },
+      ]
+    } else if (event.type === 'skill_loaded') {
+      thread.steps = [
+        ...thread.steps,
+        {
+          ...base,
+          seq: event.seq,
+          kind: 'skill_loaded',
+          skill_key: event.skill_key,
+          skill_name: event.name,
+          skill_source: event.source,
+          skill_version: event.version,
+        },
+      ]
+    } else if (event.type === 'skill_load_failed') {
+      thread.steps = [
+        ...thread.steps,
+        {
+          ...base,
+          seq: event.seq,
+          kind: 'skill_load_failed',
+          skill_key: event.skill_key,
+          content: event.message,
+        },
+      ]
+    } else if (event.type === 'skill_resource') {
+      thread.steps = [
+        ...thread.steps,
+        {
+          ...base,
+          seq: event.seq,
+          kind: 'skill_resource',
+          skill_key: event.skill_key,
+          skill_name: event.name,
+          tool_args: { skill_key: event.skill_key, path: event.path },
+          ok: event.ok,
+          content: event.message,
+        },
       ]
     } else if (event.type === 'approval_required') {
       thread.approval = {
@@ -442,7 +485,10 @@ export const useChatStore = defineStore('chat', () => {
     sortByRecent()
   }
 
-  async function sendWithAgent(content: string): Promise<boolean> {
+  async function sendWithAgent(
+    content: string,
+    skillMode: AgentSkillMode = 'manual',
+  ): Promise<boolean> {
     const text = content.trim()
     if (!text || activeThread.value.runningAgent) return false
 
@@ -472,14 +518,20 @@ export const useChatStore = defineStore('chat', () => {
     thread.sending = true
 
     try {
-      await sendAgentStream(conversationId, text, {
-        onEvent: (event: AgentStreamEvent) => applyAgentEvent(thread, event),
-        onApproval: () => {
-          // 服务端已经暂停：流结束，等用户点批准/拒绝
-          thread.runningAgent = false
+      await sendAgentStream(
+        conversationId,
+        text,
+        {
+          onEvent: (event: AgentStreamEvent) => applyAgentEvent(thread, event),
+          onApproval: () => {
+            // 服务端已经暂停：流结束，等用户点批准/拒绝
+            thread.runningAgent = false
+          },
+          onFinished: (event) => appendAssistantMessage(thread, conversationId, event),
         },
-        onFinished: (event) => appendAssistantMessage(thread, conversationId, event),
-      })
+        undefined,
+        skillMode,
+      )
       // 用服务端的真实 id / 时间覆盖乐观数据（写回它自己的 thread）
       const detail = await getConversation(conversationId)
       thread.messages = detail.messages

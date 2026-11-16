@@ -9,12 +9,14 @@ const props = defineProps<{
   disabled: boolean
   maxLength: number
   agentMode: boolean
+  autoSkills: boolean
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   send: []
   'toggle-agent-mode': []
+  'toggle-auto-skills': []
 }>()
 
 const focused = ref(false)
@@ -68,17 +70,34 @@ defineExpose({ focus })
       />
 
       <div class="composer__bar">
-        <button
-          type="button"
-          class="chat__mode"
-          :class="{ 'is-on': agentMode }"
-          :aria-pressed="agentMode"
-          title="打开后会先思考、必要时调用工具，再给出回答"
-          @click="emit('toggle-agent-mode')"
-        >
-          <AppIcon name="sparkle" :size="15" />
-          深度回答
-        </button>
+        <div class="composer__modes">
+          <button
+            type="button"
+            class="chat__mode"
+            :class="{ 'is-on': agentMode }"
+            :aria-pressed="agentMode"
+            :disabled="sending || disabled"
+            title="打开后会先思考、必要时调用工具，再给出回答"
+            @click="emit('toggle-agent-mode')"
+          >
+            <AppIcon name="sparkle" :size="15" />
+            深度回答
+          </button>
+
+          <button
+            v-if="agentMode"
+            type="button"
+            class="chat__mode"
+            :class="{ 'is-on': autoSkills }"
+            :aria-pressed="autoSkills"
+            :disabled="sending || disabled"
+            title="根据本次任务选择技能；已挂载的技能仍会优先使用"
+            @click="emit('toggle-auto-skills')"
+          >
+            <AppIcon name="sparkle" :size="14" />
+            自动挑选技能
+          </button>
+        </div>
 
         <el-button
           type="primary"
@@ -144,6 +163,13 @@ defineExpose({ focus })
   padding-top: 8px;
 }
 
+.composer__modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 /* 「深度回答」是一枚可开关的胶囊，状态靠底色与文字色区分，不加边框 */
 .chat__mode {
   display: inline-flex;
@@ -176,6 +202,11 @@ defineExpose({ focus })
 .chat__mode:focus-visible {
   outline: 2px solid var(--ma-color-accent);
   outline-offset: 2px;
+}
+
+.chat__mode:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .composer__send {

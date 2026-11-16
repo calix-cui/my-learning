@@ -19,16 +19,21 @@ const settings = useSettingsStore()
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null)
 const scroller = ref<HTMLElement | null>(null)
 const skills = ref<ChatSkill[]>([])
+const autoSkills = ref(false)
 
 const hasConversation = computed(() => chat.activeId !== null)
 
 /** 技能列表跟着当前会话走：换会话要重拉，才能标出「哪个是挂着的」 */
+let skillRequest = 0
 async function loadSkills() {
+  const request = ++skillRequest
+  const conversationId = chat.activeId
+  skills.value = []
   try {
-    const { items } = await listSkills(chat.activeId)
-    skills.value = items
+    const { items } = await listSkills(conversationId)
+    if (request === skillRequest && conversationId === chat.activeId) skills.value = items
   } catch {
-    skills.value = []
+    // 保持空列表；手动模式仍由后端读取真实挂载状态。
   }
 }
 
@@ -40,7 +45,7 @@ const skillItems = computed(() => [
 
 async function handleSelectSkill(slug: string | null) {
   const id = chat.activeId
-  if (!id) return
+  if (!id || chat.sending) return
   try {
     await mountSkill(id, slug)
     await loadSkills()
@@ -89,9 +94,12 @@ async function handleApproval(decision: 'approve' | 'reject', note?: string) {
 
 async function handleSend() {
   const content = chat.composerText
-  if (!content.trim()) return
+  if (!content.trim() || chat.sending) return
   // 失败时保留草稿，用户不用重打；成功由 store 清掉自己会话的草稿
-  const ok = chat.agentMode ? await chat.sendWithAgent(content) : await chat.send(content)
+  const skillMode = autoSkills.value ? 'auto' : 'manual'
+  const ok = chat.agentMode
+    ? await chat.sendWithAgent(content, skillMode)
+    : await chat.send(content)
   if (ok) {
     composer.value?.focus()
   }
@@ -139,7 +147,7 @@ onMounted(async () => {
       :model="modelLabel"
       :skill-name="mountedSkill?.name ?? ''"
       :skill-items="skillItems"
-      :skill-disabled="!hasConversation"
+      :skill-disabled="!hasConversation || chat.sending"
       @select-skill="handleSelectSkill"
     />
 
@@ -194,8 +202,10 @@ onMounted(async () => {
       :disabled="false"
       :max-length="MAX_LENGTH"
       :agent-mode="chat.agentMode"
+      :auto-skills="autoSkills"
       @send="handleSend"
       @toggle-agent-mode="chat.toggleAgentMode(!chat.agentMode)"
+      @toggle-auto-skills="autoSkills = !autoSkills"
     />
   </div>
 </template>

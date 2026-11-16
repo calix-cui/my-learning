@@ -12,7 +12,12 @@ const props = defineProps<{
 const visible = computed(() =>
   props.steps.filter(
     (step) =>
-      step.kind === 'tool_call' || step.kind === 'tool_result' || step.kind === 'assistant_text',
+      step.kind === 'tool_call' ||
+      step.kind === 'tool_result' ||
+      step.kind === 'assistant_text' ||
+      step.kind === 'skill_loaded' ||
+      step.kind === 'skill_load_failed' ||
+      step.kind === 'skill_resource',
   ),
 )
 
@@ -25,6 +30,9 @@ function argsText(step: AgentStep): string {
 
 function kindLabel(step: AgentStep): string {
   if (step.kind === 'assistant_text') return '思考'
+  if (step.kind === 'skill_loaded') return '已采用技能'
+  if (step.kind === 'skill_load_failed') return '技能未加载'
+  if (step.kind === 'skill_resource') return step.ok ? '已读取参考资料' : '参考资料未读取'
   if (step.kind === 'tool_call') return '调用工具'
   return step.ok ? '工具结果' : '工具失败'
 }
@@ -48,12 +56,24 @@ function kindLabel(step: AgentStep): string {
         <div class="timeline__body">
           <p class="timeline__label">
             {{ kindLabel(step) }}
-            <code v-if="step.tool_name" class="timeline__tool">{{ step.tool_name }}</code>
+            <code
+              v-if="
+                step.skill_name ||
+                step.skill_key ||
+                (step.tool_name && step.kind !== 'skill_resource')
+              "
+              class="timeline__tool"
+            >
+              {{ step.skill_name || step.skill_key || step.tool_name }}
+            </code>
             <span v-if="step.duration_ms !== null" class="timeline__time"
               >{{ step.duration_ms }}ms</span
             >
           </p>
-          <p v-if="step.kind === 'tool_call'" class="timeline__text timeline__text--muted">
+          <p v-if="step.kind === 'skill_loaded'" class="timeline__text timeline__text--muted">
+            {{ step.skill_source === 'builtin' ? '内置技能' : '自建技能' }}
+          </p>
+          <p v-else-if="step.kind === 'tool_call'" class="timeline__text timeline__text--muted">
             {{ argsText(step) || '（无参数）' }}
           </p>
           <p v-else class="timeline__text">{{ step.content }}</p>

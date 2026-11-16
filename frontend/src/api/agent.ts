@@ -1,10 +1,36 @@
 import type { AgentRunList, ChatMessage } from '@/types/api'
 
+export type AgentSkillMode = 'off' | 'manual' | 'auto'
+
 /** agent 流式事件（与后端 SSE 负载一一对应） */
 export type AgentStreamEvent =
   | { type: 'run_started'; run_id: number; conversation_id: number }
   | { type: 'step_started'; seq: number; kind: string }
   | { type: 'assistant_text'; seq: number; content: string }
+  | {
+      type: 'skill_loaded'
+      seq: number
+      skill_key: string
+      name: string
+      source: string
+      version: string
+    }
+  | {
+      type: 'skill_load_failed'
+      seq: number
+      skill_key: string
+      error_code: string
+      message: string
+    }
+  | {
+      type: 'skill_resource'
+      seq: number
+      skill_key: string
+      name: string | null
+      path: string
+      ok: boolean
+      message: string
+    }
   | { type: 'tool_call'; seq: number; tool: string; args: Record<string, unknown> | null }
   | {
       type: 'tool_result'
@@ -108,11 +134,12 @@ export async function sendAgentStream(
   content: string,
   handlers: AgentStreamHandlers,
   signal?: AbortSignal,
+  skillMode: AgentSkillMode = 'manual',
 ): Promise<void> {
   const response = await fetch(`/api/conversations/${id}/agent/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, skill_mode: skillMode }),
     signal,
   })
   await consume(response, handlers)

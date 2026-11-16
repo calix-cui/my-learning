@@ -271,3 +271,79 @@ describe('chat store · 工具审批', () => {
     })
   })
 })
+
+describe('chat store · Skill 时间线', () => {
+  it('传递自动模式，隔离异步事件并回放已保存的 Skill 步骤', async () => {
+    const { sendAgentStream, listAgentRuns } = await import('@/api/agent')
+    setActivePinia(createPinia())
+    const chat = useChatStore()
+    chat.activeId = 1
+    const sending = chat.sendWithAgent('整理会议', 'auto')
+    expect(sendAgentStream).toHaveBeenLastCalledWith(
+      1,
+      '整理会议',
+      expect.any(Object),
+      undefined,
+      'auto',
+    )
+    await chat.openConversation(2)
+    agentHandlers.onEvent?.({
+      type: 'skill_loaded',
+      seq: 2,
+      skill_key: 'builtin:meeting',
+      name: '会议纪要',
+      source: 'builtin',
+      version: 'v1',
+    })
+    agentHandlers.onEvent?.({
+      type: 'skill_load_failed',
+      seq: 3,
+      skill_key: 'builtin:missing',
+      error_code: 'unknown_skill',
+      message: '技能不可用',
+    })
+    expect(chat.agentSteps).toEqual([])
+    finishAgent?.()
+    await sending
+    await chat.openConversation(1)
+    expect(chat.agentSteps).toMatchObject([
+      { kind: 'skill_loaded', skill_name: '会议纪要', skill_version: 'v1' },
+      { kind: 'skill_load_failed', content: '技能不可用' },
+    ])
+    agentHandlers.onEvent?.({
+      type: 'skill_resource',
+      seq: 4,
+      skill_key: 'builtin:meeting',
+      name: '会议纪要',
+      path: 'references/checklist.md',
+      ok: true,
+      message: '已读取参考资料',
+    })
+    expect(chat.agentSteps.at(-1)).toMatchObject({
+      kind: 'skill_resource',
+      skill_name: '会议纪要',
+      ok: true,
+      tool_args: { path: 'references/checklist.md' },
+    })
+    const savedSteps = JSON.parse(JSON.stringify(chat.agentSteps))
+    vi.mocked(listAgentRuns).mockResolvedValueOnce({
+      items: [
+        {
+          id: 7,
+          model: null,
+          status: 'completed',
+          step_count: 3,
+          error_message: null,
+          started_time: '',
+          finished_time: null,
+          steps: savedSteps,
+        },
+      ],
+    })
+    setActivePinia(createPinia())
+    const refreshed = useChatStore()
+    refreshed.activeId = 1
+    await refreshed.loadAgentRuns(1)
+    expect(refreshed.agentSteps).toEqual(savedSteps)
+  })
+})
