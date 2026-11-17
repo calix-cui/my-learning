@@ -79,6 +79,7 @@ class OpenAICompatibleClient:
 
         payload: dict[str, object] = {"model": self.model, "messages": converted}
         if tools:
+            # 只发送工具名称、用途和参数约束，供模型生成结构化调用请求。
             payload["tools"] = [
                 {
                     "type": "function",
@@ -195,6 +196,7 @@ class OpenAICompatibleClient:
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise LLMError("模型返回格式无法解析") from exc
 
+        # 兼容接口将函数名和参数放在 tool_calls 中，适配层只解析并交给执行器。
         raw_calls = message.get("tool_calls") or []
         if not isinstance(raw_calls, list):
             raise LLMError("模型返回格式无法解析")

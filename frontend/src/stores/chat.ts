@@ -373,7 +373,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /** 用 agent 循环发一条消息：过程进时间线，最终答复进 messages */
-  /** 把一条流式事件并进它所属会话的时间线（绝不写别的会话） */
+  /** 将后端工具调用和结果映射到所属会话的时间线，供执行过程组件展示。 */
   function applyAgentEvent(thread: ChatThread, event: AgentStreamEvent) {
     const base = {
       seq: 0,
@@ -523,6 +523,7 @@ export const useChatStore = defineStore('chat', () => {
     thread.runningAgent = true
     thread.sending = true
 
+    // 事件回调绑定本次发送的会话，切换页面时也继续更新原会话。
     try {
       await sendAgentStream(
         conversationId,

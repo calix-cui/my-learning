@@ -65,6 +65,7 @@ def stream_agent_run(
         content=payload.content,
         skill_mode=payload.skill_mode,
     )
+    # 按当前用户和会话装配工具，再将注册表与执行策略交给 Agent 循环。
     registry = registry_for(db, user.id, conversation.id, skill_mode=payload.skill_mode)
     events = stream_run(
         db,
@@ -153,7 +154,7 @@ def decide(
         approved=payload.decision == "approve",
         note=payload.note,
     )
-    # The run snapshot, not the conversation's current mount, determines its Skill limits.
+    # 恢复执行时先组装基础工具，再按原运行的 Skill 快照恢复工具范围。
     registry = registry_for(db, user.id, run.conversation_id, skill_mode="off")
     events = resume_run(
         db,

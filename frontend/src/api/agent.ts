@@ -127,7 +127,7 @@ async function consume(response: Response, handlers: AgentStreamHandlers): Promi
  * 跑一次 agent 循环（SSE）。
  *
  * 和普通对话一样用 fetch + ReadableStream：POST 带 body，EventSource 做不到。
- * 超时给到 120s——多步循环比单次问答慢，但也不能真的无限挂。
+ * 请求只传用户消息和 Skill 模式，工具定义和执行权限由后端组装。
  */
 export async function sendAgentStream(
   id: number,

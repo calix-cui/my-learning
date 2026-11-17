@@ -150,7 +150,7 @@ class ToolRegistry:
         return [self._metas[name] for name in self._tools]
 
     def specs(self) -> list[ToolSpec]:
-        """给模型的工具声明：被用户关掉的不出现，省 token 也少误调。"""
+        """为已启用的工具生成模型可见的声明，实际执行仍需经过策略检查。"""
         return [spec_of(self._tools[name]) for name in self.enabled_names()]
 
     # ---- 执行 ----

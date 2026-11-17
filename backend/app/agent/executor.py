@@ -372,6 +372,7 @@ def _run_loop(
 
     try:
         for _ in range(MAX_STEPS):
+            # 每轮按已加载的 Skill 收窄工具集合，模型和执行策略使用同一注册表。
             tools = _tools_for_skills(base_tools, state.loaded_skills)
             policy.registry = tools
             specs = tools.specs()
@@ -381,6 +382,7 @@ def _run_loop(
                 and any(item.key not in loaded_keys for item in state.skill_catalog)
                 and SKILL_LOAD_TOOL_NAME not in tools.names()
             )
+            # Skill 控制动作复用函数调用格式，由执行器单独处理。
             if skill_control_enabled:
                 specs.append(_skill_load_tool_spec())
             if any(item.resources for item in state.loaded_skills):
@@ -409,6 +411,7 @@ def _run_loop(
                 db.commit()
                 yield events.assistant_text(state.seq, reply["content"])
 
+            # 模型没有继续请求工具时，将这轮文本作为最终答复保存。
             if not calls:
                 final = (reply["content"] or "").strip()
                 if not final:
@@ -434,6 +437,7 @@ def _run_loop(
                 yield events.run_finished(run.id, final, state.seq, run.model)
                 return
 
+            # 保留模型的调用消息，下一轮按调用 ID 将它与工具结果配对。
             messages.append(
                 LLMMessage(
                     role="assistant",
@@ -452,8 +456,7 @@ def _run_loop(
             if any(
                 call["name"] in {SKILL_LOAD_TOOL_NAME, SKILL_RESOURCE_TOOL_NAME} for call in calls
             ):
-                # A Skill changes the instructions for the next model turn. Calls planned
-                # in the same response are returned as deferred observations, never run.
+                # 加载指引或读取资源会改变下一轮上下文，同批普通工具暂缓执行。
                 for call in calls:
                     if call["name"] == SKILL_RESOURCE_TOOL_NAME:
                         event = _read_skill_resource(
@@ -536,9 +539,11 @@ def _run_loop(
                 db.commit()
                 yield events.tool_call(state.seq, call["name"], _safe_json(call["arguments"]))
 
+                # 模型提出请求，后端决定放行、拒绝或等待用户审批。
                 decision = policy.check(call["name"], _safe_json(call["arguments"]))
 
                 if decision.needs_approval:
+                    # 保存待审批请求并结束当前流，用户决定后从运行记录恢复。
                     approval = _open_approval(
                         db,
                         run=run,
@@ -596,6 +601,7 @@ def _run_loop(
                     yield events.error(504, message)
                     return
 
+                # SSE 和运行步骤只记录摘要，模型下一轮收到完整结果并按调用 ID 配对。
                 messages.append(
                     LLMMessage(
                         role="tool",
@@ -994,6 +1000,7 @@ def registry_for(
     row = db.scalar(select(UserSettings).where(UserSettings.user_id == user_id))
     disabled = tuple(row.tools_disabled or []) if row is not None else ()
 
+    # 汇总内置工具和当前用户启用的 MCP 工具，再应用账号的禁用名单。
     sources: list[ToolSource] = [BuiltinSource(db, conversation_id)]
     manager = get_manager()
     servers = db.scalars(

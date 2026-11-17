@@ -173,7 +173,7 @@ def validate_arguments(
 
 
 def run_tool(tool: Tool, raw_arguments: str, *, user_id: int) -> ToolResult:
-    """执行一个工具，把任何异常都收敛成结果，保证循环不中断。"""
+    """先按工具的参数模型验证请求，再执行工具，将校验或执行错误转为结果。"""
     started = time.perf_counter()
     model, data, error = validate_arguments(tool, raw_arguments)
     if error is not None:
