@@ -5,7 +5,7 @@
 ## 1. 先读哪条链路
 
 1. **登录 → 新建会话 → 普通发送 → 刷新回看**。理解 Cookie、会话归属、SSE 和消息提交。
-2. **深度回答 → 发现工具 → 执行工具 → 审批恢复**。理解模型如何提出调用，以及后端在哪里决定能否执行。
+2. **普通聊天 → 按需选择工具 → 执行工具 → 审批恢复**。理解模型如何提出调用，以及后端在哪里决定能否执行。
 3. **手动挂载或自动挑选 Skill → 加载正文 → 读取资源 → 回放**。理解方法指引如何进入上下文，以及快照如何保存。
 4. 最后读设置、工具市场、技能管理和启动入口。各节末尾的测试可以当作可执行示例。
 
@@ -51,21 +51,19 @@ flowchart LR
 
 ## 4. 普通发送与回复展示
 
-1. [ChatComposer.vue](../frontend/src/components/chat/ChatComposer.vue) 的 `handleKeydown` / `submit` 发出 `send` 事件，交给 [ChatView.vue](../frontend/src/views/ChatView.vue) 的 `handleSend`。普通模式进入 [stores/chat.ts](../frontend/src/stores/chat.ts) 的 `send`，先显示临时用户消息。
-2. [api/chat.ts](../frontend/src/api/chat.ts) 的 `sendMessageStream` 请求 `POST /api/conversations/{id}/messages/stream`，[api/chat.py](../backend/app/api/chat.py) 的 `stream_message` 调用 [chat_service.py](../backend/app/services/chat_service.py) 的 `prepare_stream` / `build_context`，校验归属、写入待提交的用户消息、构建上下文。
-3. `stream_reply` 调用 `llm.stream`，通过 [sse.py](../backend/app/api/sse.py) 的 `encode_sse` 发出 `meta`、`delta`、`done` 或 `error`；正常结束时提交用户和助手消息，再发 `done`。提交前断流或出错会回滚。消息实体见 [message.py](../backend/app/models/message.py)。
-4. Store 在 `onMeta` 替换临时消息，在 `onDelta` 拼接流式文字，在 `onDone` 写入正式助手消息并更新侧栏。[ChatView.vue](../frontend/src/views/ChatView.vue) 排列消息，[ChatMessage.vue](../frontend/src/components/chat/ChatMessage.vue) 渲染消息，[markdown.ts](../frontend/src/utils/markdown.ts) 负责 Markdown 转换与净化。
+1. [ChatComposer.vue](../frontend/src/components/chat/ChatComposer.vue) 的 `submit` → [ChatView.vue](../frontend/src/views/ChatView.vue) 的 `handleSend` → [stores/chat.ts](../frontend/src/stores/chat.ts) 的 `send`。深度回答只改变传入的推理强度。
+2. [api/agent.ts](../frontend/src/api/agent.ts) 的 `sendAgentStream` 向 `POST /api/conversations/{id}/messages/stream` 发送 `execution: "auto"`。[api/chat.py](../backend/app/api/chat.py) 经 `agent_stream_response` 进入现有 Agent 循环。
+3. `prepare_run` 提交用户消息、运行及首步骤。`_run_loop` 向模型流式请求，当前轮有工具调用时清除临时预览，最后一轮返回正式正文。Store 经 `applyAgentEvent` 和 `appendAssistantMessage` 更新消息及执行步骤。[ChatView.vue](../frontend/src/views/ChatView.vue) 在动画帧中更新 Markdown 预览。
+4. 旧文本 API 和同步 API 保留。普通模式和深度回答的端到端行为可从 [test_chat_tool_stream.py](../backend/tests/test_chat_tool_stream.py) 跟读。
 
-模型选择可从 [llm/__init__.py](../backend/app/llm/__init__.py) 的 `get_user_llm → resolve_llm → build_llm_for` 追到 [OpenAICompatibleClient.stream](../backend/app/llm/openai_compatible.py) 或 [FakeLLM.stream](../backend/app/llm/fake.py)。同步接口 `POST /messages` 在同一个 [api/chat.py](../backend/app/api/chat.py) 的 `send_message`。测试入口：[test_chat_service.py](../backend/tests/test_chat_service.py)、[api/chat.test.ts](../frontend/src/api/chat.test.ts)。
-
-## 5. 深度回答、Tool 发现与执行
+## 5. Tool 发现、执行与审批
 
 | 环节 | 代码位置 | 阅读重点 |
 |---|---|---|
-| 启动 | [ChatView.vue](../frontend/src/views/ChatView.vue) · `handleSend` → [stores/chat.ts](../frontend/src/stores/chat.ts) · `sendWithAgent` → [api/agent.ts](../frontend/src/api/agent.ts) · `sendAgentStream` → [api/agent.py](../backend/app/api/agent.py) · `stream_agent_run` | `POST /api/conversations/{id}/agent/stream`。执行器 `prepare_run` 开流前提交用户消息、运行及首步骤，`stream_run` 开始产出事件。 |
+| 启动 | [api/chat.py](../backend/app/api/chat.py) · `stream_message` → [api/agent.py](../backend/app/api/agent.py) · `agent_stream_response` → [executor.py](../backend/app/agent/executor.py) · `prepare_run`、`stream_run` | 模型、账号工具配置、消息和运行关联在开流前确定。 |
 | 发现内置工具 | [executor.py](../backend/app/agent/executor.py) · `registry_for` → [tools/__init__.py](../backend/app/agent/tools/__init__.py) · `BuiltinSource.list`、`ToolRegistry.from_sources` | 内置工具来自代码。工具实现位于 [calculator.py](../backend/app/agent/tools/calculator.py)、[clock.py](../backend/app/agent/tools/clock.py)、[history.py](../backend/app/agent/tools/history.py)、[conversation.py](../backend/app/agent/tools/conversation.py)。 |
 | 发现 MCP 工具 | `executor.registry_for` → [mcp_service.py](../backend/app/services/mcp_service.py) · `spec_of_row` → [manager.py](../backend/app/mcp/manager.py) · `source_for` → [client.py](../backend/app/mcp/client.py) · `list_tools` → [source.py](../backend/app/mcp/source.py) · `McpSource.list` | 为当前账号已启用的服务器组装工具，注意连接与清单缓存。市场条目由另一条管理链路提供，见 §8。 |
-| 把工具交给模型 | [executor.py](../backend/app/agent/executor.py) · `_run_loop`、`_tools_for_skills` → `ToolRegistry.specs` → [openai_compatible.py](../backend/app/llm/openai_compatible.py) · `_tool_payload`、`chat_with_tools` | 可用集合受账号禁用项和已加载技能的工具白名单影响。模型收到工具定义后返回结构化 `tool_calls`。 |
+| 把工具交给模型 | [executor.py](../backend/app/agent/executor.py) · `_run_loop` → `ToolRegistry.specs` → [openai_compatible.py](../backend/app/llm/openai_compatible.py) · `_tool_payload`、`stream_with_tools` | 模型收到已启用工具的 Schema 并按任务决定是否调用。适配器合并调用分片，轮次完整结束后才执行。 |
 | 校验并执行 | `_run_loop` → [policy.py](../backend/app/agent/policy.py) · `ToolPolicy.check` → `_execute` → `ToolRegistry.execute` → [tools/base.py](../backend/app/agent/tools/base.py) · `run_tool` → 各工具的 `run` | 策略检查启停、预算和审批；执行层解析参数并处理超时。MCP 路径经过 `McpTool.run` 本地 Schema 校验，再到 `McpClient.call_tool`。结果以 tool 消息回传模型。 |
 | 审批暂停与恢复 | `_open_approval` → [ApprovalCard.vue](../frontend/src/components/chat/ApprovalCard.vue) → Store 的 `decideApproval` → API 的 `decideApprovalStream` → 后端 `decide` → 执行器的 `decide_approval`、`resume_run`、`_replay_messages` | 根据运行记录重建上下文，批准后核对工具指纹和当前策略。读 [agent_approval.py](../backend/app/models/agent_approval.py) 看审批状态。 |
 | 最终回答 | `_run_loop → _save_final_message`；事件构造见 [events.py](../backend/app/agent/events.py) | 模型停止请求工具后保存助手消息并发 `run_finished`。过程步骤独立留在 [agent_step.py](../backend/app/models/agent_step.py)，运行与快照在 [agent_run.py](../backend/app/models/agent_run.py)。 |
@@ -76,22 +74,23 @@ flowchart LR
 
 | 环节 | 代码位置与阅读顺序 |
 |---|---|
-| 展示/挂载 | [ChatView.vue](../frontend/src/views/ChatView.vue) 的 `loadSkills` / `handleSelectSkill` → [ChatToolbar.vue](../frontend/src/components/chat/ChatToolbar.vue) 交互 → [api/skills.ts](../frontend/src/api/skills.ts) → 后端 [api/skills.py](../backend/app/api/skills.py) 列表、[api/chat.py](../backend/app/api/chat.py) 挂载 → [skill_service.py](../backend/app/services/skill_service.py) 的 `list_skills` / `mount_skill`。 |
-| 发现目录 | [executor.prepare_run](../backend/app/agent/executor.py) → `skill_service.registry_for` → [SkillRegistry.discover](../backend/app/skills/registry.py) → [FileSystemSkillProvider](../backend/app/skills/providers/filesystem.py) / [DatabaseSkillProvider](../backend/app/skills/providers/database.py)。文件来源解析 [SKILL.md](../backend/app/skills/meeting-notes/SKILL.md)，数据库来源读取当前用户的 [Skill](../backend/app/models/skill.py) 元数据。 |
-| 决定加载 | `off` 跳过 Skill；`manual` 读会话挂载；`auto` 优先加载已挂载技能，并可从目录选其他技能。定位 `prepare_run`、`stream_run`、`_run_loop`；页面开关和模式传递见 [ChatComposer.vue](../frontend/src/components/chat/ChatComposer.vue)、[ChatView.vue](../frontend/src/views/ChatView.vue)。 |
+| 登录发现 | [App.vue](../frontend/src/App.vue) 监听账号 ID → [stores/skills.ts](../frontend/src/stores/skills.ts) 的 `initialize` / `scan` → [api/skills.py](../backend/app/api/skills.py) 的 `rescan_catalog` → [skill_catalog_service.py](../backend/app/services/skill_catalog_service.py) 保存账号目录快照。 |
+| 设置重扫与说明 | [SkillsPanel.vue](../frontend/src/components/settings/SkillsPanel.vue) 使用同一 Store，按需请求 `read_catalog_detail`。 |
+| 单条消息选择 | [ChatView.vue](../frontend/src/views/ChatView.vue) 和 [ChatToolbar.vue](../frontend/src/components/chat/ChatToolbar.vue) 读账号目录缓存，选中的来源键保存在当前消息草稿，随 `send` 提交后清除。切换会话不查询目录。 |
+| 运行发现和决定加载 | `prepare_run` 读取本地目录快照，`stream_run` 加载显式选择项，`auto` 模式通过控制动作按需加载。文件元数据解析、版本和读取由 [FileSystemSkillProvider](../backend/app/skills/providers/filesystem.py) 负责。 |
 | 正文进入上下文 | 自动模式的模型控制动作 `__runtime_request_skill_load` → `_load_skill` → Registry 的 `load` → Provider → `_snapshot_payload` → `_messages_with_runtime_skills` → [build_runtime_skill_prompt](../backend/app/skills/models.py)。跟读版本校验、加载去重、上下文限制以及 `skill_loaded` / `skill_load_failed`。 |
 | 按需读取参考资料 | `__runtime_read_skill_resource` → `_read_skill_resource` → Registry 的 `read_resource` → 文件 Provider → [resources.py](../backend/app/skills/resources.py) 的 `read_resource`。只读已加载技能清单内的文本，首次成功读取保存快照，同时发 `skill_resource`。可用实例见 [会议纪要检查清单](../backend/app/skills/meeting-notes/references/checklist.md)。 |
 | 审批恢复 | `resume_run → _loop_state → _replay_messages` 恢复已加载指引和已读资源；跟踪运行快照与步骤记录如何配对。 |
 
-Skill 加载和资源读取由 Runtime 直接分派。普通工具另经 Tool Policy。技能指引可以收窄可用工具，工具授权仍由策略决定。测试入口：[test_skills.py](../backend/tests/test_skills.py)、[test_skill_resources.py](../backend/tests/test_skill_resources.py)、[test_agent_executor.py](../backend/tests/test_agent_executor.py)。
+Skill 加载和资源读取由 Runtime 直接分派。普通工具另经 Tool Policy。技能指引可推荐工具。账号启停设置和 Tool Policy 决定工具可用性与权限。测试入口：[test_skills.py](../backend/tests/test_skills.py)、[test_skill_resources.py](../backend/tests/test_skill_resources.py)、[test_agent_executor.py](../backend/tests/test_agent_executor.py)。
 
 ## 7. 会话展示、SSE 与历史回放
 
 | 页面看到的内容 | 代码位置 |
 |---|---|
-| 普通回复的逐字更新、完成消息 | [api/chat.ts](../frontend/src/api/chat.ts) 的 `sendMessageStream` → [stores/chat.ts](../frontend/src/stores/chat.ts) 的 `send` 回调 → [ChatView.vue](../frontend/src/views/ChatView.vue) 的 `streamingText` 展示和消息列表。 |
+| 普通回复的逐字更新、完成消息 | [api/chat.ts](../frontend/src/api/chat.ts) 兼容的 `sendMessageStream`；聊天页使用 [api/agent.ts](../frontend/src/api/agent.ts) 的 `sendAgentStream` → [stores/chat.ts](../frontend/src/stores/chat.ts) 的 `send` 回调 → [ChatView.vue](../frontend/src/views/ChatView.vue) 的 `streamingText` 展示和消息列表。 |
 | 工具、技能、参考资料或审批状态 | [api/agent.ts](../frontend/src/api/agent.ts) 的 `consume` → Store 的 `applyAgentEvent` → [AgentTimeline.vue](../frontend/src/components/chat/AgentTimeline.vue) / [ApprovalCard.vue](../frontend/src/components/chat/ApprovalCard.vue)。最终答复走 Store 的 `appendAssistantMessage`，随后重新拉取会话详情。 |
-| 页面刷新后恢复 | `ChatView` 监听路由参数 → `openConversation → loadAgentRuns`；消息来自详情接口，步骤来自 [api/agent.py](../backend/app/api/agent.py) 的 `list_agent_runs`，待审批项通过 `listApprovals` 补回。类型见 [types/api.ts](../frontend/src/types/api.ts) 的 `ChatMessage`、`AgentRun`、`AgentStep`。 |
+| 刷新、切换会话和翻页 | `ChatView` 监听路由参数 → Store 的 `openConversation` → [chat_service.py](../backend/app/services/chat_service.py) 的 `read_message_history`，返回消息页与运行摘要。视图通过 `assistant_message_id` 把执行过程挂在对应助手消息下，展开时走 Store 的 `loadExecutionSteps` → [api/agent.py](../backend/app/api/agent.py) 的 `get_replay_steps`。待审批项通过 `listApprovals` 恢复。 |
 
 对应测试：[api/agent.test.ts](../frontend/src/api/agent.test.ts)、[SkillInteraction.test.ts](../frontend/src/components/chat/SkillInteraction.test.ts)、[ChatView.test.ts](../frontend/src/views/ChatView.test.ts)。
 
@@ -104,7 +103,7 @@ Skill 加载和资源读取由 Runtime 直接分派。普通工具另经 Tool Po
 | 账号、设备与数据导出 | [AccountPanel.vue](../frontend/src/components/settings/AccountPanel.vue)、[DevicesPanel.vue](../frontend/src/components/settings/DevicesPanel.vue)、[DataPanel.vue](../frontend/src/components/settings/DataPanel.vue) | [api/auth.py](../backend/app/api/auth.py) 的账号与设备路由；[api/settings.py](../backend/app/api/settings.py) 的 `export_data` → [export_service.py](../backend/app/services/export_service.py) |
 | 工具启停、预算与用量 | [ToolsPanel.vue](../frontend/src/components/settings/ToolsPanel.vue)、[api/settings.ts](../frontend/src/api/settings.ts) | [api/settings.py](../backend/app/api/settings.py) 的 `read_tools/update_tools/read_tool_stats` → [settings_service.py](../backend/app/services/settings_service.py)；对照执行时的 [ToolPolicy](../backend/app/agent/policy.py) |
 | MCP 工具市场、安装和试连 | [MarketPanel.vue](../frontend/src/components/settings/MarketPanel.vue)、[api/mcp.ts](../frontend/src/api/mcp.ts) | [api/mcp.py](../backend/app/api/mcp.py) 的 `read_catalog/create_server/test_server` → [mcp_service.py](../backend/app/services/mcp_service.py) → [mcp_server.py](../backend/app/models/mcp_server.py) |
-| 自建技能管理 | [SkillsPanel.vue](../frontend/src/components/settings/SkillsPanel.vue)、[api/skills.ts](../frontend/src/api/skills.ts) | [api/skills.py](../backend/app/api/skills.py) 的 `list_skills/get_skill/create_skill/update_skill/delete_skill` → [skill_service.py](../backend/app/services/skill_service.py) → [skill.py](../backend/app/models/skill.py) |
+| 本地 Skill 目录 | [SkillsPanel.vue](../frontend/src/components/settings/SkillsPanel.vue)、[api/skills.ts](../frontend/src/api/skills.ts) | [api/skills.py](../backend/app/api/skills.py) 的 `read_catalog/rescan_catalog/read_catalog_detail` → [skill_catalog_service.py](../backend/app/services/skill_catalog_service.py) → 文件 Provider |
 | 应用启动、探针与迁移 | [main.ts](../frontend/src/main.ts)、[App.vue](../frontend/src/App.vue)、[router/index.ts](../frontend/src/router/index.ts) | [main.py](../backend/app/main.py) 的路由挂载和 `healthz/readyz`、[database.py](../backend/app/database.py)、[migrations/env.py](../backend/migrations/env.py)、[部署说明](deploy.md) |
 
 ## 9. 如何用代码和测试互相验证

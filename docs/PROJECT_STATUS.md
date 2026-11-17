@@ -1,8 +1,14 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-16 · 阶段 1–4 自动化验证完成、本地迁移完成；真实模型验收受余额不足阻塞
+> 最近更新：2026-11-18 · 本地 Skill 目录与单条消息选择已交付，按用户要求停在第三步
 
+- 本地改动整理提交：按后端实现与测试、前端交互与测试、项目文档分组，提交信息统一使用中文。提交前复验后端全量测试（覆盖率 92.40%）、前端 89 项测试、Ruff、ESLint、类型检查和生产构建通过。
+
+- 已完成 [重设计第三步](skills.md)。网页统一使用 Skill，本地目录按账号保存元数据快照，登录或刷新初始化一次，切换会话零目录查询。设置只读并支持重扫、说明和旧数据库 Skill 导出。单条消息可显式选择，默认支持模型按需加载。后端 367 项（覆盖率 92.40%）、前端 89 项测试，Ruff、ESLint、格式检查及构建通过。本机 MySQL 已升级至 `a638c170ef92`，结构无漂移。Chrome 已用真实 DeepSeek 验证显式选择与新安装本地 Skill 的按需加载，并检查明暗主题。按要求在本步停止。
+- 已完成 [对话执行、Tool 与 Skill 重设计](conversation-tool-skill-redesign.md) 第二步。聊天页统一走自动工具循环，深度回答独立调整推理强度。工具市场新增 Exa，搜索查询在审批后发送，来源随回复保存。Chrome 使用真实 DeepSeek 验证了当前时间和审批后的 Exa 搜索，刷新可回放两次执行。浏览器回归 10 项通过。本机 MySQL 已升级至 `52f9b8c781ad`，`alembic check` 无漂移。后端 353 项测试、前端 83 项测试、构建及静态检查通过。
+- 已完成 [对话执行、Tool 与 Skill 重设计](conversation-tool-skill-redesign.md) 第一步。新运行关联用户及助手消息，工具步骤按消息回放。会话刷新、切换和翻页有覆盖。旧执行记录保留在会话级。本机 MySQL 已升级至 `ae69f7e9c341`，`alembic check` 无漂移。后端 344 项测试，前端 81 项测试，构建、类型检查、ESLint 和 Ruff 均通过。Chrome 使用模拟模型验收。
+- 已精简深度回答时间线：无调用时以浅色文字和依次跳动的三个点显示思考，有调用时可展开过程与单条参数、结果。流式区域仅显示 Markdown 正文。前端 79 项测试、构建和 ESLint 通过；Chrome 用模拟 Agent 事件验证两层展开和键盘操作，真实模型验收未运行。
 - 调试日志交付复验通过：后端全量 340 项（覆盖率 92.33%），前端 78 项，构建和静态检查通过。摘要测试显式隔离本机正文开关；生产前端产物无开发日志标记。
 - 已在模型适配层记录每次同步、流式与工具轮次，按 `exchange_id` 配对请求、返回、错误或取消。开发环境可用 `LLM_LOG_PAYLOADS=true` 查看消息、工具定义和回复正文，默认摘要，生产环境禁用。后端 122 项相关测试及 Ruff 通过。
 - 已补齐 Tool、MCP 和 Skill 管理与运行链路的开发日志，覆盖浏览器请求/响应、技能挂载、后端目录发现/加载、MCP 连接与远端执行。后端 125 项相关测试和前端 78 项测试通过，生产前端产物未发现日志标记。
@@ -14,6 +20,14 @@
 - 新增[源码研读指南](code-reading-guide.md)，串起登录、会话、两类消息链路、Tool/Skill、审批和展示，并在文档导航中提供入口。
 - 已整理并保存 [Python Agent 开发面试问答](../面经&八股/Python%20Agent%20开发面试问答.md)。通过 CodeGraph 核对模型客户端、深度回答、工具审批与 SSE 链路，并用 HTTPX 模拟请求验证补全示例。
 - 已补充 [Python 面试题与 Agent 岗位面经](../面经&八股/纯%20python/八股.md)，按 9 个技术模块整理 33 道题，保留公开面经和岗位来源。两个 Python 示例均已本地执行验证。
+
+## 第三步涉及文件（2026-11-18）
+
+- 目录、作用域和 API新增 [skill_catalog_service.py](../backend/app/services/skill_catalog_service.py) 与 [目录快照迁移](../backend/migrations/versions/20261117_a638c170ef92_local_skill_catalog.py)。调整 `backend/app/api/{skills,agent,chat}.py`、`schemas/{skill,chat}.py`、`models/user_settings.py`、`config.py` 和 `backend/.env.example`。
+- 文件读取和运行调整 `backend/app/skills/{loader,registry,resources}.py`、`providers/filesystem.py` 与 `agent/executor.py`，复用原加载、资源安全检查和执行快照。
+- 网页新增 [Skill Store](../frontend/src/stores/skills.ts)，调整 `App.vue`、`api/{skills,agent}.ts`、`stores/chat.ts`、`types/api.ts`、`views/{ChatView,SettingsView}.vue`、`components/chat/{ChatToolbar,ChatComposer,AgentTimeline}.vue` 与 [只读设置](../frontend/src/components/settings/SkillsPanel.vue)。
+- 测试新增 `backend/tests/test_local_skill_catalog.py`、`frontend/src/App.test.ts`、`stores/skills.test.ts` 和 `components/settings/SkillsPanel.test.ts`。调整 `backend/tests/test_skills.py`、`frontend/src/{stores/chat,views/ChatView,api/agent}.test.ts`、`components/chat/SkillInteraction.test.ts`，重写 `frontend/scripts/skills-acceptance.mjs`。
+- 文档同步 `DESIGN.md`、后端环境示例、前后端 README、API、Skill、研读指南、重设计方案及 ADR。新增 [ADR-0014](adr/0014-local-skill-catalog-and-message-selection.md)，`.gitignore` 排除本地安装目录。
 
 ## 本地交付核对（2026-11-16）
 

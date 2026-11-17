@@ -179,7 +179,21 @@
 
 ### 2.7 发送消息（流式）`POST /api/conversations/{id}/messages/stream`
 
-与 4.6 的区别只在传输方式：回复按 SSE 逐块吐出，适合前端做「逐字渲染」。请求体、校验规则、上下文窗口、事务语义与 4.6 完全一致。
+聊天页发送 `execution: "auto"`，使用 [Agent 流式事件](#61-发送消息agent-循环流式)。原有调用方省略 `execution` 或发送 `execution: "text"` 时仍使用下文的文本 SSE 契约。
+
+自动模式请求字段：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `content` | string | 用户消息，1–4000 字 |
+| `execution` | `auto` | 按任务自动选择账号已启用的工具 |
+| `reasoning_effort` | `none` / `high` | 默认 `none`，由模型适配器映射，工具权限独立 |
+| `skill_mode` | `off` / `manual` / `auto` | 默认 `auto`，单条消息选择与模型按需加载 |
+| `skill_keys` | string[] | 本条消息显式选择的来源键，最多 3 项 |
+| `skill_catalog_version` | string，可选 | 与当前账号目录快照对齐 |
+| `request_id` | UUID，可选 | 同一会话的重复请求返回 409，已有消息可从历史恢复 |
+
+文本模式的传输使用 SSE，保留原有上下文和提交、回滚语义。
 
 **为什么是 POST 而不是 GET**：设计稿里写的是 `GET .../messages/stream?content=...`，但消息最长 4000 字，塞进 query string 既可能超长、也会整段进访问日志，所以改为 POST + 请求体；代价是前端不能用原生 `EventSource`（只支持 GET），改用 `fetch` + `ReadableStream` 解析。
 
@@ -346,11 +360,11 @@ curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: applic
 
 ## 6 Agent 接口（`/api/conversations/{id}/agent`）
 
-普通对话是「一问一答」；深度回答会多跑几轮「模型 → 工具 → 模型」，每步都落库可回放。
+聊天页的自动模式和旧 Agent 入口共享执行循环。工具按对话需求调用。审批、工具结果和最终消息可回放。
 
 ### 6.1 发送消息（agent 循环，流式）
 
-`POST /api/conversations/{conversation_id}/agent/stream`
+`POST /api/conversations/{conversation_id}/agent/stream` 是旧 Agent 入口。聊天页使用 §2.7 的自动模式，在相同执行事件上增加正文分片。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -370,33 +384,43 @@ curl -i -X POST http://127.0.0.1:8000/api/auth/register -H 'content-type: applic
 
 | type | 负载 | 含义 |
 |---|---|---|
-| `run_started` | `run_id`、`conversation_id` | 运行开始 |
+| `run_started` | `run_id`、`conversation_id`、`user_message_id` | 运行开始，用户消息已入库 |
 | `skill_loaded` | `seq`、`skill_key`、`name`、`source`、`version` | 指引已加载 |
 | `skill_load_failed` | `seq`、`skill_key`、`error_code`、`message` | 加载失败，可继续回答 |
 | `skill_resource` | `seq`、`skill_key`、`name`（可空）、`path`、`ok`、`message` | 参考资料读取结果；不推送正文 |
+| `assistant_delta` | `content` | 自动模式的正文分片 |
+| `assistant_preview_reset` | 无 | 当前轮有工具调用，清除该轮的临时正文 |
 | `assistant_text` | `seq`、`content` | 模型「说完这句要调工具」的中间话 |
 | `tool_call` | `seq`、`tool`、`args` | 要调哪个工具、参数是什么 |
 | `tool_result` | `seq`、`tool`、`ok`、`content`、`duration_ms` | 工具执行结果；失败也是 `ok:false` 的这一步 |
-| `run_finished` | `run_id`、`content`、`steps`、`model` | 最终答复（同时写进 `messages`） |
+| `run_finished` | `run_id`、`assistant_message_id`、`content`、`steps`、`model` | 助手消息和运行终态提交后推送 |
 | `error` | `code`、`message` | 循环中途失败（如模型 502、超过 8 步） |
 
 ```
-data: {"type":"run_started","run_id":1,"conversation_id":134}
+data: {"type":"run_started","run_id":1,"conversation_id":134,"user_message_id":42}
 
 data: {"type":"tool_call","seq":2,"tool":"calculator","args":{"expression":"3**5"}}
 
 data: {"type":"tool_result","seq":3,"tool":"calculator","ok":true,"content":"243","duration_ms":0}
 
-data: {"type":"run_finished","run_id":1,"content":"3 的 5 次方等于 243。","steps":4,"model":"deepseek-flash"}
+data: {"type":"run_finished","run_id":1,"assistant_message_id":43,"content":"3 的 5 次方等于 243。","steps":4,"model":"deepseek-flash"}
 ```
 
 三条注意：
 
 1. **中间步骤只进 `agent_steps`，不进 `messages`**——聊天记录里只留「用户问的 + 最终回答」，过程通过下面的接口回放。
 2. **步数与时间有硬上限**：最多 8 步、单工具 2 秒、连续 3 次同类失败即中止。
-3. **客户端断开会整体回滚**：run 标 `failed`，不会留下半截助手消息。
+3. **客户端断开会结束运行**：已提交的用户消息和执行步骤可回放，半截助手正文不入库。
 
 ### 6.2 查看历史运行
+
+聊天页通过 `GET /api/conversations/{id}?message_limit=50` 读取最近一页消息；追加 `before_message_id` 读更早消息。消息按 ID 升序返回，`next_before_message_id` 为空时到达末页。未传分页参数时仍返回原会话详情。
+
+分页数据中的 `runs` 包含关联本页消息的执行摘要及活跃运行。每条摘要包含 `id`、`user_message_id`、`assistant_message_id`、`status` 和 `visible_step_count`。已完成运行展示在助手消息下，缺少助手消息的未完成运行展示在用户消息下。最晚一页的 `legacy_runs` 收录最近五条有可展示步骤且缺少消息关联的已结束运行。
+
+展开回放时调用 `GET /api/agent/runs/{run_id}/steps`。返回 `data.items`，每条为按 `seq` 排序的工具或 Skill 步骤。他人运行返回 404。
+
+原历史接口继续可用。
 
 `GET /api/conversations/{conversation_id}/agent/runs?limit=5`
 
@@ -494,41 +518,24 @@ data: {"type":"run_finished","run_id":1,"content":"3 的 5 次方等于 243。",
 
 失败语义：连不上不会让对话失败——`registry_for()` 只记 `last_status=error` 与 `last_error` 并跳过这台服务器，模型继续用剩下的工具回答。
 
-### 6.6 技能（`/api/skills`）
+### 6.6 Skill（`/api/skills`）
 
-技能是一段可复用的「工作方法」，挂到会话上就会作为 system 消息注入这次运行（`docs/skills.md`）。内置 3 个只读，自建的按账号存。
+现行聊天的 Skill 来自后端本地目录，按账号保存目录快照。安装和限制见 [Skill 文档](skills.md)。
 
 | 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/api/skills?conversation_id=` | 内置 + 自建清单；带会话时额外返回 `mounted`（当前挂的 slug） |
-| GET | `/api/skills/{slug}` | 详情（含正文 `instructions` 与白名单 `tools`） |
-| POST | `/api/skills` | 新建自建技能；slug 与内置或已有自建重复返回 400 |
-| PATCH | `/api/skills/{skill_id}` | 改名/改正文/改白名单；内置技能不可改（404） |
-| DELETE | `/api/skills/{skill_id}` | 删除自建技能，同时把挂着它的会话置回不挂 |
-| PUT | `/api/conversations/{conversation_id}/skill` | 挂载/卸载：`{"slug": "code-review"}` 或 `{"slug": null}` |
+| --- | --- | --- |
+| GET | `/api/skills/catalog` | 当前账号元数据快照，空缓存时初始化 |
+| POST | `/api/skills/catalog/rescan` | 登录、刷新和设置页使用的扫描入口 |
+| GET | `/api/skills/catalog/detail?key=&version=` | 按稳定来源键加载只读正文 |
+| GET | `/api/skills/legacy/export` | 导出当前账号旧版 Skill 为 ZIP |
 
-```json
-{
-  "code": 200,
-  "message": "请求成功",
-  "data": {
-    "items": [
-      {
-        "slug": "code-review",
-        "name": "代码审查",
-        "description": "按四层顺序过一遍改动，每条给出位置与改法",
-        "icon": "sparkle",
-        "source": "builtin",
-        "tools": ["calculator"],
-        "tool_count": 1
-      }
-    ],
-    "mounted": "code-review"
-  }
-}
-```
+目录响应包含 `items`、`version`、`legacy_count`。每项包含 `key`、`slug`、`name`、`description`、`source`、`trust`、`version`、`tools` 和 `icon`。目录响应只包含元数据。
 
-约束：`instructions` ≤ 4000 字，`tools` ≤ 20 个且只做减法——挂上技能后，工具注册表只会从「账号已启用的工具」里再筛掉不在白名单内的，**不会**因此多出任何工具，也不会跳过审批。
+自动聊天请求可附 `skill_keys`（最多 3 项）和 `skill_catalog_version`，默认 `skill_mode: "auto"`。显式选择只用于当前消息；`manual` 只加载显式选择项，`off` 关闭 Skill。`auto` 还允许模型按元数据选择。旧 `skill_slug` 不参与新聊天的选择。
+
+未知或越权的 Skill 键返回 400，过期目录版本返回 409。按需读取已变更的文件返回 404 或 409。目录扫描失败保留原快照。
+
+旧版 `GET /skills`、详情、数据库写接口及 `PUT /conversations/{id}/skill` 暂留兼容，写接口已标记弃用。新版网页通过上述本地目录接口工作。
 
 ## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages` / `agent_runs` / `agent_steps` / `agent_approvals` / `skills`）
 
@@ -566,6 +573,7 @@ user_settings
   model_timeout_seconds     int           默认 30
   model_api_key_ciphertext  varchar(512)  nullable（Fernet 密文）
   model_api_key_hint        varchar(8)    nullable（末四位）
+  skill_catalog             json          nullable，账号级本地 Skill 元数据快照
   model_configured          tinyint(1)    默认 0（只有真配过模型才置 1）
   create_time / update_time datetime
 
@@ -590,7 +598,9 @@ agent_runs
   id               int  pk autoincrement
   conversation_id  int  FK → conversations.id  ON DELETE CASCADE，有索引
   user_id          int  FK → users.id          ON DELETE CASCADE，有索引
-  status           varchar(16)  running | completed | failed | cancelled
+  user_message_id  int          nullable FK → messages.id ON DELETE SET NULL，有索引
+  assistant_message_id int      nullable FK → messages.id ON DELETE SET NULL，唯一索引
+  status           varchar(16)  running | waiting_approval | completed | failed | cancelled
   step_count       int          默认 0
   model            varchar(64)  nullable（这一轮实际回话的模型）
   started_time     datetime
@@ -635,7 +645,7 @@ skills
   name          varchar(30)
   description   varchar(120)
   instructions  text          技能正文，≤ 4000 字
-  tools         json          工具白名单，≤ 20 个
+  tools         json          推荐工具，≤ 20 个
   icon          varchar(32)   默认 sparkle
   create_time / update_time datetime
   唯一约束 (user_id, slug)

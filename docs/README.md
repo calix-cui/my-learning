@@ -49,8 +49,9 @@
 | [`api.md`](api.md) | 前后端 | 接口契约：对话 7 个操作 + 3 个运维路径（参数/响应/错误文案） | 调接口、改接口 |
 | [`agent.md`](agent.md) | 前后端 | **Agent 执行循环设计**：主流架构调研、步数与预算护栏、工具层、SSE 事件、任务拆分 | 要做工具调用、改执行流程时 |
 | [`agent-skill-tool-architecture.md`](agent-skill-tool-architecture.md) | 前后端 | **Skill 与 Tool System 架构方案（待确认）**：当前 Runtime 评估、渐进式 Skill 加载、工具授权边界、SSE 与持久化 | 评审下一阶段 Skill/Tool 架构时 |
+| [对话执行、Tool 与 Skill 重设计](conversation-tool-skill-redesign.md) | 前后端 | 消息级执行回放、按需工具调用和本地 Skill 已实现，另含 RAG 扩展边界 | 评审本轮对话架构调整时 |
 | [`tools.md`](tools.md) | 前后端 | **工具生态与权限治理设计**：分级、人工审批四态、可观测性、MCP 适配层 | 要加工具、改权限或做审批时 |
-| [`skills.md`](skills.md) | 阶段 7 下半：技能包（SKILL.md 形状、注入方式、工具白名单、内置 3 个） |
+| [`skills.md`](skills.md) | 本地 Skill 目录、账号缓存、单条选择、按需加载与旧数据导出 |
 | [`mcp.md`](mcp.md) | 前后端 | **阶段 7 设计：MCP 接入与「工具市场」**：传输、连接管理、`mcp__{server}__{tool}` 命名、EXTERNAL 一律审批、DESIGN §5 覆盖检验 | 要接 MCP server 或改工具市场页时 |
 | [`agent-architecture.md`](agent-architecture.md) | 前后端 | **阶段 6 Agent 技术架构（读代码手册）**：代码地图、五个核心结构、三条主流程、六个扩展点、六个手改练习 | 想读懂或动手改 Agent 代码时 |
 | [`chat.md`](chat.md) | 前后端 | **对话功能设计**：表结构、接口、模型抽象、任务拆分与验收 | 要改对话、接模型时 |

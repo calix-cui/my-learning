@@ -196,15 +196,15 @@ erDiagram
 2. **上下文只带最近 20 条**：`CONTEXT_LIMIT=20`，system 消息全带；这是成本与连贯性的折中，不是越多越好。
 3. **删账号即删数据**：`sessions` 与 `conversations` 都对 `users.id` 建了 `ON DELETE CASCADE`，消息随会话级联删除；这是 v1 的取舍——没有回收站，删了就没了。
 
-## 4.5 深度回答（agent 循环）是怎么转起来的
+## 4.5 对话中的 Agent 循环是怎么转起来的
 
-普通对话是「一次请求、一次回答」；勾上「深度回答」后，后端会在同一个请求里跑一个循环：
+普通聊天默认使用 Agent 循环。模型根据任务和已启用的工具选择直接答复或调用工具。「深度回答」调整兼容模型的推理强度。
 
 ```
 用户提问
   └─ 建 run（agent_runs）+ 落 user_message 步
        └─ 循环（最多 8 步，每步先落库再推事件）
-            模型 chat_with_tools →
+            模型 stream_with_tools →
               有 tool_calls？ ── 是 ─→ 记 tool_call 步 → 执行工具（2s 超时）
                                     → 记 tool_result 步 → 把结果回灌 → 下一轮
                               └─ 否 ─→ 这段文本就是最终答复 → 记 final_answer 步

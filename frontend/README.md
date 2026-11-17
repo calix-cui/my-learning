@@ -23,11 +23,11 @@ My Agent 的聊天界面，基于 Vue 3 + TypeScript + Vite + Element Plus 实�
 
 ## 浏览器调试日志
 
-用 `pnpm dev` 启动前端，在浏览器控制台启用 Verbose（详细），搜索 `[my-agent]`。普通回复从 `chat.view.send` 跟到 `chat.sse.*`、`chat.store.*` 和 `chat.view.render`。深度回答从 `agent.send` 跟到 `agent.sse` 和 `agent.store.*`，审批请求可以用 `agent.approval` 定位。用 `conversationId`、`runId` 和步骤号对照前后端日志。
+用 `pnpm dev` 启动前端，在浏览器控制台启用 Verbose（详细），搜索 `[my-agent]`。聊天从 `chat.view.send`、`agent.send` 跟到 `agent.sse` 和 `agent.store.*`，审批请求可以用 `agent.approval` 定位。用 `conversationId`、`runId` 和步骤号对照前后端日志。
 
 高频的普通 SSE 分片只单独记录首个，结束时提供分片数和总字符数。Markdown 更新按渲染帧记录字符数和滚动位置。日志只包含摘要，生产构建会移除这些语句。
 
-Tool 设置、MCP 市场和 Skill 管理接口用 `tool-skill.api.request`、`tool-skill.api.response`、`tool-skill.api.error` 查看请求与结果。会话内的技能列表和挂载用 `skill.view.*` 查看。运行中用 `agent.sse` 和 `agent.store.timeline` 查找工具、审批与技能事件。
+Tool 设置、MCP 市场和 Skill 管理接口用 `tool-skill.api.request`、`tool-skill.api.response`、`tool-skill.api.error` 查看请求与结果。Skill 目录在认证初始化时获取，设置页可重新扫描，聊天切换读取账号缓存。运行中用 `agent.sse` 和 `agent.store.timeline` 查找工具、审批与技能事件。
 
 ## 启动方式
 
@@ -137,7 +137,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 | --- | --- | --- |
 | `/login` | 登录（公开） | `views/LoginView.vue`、`stores/session.ts` |
 | `/register` | 注册（公开，注册即登录） | `views/RegisterView.vue` |
-| `/chat` | 对话（左会话列表 + 右消息区，SSE 逐字渲染，助手消息按 Markdown 渲染；头部「深度回答」开关可切到 agent 循环并展开执行时间线） | `views/ChatView.vue`、`components/chat/*`、`stores/chat.ts`、`api/chat.ts`、`api/agent.ts`、`utils/markdown.ts` |
+| `/chat` | 对话（左会话列表 + 右消息区，SSE 逐字渲染，助手消息按 Markdown 渲染；普通聊天按需调用工具，可展开执行过程。「深度回答」调整兼容模型的推理强度） | `views/ChatView.vue`、`components/chat/*`、`stores/chat.ts`、`api/chat.ts`、`api/agent.ts`、`utils/markdown.ts` |
 | `/settings` | **悬浮窗**（不是独立页面）：`/chat?settings=1` 之上盖一层，关掉回原处；内含模型接入 / 账号资料 / 登录设备 / 外观 / 数据管理五节 | `components/settings/SettingsDialog.vue`、`views/SettingsView.vue`、`components/settings/*`、`stores/settings.ts` |
 | `/` / 其他 | 重定向到 `/chat`；未登录时守卫改送 `/login?redirect=...` | `src/router/index.ts` |
 

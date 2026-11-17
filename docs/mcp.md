@@ -3,6 +3,11 @@
 > **状态**：已交付（2026-11-11，T1–T7 全部完成）。
 > **上游**：[`tools.md`](tools.md)（阶段 6 工具生态与权限治理）、[ADR-0011](adr/0011-tool-permissions-and-approvals.md)、[`agent-architecture.md`](agent-architecture.md) §6.5、[`playbooks/05`](playbooks/05-development-plan-and-mvp-tasks.md) 阶段 7。
 
+## 网页搜索
+
+在「设置 → 工具市场」接入「网页搜索（Exa）」。目录项只提供 `web_search_exa`，公开服务可匿名访问，有第三方限额。普通聊天输入「请搜索 Agent 怎么实现」，模型提出搜索请求后，审批卡会显示拟发送的查询。批准后查询才发往 Exa，真实返回的来源链接附在助手回复中。也可用自定义 MCP 接入其他搜索供应商。 [Exa 官方 MCP 说明](https://github.com/exa-labs/exa-mcp-server)
+
+
 ## 1. 要解决的问题
 
 阶段 6 把「加工具」变成了实现一个 `Tool` 类 + 放进一个 `ToolSource`。代价是**工具只能由我们写**：想用社区现成的 filesystem / git / fetch，就得把别人的能力重抄一遍。
