@@ -268,9 +268,6 @@ await step('T-05 写工具执行前停下等确认', async () => {
   await page.waitForFunction(() => !document.querySelector('.settings'), { timeout: 5000 })
   await page.click('.chat__new')
   await page.waitForSelector('.chat__composer textarea', { timeout: 5000 })
-  if ((await page.$eval('.chat__mode', (el) => el.getAttribute('aria-pressed'))) !== 'true') {
-    await page.click('.chat__mode')
-  }
   await sendRenamePrompt('周报')
   // 卡片先于流关闭出现，按钮会短暂是「执行中…」，等它可点再断言
   await page.waitForFunction(
@@ -294,6 +291,8 @@ await step('T-06 拒绝后运行继续跑完，且工具没有执行', async () 
     () => document.querySelectorAll('.timeline__item--tool_result').length >= 1,
     { timeout: 60000 },
   )
+  await page.click('.timeline > summary')
+  await page.click('.timeline__item--tool_result > summary')
   const result = await page.$eval('.timeline__item--tool_result .timeline__text', (el) =>
     (el.textContent ?? '').trim(),
   )

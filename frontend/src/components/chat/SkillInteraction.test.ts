@@ -5,7 +5,7 @@ import ChatComposer from './ChatComposer.vue'
 import AgentTimeline from './AgentTimeline.vue'
 import type { AgentStep } from '@/types/api'
 
-it('自动选择仅在深度回答可见，发送时锁定模式开关', async () => {
+it('自动选择独立于深度回答，发送时锁定模式开关', async () => {
   const wrapper = mount(ChatComposer, {
     props: {
       modelValue: '问题',
@@ -18,7 +18,8 @@ it('自动选择仅在深度回答可见，发送时锁定模式开关', async (
     global: { stubs: { AppIcon: true, 'el-button': true } },
   })
   expect(wrapper.findAll('button')).toHaveLength(1)
-  await wrapper.setProps({ agentMode: true })
+  expect(wrapper.get('button').text()).toContain('自动选择 Skill')
+  await wrapper.setProps({ supportsReasoning: true })
   const auto = wrapper.findAll('button')[1]
   await auto.trigger('click')
   expect(wrapper.emitted('toggle-auto-skills')).toHaveLength(1)
@@ -62,14 +63,64 @@ it('时间线展示技能名称和失败原因，不暴露控制函数或版本�
       ],
     },
   })
-  expect(wrapper.text()).toContain('已采用技能')
+  expect(wrapper.get('details.timeline').attributes('open')).toBeUndefined()
+  expect(wrapper.findAll('.timeline__entry')).toHaveLength(4)
+  expect(wrapper.text()).toContain('已加载 Skill')
   expect(wrapper.text()).toContain('会议纪要')
-  expect(wrapper.text()).toContain('内置技能')
+  expect(wrapper.text()).toContain('内置 Skill')
   expect(wrapper.text()).toContain('技能已更新，请重新发起任务')
   expect(wrapper.text()).toContain('已读取参考资料')
   expect(wrapper.text()).toContain('参考资料未读取')
   expect(wrapper.text()).toContain('资源超过大小限制')
   expect(wrapper.text()).not.toContain('private-version-hash')
   expect(wrapper.text()).not.toContain('__runtime_request_skill_load')
+  wrapper.unmount()
+})
+
+it('工具和结果合并为一条可展开记录，普通思考只显示跳动省略号', async () => {
+  const step: AgentStep = {
+    seq: 1,
+    kind: 'assistant_text',
+    content: '中间说明',
+    tool_name: null,
+    tool_args: null,
+    skill_key: null,
+    skill_name: null,
+    skill_source: null,
+    skill_version: null,
+    ok: null,
+    duration_ms: null,
+    create_time: '',
+  }
+  const wrapper = mount(AgentTimeline, { props: { running: true, steps: [step] } })
+  expect(wrapper.get('[role="status"]').text()).toBe('正在思考...')
+  expect(wrapper.findAll('.timeline__dots > span')).toHaveLength(3)
+  expect(wrapper.find('summary').exists()).toBe(false)
+
+  const call = {
+    ...step,
+    seq: 2,
+    kind: 'tool_call',
+    tool_name: 'calculator',
+    tool_args: { expression: '3^5' },
+  }
+  await wrapper.setProps({ steps: [step, call] })
+  const summary = wrapper.get('details.timeline > summary')
+  expect(summary.text()).toContain('正在思考...')
+  expect(wrapper.get('.timeline__entry > summary').text()).toContain('调用了工具 calculator')
+  expect(wrapper.get('.timeline__entry .timeline__text').text()).toBe('等待执行结果')
+
+  await wrapper.setProps({
+    running: false,
+    steps: [step, call, { ...call, seq: 3, kind: 'tool_result', content: '243', ok: true }],
+  })
+  expect(summary.text()).toContain('执行过程')
+  expect(wrapper.findAll('.timeline__entry')).toHaveLength(1)
+  const row = wrapper.get('.timeline__entry')
+  expect(row.attributes('open')).toBeUndefined()
+  expect(row.get('pre').text()).toContain('3^5')
+  expect(row.get('.timeline__text').text()).toBe('243')
+  await wrapper.setProps({ steps: [step] })
+  expect(wrapper.find('.timeline').exists()).toBe(false)
   wrapper.unmount()
 })

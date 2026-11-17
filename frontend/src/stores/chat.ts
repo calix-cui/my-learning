@@ -8,18 +8,33 @@ import {
   getConversation,
   listConversations,
   renameConversation,
-  sendMessageStream,
 } from '@/api/chat'
 import {
   decideApprovalStream,
-  listAgentRuns,
+  getAgentSteps,
   listApprovals,
   sendAgentStream,
   type AgentSkillMode,
   type AgentStreamEvent,
+  type ReasoningEffort,
 } from '@/api/agent'
 import { confirmDialog, promptDialog } from '@/components/ui/messageBox'
-import type { AgentStep, ChatConversationListItem, ChatMessage } from '@/types/api'
+import type {
+  AgentRunSummary,
+  AgentStep,
+  ChatConversationDetail,
+  ChatConversationListItem,
+  ChatMessage,
+} from '@/types/api'
+
+const HISTORY_PAGE_SIZE = 50
+const VISIBLE_STEP_KINDS = new Set([
+  'tool_call',
+  'tool_result',
+  'skill_loaded',
+  'skill_load_failed',
+  'skill_resource',
+])
 
 const AGENT_MODE_KEY = 'my-agent.agent-mode'
 
@@ -33,13 +48,25 @@ const DRAFT_KEY = 0
  * 单例，切换会话只是把它们换成另一份数据，而正在跑的流仍然往同一份里写，
  * 于是「上一个会话的回答」就落到新会话里了。现在按会话隔离，流只写自己那一份。
  */
+interface ReplayDetail {
+  status: 'loading' | 'loaded' | 'error'
+  steps: AgentStep[]
+}
+
 interface ChatThread {
   messages: ChatMessage[]
   /** 流式过程中已收到的文本；空串表示还在等第一个字符 */
   streamingText: string
   /** 当前这次运行的步骤时间线（工具往返过程） */
   steps: AgentStep[]
+  activeUserMessageId: number | null
+  runs: Record<number, AgentRunSummary>
+  replayDetails: Record<number, ReplayDetail>
+  nextBeforeMessageId: number | null
+  loadingOlderMessages: boolean
+  historyRevision: number
   /** 输入框草稿：切走再切回来，写了一半的字还在 */
+  selectedSkillKey: string | null
   draftText: string
   /** 是否正在发送（普通回答或深度回答都算） */
   sending: boolean
@@ -64,6 +91,13 @@ function emptyThread(): ChatThread {
     messages: [],
     streamingText: '',
     steps: [],
+    activeUserMessageId: null,
+    runs: {},
+    replayDetails: {},
+    nextBeforeMessageId: null,
+    loadingOlderMessages: false,
+    historyRevision: 0,
+    selectedSkillKey: null,
     draftText: '',
     sending: false,
     runningAgent: false,
@@ -104,7 +138,7 @@ export const useChatStore = defineStore('chat', () => {
   const loadingList = ref(false)
   /** 正在拉某个会话的消息（只影响当前会话的骨架屏） */
   const loadingMessages = ref(false)
-  /** 是否用「深度回答」（agent 循环 + 工具）代替一问一答；默认关，省 token */
+  /** 是否请求模型提高推理强度。 */
   const agentMode = ref(readAgentMode())
 
   /** 按会话 id 存放的运行时状态；草稿态用 DRAFT_KEY */
@@ -126,12 +160,40 @@ export const useChatStore = defineStore('chat', () => {
   const messages = computed(() => activeThread.value.messages)
   const streamingText = computed(() => activeThread.value.streamingText)
   const agentSteps = computed(() => activeThread.value.steps)
+  const activeUserMessageId = computed(() => activeThread.value.activeUserMessageId)
+  const hasOlderMessages = computed(() => activeThread.value.nextBeforeMessageId !== null)
+  const loadingOlderMessages = computed(() => activeThread.value.loadingOlderMessages)
+  const replayDetails = computed(() => activeThread.value.replayDetails)
+  const runsByMessage = computed(() => {
+    const grouped: Record<number, AgentRunSummary[]> = {}
+    for (const run of Object.values(activeThread.value.runs)) {
+      const messageId = run.assistant_message_id ?? run.user_message_id
+      if (messageId !== null && run.visible_step_count > 0) {
+        const runs = (grouped[messageId] ??= [])
+        runs.push(run)
+      }
+    }
+    return grouped
+  })
+  const legacyRuns = computed(() =>
+    Object.values(activeThread.value.runs)
+      .filter((run) => run.user_message_id === null && run.assistant_message_id === null)
+      .filter((run) => run.visible_step_count > 0)
+      .sort((a, b) => b.id - a.id),
+  )
   const sending = computed(() => activeThread.value.sending)
   const pendingApproval = computed(() => activeThread.value.approval)
 
   const agentRunning = computed(() => activeThread.value.runningAgent)
 
   /** 输入框内容也是会话状态的一部分：每个会话各存各的草稿 */
+  const selectedSkillKey = computed({
+    get: () => activeThread.value.selectedSkillKey,
+    set: (key: string | null) => {
+      activeThread.value.selectedSkillKey = key
+    },
+  })
+
   const composerText = computed({
     get: () => activeThread.value.draftText,
     set: (value: string) => {
@@ -216,20 +278,121 @@ export const useChatStore = defineStore('chat', () => {
     const firstLoad = !thread.loaded
     loadingMessages.value = firstLoad && !thread.sending
     if (thread.sending) return
+    const revision = ++thread.historyRevision
     try {
-      const detail = await getConversation(id)
-      if (threads.get(id) !== thread || thread.sending) return
-      thread.messages = detail.messages
-      thread.loaded = true
-      patchConversation(id, { title: detail.title })
+      const detail = await getConversation(id, { message_limit: HISTORY_PAGE_SIZE })
+      if (threads.get(id) !== thread || thread.historyRevision !== revision) return
+      applyLatestHistory(id, thread, detail)
+      await restoreApproval(thread, detail, revision)
     } catch {
       // 会话可能已被别处删除：只有当前还停在这个会话时才退回空态
-      if (request === conversationRequest && activeId.value === id) {
+      if (
+        request === conversationRequest &&
+        activeId.value === id &&
+        thread.historyRevision === revision
+      ) {
         startNew()
         await loadConversations()
       }
     } finally {
       if (request === conversationRequest) loadingMessages.value = false
+    }
+  }
+
+  function applyRunSummaries(thread: ChatThread, runs: AgentRunSummary[]) {
+    for (const run of runs) {
+      const previous = thread.runs[run.id]
+      if (
+        previous &&
+        (previous.status !== run.status || previous.visible_step_count !== run.visible_step_count)
+      ) {
+        delete thread.replayDetails[run.id]
+      }
+      thread.runs[run.id] = run
+    }
+  }
+
+  function applyLatestHistory(id: number, thread: ChatThread, detail: ChatConversationDetail) {
+    const firstId = detail.messages[0]?.id
+    const older =
+      detail.next_before_message_id && firstId !== undefined
+        ? thread.messages.filter((message) => message.id > 0 && message.id < firstId)
+        : []
+    // 只有新页与已加载消息有交集，才保留已加载的旧页。
+    const overlaps =
+      firstId !== undefined && thread.messages.some((message) => message.id === firstId)
+    thread.messages = [...(overlaps ? older : []), ...detail.messages]
+    if (!overlaps || !older.length)
+      thread.nextBeforeMessageId = detail.next_before_message_id ?? null
+    applyRunSummaries(thread, [...(detail.runs ?? []), ...(detail.legacy_runs ?? [])])
+    thread.loaded = true
+    patchConversation(id, { title: detail.title })
+  }
+
+  async function restoreApproval(
+    thread: ChatThread,
+    detail: ChatConversationDetail,
+    revision: number,
+  ) {
+    if (!detail.runs) return
+    const run = detail.runs.find((item) => item.status === 'waiting_approval')
+    if (!run) {
+      thread.approval = null
+      if (!thread.runningAgent) thread.activeUserMessageId = null
+      return
+    }
+    const approvals = await listApprovals(run.id).catch(() => null)
+    if (approvals === null || thread.historyRevision !== revision) return
+    const waiting = approvals.find((item) => item.status === 'pending')
+    thread.approval = waiting
+      ? {
+          runId: waiting.run_id,
+          approvalId: waiting.id,
+          tool: waiting.tool_name,
+          args: waiting.tool_args,
+          reason: waiting.note ?? '',
+        }
+      : null
+  }
+
+  async function loadOlderMessages() {
+    const id = activeId.value
+    const thread = activeThread.value
+    const before = thread.nextBeforeMessageId
+    if (id === null || before === null || thread.loadingOlderMessages || thread.sending)
+      return false
+
+    const revision = thread.historyRevision
+    thread.loadingOlderMessages = true
+    try {
+      const detail = await getConversation(id, {
+        message_limit: HISTORY_PAGE_SIZE,
+        before_message_id: before,
+      })
+      if (threads.get(id) !== thread || thread.historyRevision !== revision) return false
+      thread.messages = [...detail.messages, ...thread.messages]
+      thread.nextBeforeMessageId = detail.next_before_message_id ?? null
+      applyRunSummaries(thread, detail.runs ?? [])
+      return true
+    } catch {
+      return false
+    } finally {
+      thread.loadingOlderMessages = false
+    }
+  }
+
+  async function loadExecutionSteps(runId: number) {
+    const thread = activeThread.value
+    const cached = thread.replayDetails[runId]
+    if (cached && cached.status !== 'error') return
+
+    const request: ReplayDetail = reactive({ status: 'loading', steps: [] })
+    thread.replayDetails[runId] = request
+    try {
+      request.steps = await getAgentSteps(runId)
+      request.status = 'loaded'
+    } catch {
+      request.status = 'error'
     }
   }
 
@@ -302,85 +465,6 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /** 发送一条消息；返回是否成功（失败时由调用方决定输入框保留内容） */
-  async function send(content: string): Promise<boolean> {
-    const text = content.trim()
-    if (!text || activeThread.value.sending) return false
-
-    let id = activeId.value
-    if (id === null) {
-      id = await ensureConversation()
-      if (id === null) return false
-    }
-
-    // 从此处开始只认这个 id：即使中途切走，写入的也是它自己那一份
-    const thread = threadOf(id)
-    const optimisticId = -Date.now()
-    thread.messages = [
-      ...thread.messages,
-      {
-        id: optimisticId,
-        conversation_id: id,
-        role: 'user',
-        content: text,
-        model: null,
-        create_time: '',
-      },
-    ]
-    thread.streamingText = ''
-    thread.sending = true
-
-    let currentUserId = optimisticId
-    try {
-      await sendMessageStream(id, text, {
-        onMeta: (message) => {
-          currentUserId = message.id
-          thread.messages = thread.messages.map((m) => (m.id === optimisticId ? message : m))
-          if (import.meta.env.DEV) {
-            console.debug('[my-agent] chat.store.meta', {
-              conversationId: id,
-              messageId: message.id,
-            })
-          }
-        },
-        onDelta: (delta) => {
-          thread.streamingText += delta
-        },
-        onDone: (event) => {
-          thread.streamingText = ''
-          thread.messages = [...thread.messages, event.assistant_message]
-          thread.loaded = true
-          if (import.meta.env.DEV) {
-            console.debug('[my-agent] chat.store.complete', {
-              conversationId: id,
-              messageId: event.assistant_message.id,
-              chars: event.assistant_message.content.length,
-            })
-          }
-          patchConversation(id, {
-            title: event.conversation_title,
-            message_count: event.message_count,
-            update_time: event.assistant_message.create_time,
-          })
-          sortByRecent()
-        },
-      })
-      thread.draftText = ''
-      return true
-    } catch (error) {
-      // 后端已回滚这次提问，前端也要撤掉乐观消息
-      thread.messages = thread.messages.filter((m) => m.id !== currentUserId)
-      thread.streamingText = ''
-      if (import.meta.env.DEV) {
-        console.debug('[my-agent] chat.store.rollback', { conversationId: id })
-      }
-      ElMessage.error(error instanceof Error ? error.message : '发送失败，请稍后重试')
-      return false
-    } finally {
-      thread.sending = false
-    }
-  }
-
   function toggleAgentMode(value: boolean) {
     agentMode.value = value
     // 记住选择：刷新后仍是同一模式（用户刚开过就说明正在用）
@@ -407,7 +491,20 @@ export const useChatStore = defineStore('chat', () => {
       duration_ms: null,
       create_time: formatNow(),
     }
-    if (event.type === 'tool_call') {
+    if (event.type === 'run_started') {
+      const optimisticId = thread.activeUserMessageId
+      const messageId = event.user_message_id
+      if (optimisticId !== null && messageId != null) {
+        thread.messages = thread.messages.map((message) =>
+          message.id === optimisticId ? { ...message, id: messageId } : message,
+        )
+        thread.activeUserMessageId = messageId
+      }
+    } else if (event.type === 'assistant_delta') {
+      thread.streamingText += event.content
+    } else if (event.type === 'assistant_preview_reset') {
+      thread.streamingText = ''
+    } else if (event.type === 'tool_call') {
       thread.steps = [
         ...thread.steps,
         {
@@ -483,11 +580,10 @@ export const useChatStore = defineStore('chat', () => {
         reason: event.reason,
       }
     }
-    if (import.meta.env.DEV && 'seq' in event) {
-      console.debug('[my-agent] agent.store.timeline', {
+    if (import.meta.env.DEV) {
+      console.debug('[my-agent] agent.store.applyAgentEvent', {
         conversationId,
-        type: event.type,
-        seq: event.seq,
+        event: event,
         stepCount: thread.steps.length,
         awaitingApproval: thread.approval !== null,
       })
@@ -500,10 +596,22 @@ export const useChatStore = defineStore('chat', () => {
     conversationId: number,
     event: Extract<AgentStreamEvent, { type: 'run_finished' }>,
   ) {
+    thread.streamingText = ''
+    const steps = thread.steps.filter((step) => VISIBLE_STEP_KINDS.has(step.kind))
+    const previous = thread.runs[event.run_id]
+    thread.runs[event.run_id] = {
+      id: event.run_id,
+      status: 'completed',
+      user_message_id: thread.activeUserMessageId ?? previous?.user_message_id ?? null,
+      assistant_message_id: event.assistant_message_id,
+      visible_step_count: steps.length,
+    }
+    thread.replayDetails[event.run_id] = { status: 'loaded', steps }
+    thread.activeUserMessageId = null
     thread.messages = [
       ...thread.messages,
       {
-        id: -Date.now() - 1,
+        id: event.assistant_message_id,
         conversation_id: conversationId,
         role: 'assistant',
         content: event.content,
@@ -526,20 +634,23 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function sendWithAgent(
+  async function send(
     content: string,
-    skillMode: AgentSkillMode = 'manual',
+    skillMode: AgentSkillMode = 'auto',
+    reasoningEffort: ReasoningEffort = 'none',
+    skillCatalogVersion?: string,
   ): Promise<boolean> {
     const text = content.trim()
-    if (!text || activeThread.value.runningAgent) return false
+    if (!text || activeThread.value.sending || activeThread.value.approval) return false
 
+    const selectedKey = activeThread.value.selectedSkillKey
     let conversationId = activeId.value
     if (conversationId === null) {
       conversationId = await ensureConversation()
     }
     if (conversationId === null) return false
 
-    // 与 send 一样：整段流程绑定 conversationId 自己的 thread
+    // 整段流程绑定 conversationId 自己的状态，切走也继续更新原会话。
     const thread = threadOf(conversationId)
     const optimisticId = -Date.now()
     thread.messages = [
@@ -553,7 +664,10 @@ export const useChatStore = defineStore('chat', () => {
         create_time: formatNow(),
       },
     ]
+    thread.selectedSkillKey = selectedKey
     thread.steps = []
+    thread.activeUserMessageId = optimisticId
+    thread.historyRevision++
     thread.streamingText = ''
     thread.runningAgent = true
     thread.sending = true
@@ -567,54 +681,41 @@ export const useChatStore = defineStore('chat', () => {
           onEvent: (event: AgentStreamEvent) => applyAgentEvent(conversationId, thread, event),
           onApproval: () => {
             // 服务端已经暂停：流结束，等用户点批准/拒绝
+            thread.streamingText = ''
             thread.runningAgent = false
           },
           onFinished: (event) => appendAssistantMessage(thread, conversationId, event),
         },
         undefined,
         skillMode,
+        reasoningEffort,
+        selectedKey ? [selectedKey] : [],
+        skillCatalogVersion,
       )
-      // 用服务端的真实 id / 时间覆盖乐观数据（写回它自己的 thread）
-      const detail = await getConversation(conversationId)
-      thread.messages = detail.messages
-      thread.loaded = true
-      patchConversation(conversationId, { title: detail.title })
+      await refreshAfterAgent(conversationId, thread)
       thread.draftText = ''
+      thread.selectedSkillKey = null
       return true
     } catch (error) {
+      thread.streamingText = ''
       thread.messages = thread.messages.filter((item) => item.id !== optimisticId)
-      ElMessage.error(error instanceof Error ? error.message : '深度回答失败')
+      thread.activeUserMessageId = null
+      await refreshAfterAgent(conversationId, thread)
+      ElMessage.error(error instanceof Error ? error.message : '生成回复失败')
       return false
     } finally {
+      thread.streamingText = ''
       thread.runningAgent = false
+      if (!thread.approval) thread.activeUserMessageId = null
       thread.sending = false
     }
   }
 
-  /** 打开会话时拉一次最近的运行，刷新后仍能看到上次的工具过程 */
-  async function loadAgentRuns(conversationId: number) {
-    const thread = threadOf(conversationId)
-    const data = await listAgentRuns(conversationId)
-    if (thread.sending) return
-    const latest = data.items[0]
-    thread.steps = latest ? latest.steps.filter((step) => step.kind !== 'final_answer') : []
-
-    // 刷新前挂起的审批要能复原，否则用户永远点不到那张卡片
-    if (latest?.status === 'waiting_approval') {
-      const pending = await listApprovals(latest.id)
-      if (thread.sending) return
-      const waiting = pending.find((item) => item.status === 'pending')
-      thread.approval = waiting
-        ? {
-            runId: waiting.run_id,
-            approvalId: waiting.id,
-            tool: waiting.tool_name,
-            args: waiting.tool_args,
-            reason: waiting.note ?? '',
-          }
-        : null
-    } else {
-      thread.approval = null
+  async function refreshAfterAgent(id: number, thread: ChatThread) {
+    const detail = await getConversation(id, { message_limit: HISTORY_PAGE_SIZE }).catch(() => null)
+    if (detail && threads.get(id) === thread) {
+      applyLatestHistory(id, thread, detail)
+      await restoreApproval(thread, detail, thread.historyRevision)
     }
   }
 
@@ -622,13 +723,21 @@ export const useChatStore = defineStore('chat', () => {
   async function decideApproval(decision: 'approve' | 'reject', note?: string): Promise<boolean> {
     const conversationId = activeId.value
     const pending = activeThread.value.approval
-    if (conversationId === null || pending === null) return false
+    if (conversationId === null || pending === null || activeThread.value.sending) return false
 
     const thread = threadOf(conversationId)
+    thread.historyRevision++
     thread.approval = null
     thread.runningAgent = true
     thread.sending = true
     try {
+      const run = thread.runs[pending.runId]
+      if (run && thread.activeUserMessageId === null) {
+        thread.activeUserMessageId = run.user_message_id
+        const cached = thread.replayDetails[run.id]
+        thread.steps =
+          cached?.status === 'loaded' ? cached.steps : await getAgentSteps(run.id).catch(() => [])
+      }
       await decideApprovalStream(
         pending.runId,
         pending.approvalId,
@@ -636,22 +745,25 @@ export const useChatStore = defineStore('chat', () => {
         {
           onEvent: (event: AgentStreamEvent) => applyAgentEvent(conversationId, thread, event),
           onApproval: () => {
+            thread.streamingText = ''
             thread.runningAgent = false
           },
           onFinished: (event) => appendAssistantMessage(thread, conversationId, event),
         },
         note,
       )
-      const detail = await getConversation(conversationId)
-      thread.messages = detail.messages
-      thread.loaded = true
-      patchConversation(conversationId, { title: detail.title })
+      await refreshAfterAgent(conversationId, thread)
       return true
     } catch (error) {
+      thread.streamingText = ''
+      thread.approval = pending
+      await refreshAfterAgent(conversationId, thread)
       ElMessage.error(error instanceof Error ? error.message : '处理审批失败')
       return false
     } finally {
+      thread.streamingText = ''
       thread.runningAgent = false
+      if (!thread.approval) thread.activeUserMessageId = null
       thread.sending = false
     }
   }
@@ -683,6 +795,7 @@ export const useChatStore = defineStore('chat', () => {
     activeId,
     draft,
     composerText,
+    selectedSkillKey,
     messages,
     loadingList,
     loadingMessages,
@@ -701,11 +814,17 @@ export const useChatStore = defineStore('chat', () => {
     remove,
     send,
     reset,
-    sendWithAgent,
     approveApproval,
     rejectApproval,
     decideApproval,
-    loadAgentRuns,
+    activeUserMessageId,
+    runsByMessage,
+    legacyRuns,
+    replayDetails,
+    loadExecutionSteps,
+    hasOlderMessages,
+    loadingOlderMessages,
+    loadOlderMessages,
     toggleAgentMode,
   }
 })

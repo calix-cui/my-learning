@@ -15,7 +15,7 @@ const CHROME =
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'new',
-  args: ['--no-sandbox', '--disable-gpu', '--user-data-dir=/tmp/cp-agent-e2e'],
+  args: ['--no-sandbox', '--disable-gpu'],
 })
 const page = await browser.newPage()
 await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 })
@@ -31,7 +31,7 @@ const gotoPage = async (url) => {
 const errors = []
 const agentCalls = []
 page.on('request', (request) => {
-  if (request.url().includes('/agent/stream'))
+  if (request.url().includes('/messages/stream'))
     agentCalls.push(`${request.method()} ${request.url()}`)
 })
 page.on('console', (message) => {
@@ -107,19 +107,23 @@ await page.waitForSelector('.chat__empty-title', { timeout: 10000 })
 
 await step('A-01 默认是普通对话，没有时间线', async () => {
   if (await page.$('.timeline')) throw new Error('默认就显示了时间线')
-  const checked = await page.$eval(
-    '.chat__mode',
-    (el) => el.getAttribute('aria-pressed') === 'true',
+  const checked = await page.evaluate(
+    () => document.querySelector('.chat__mode--reasoning')?.getAttribute('aria-pressed') === 'true',
   )
   if (checked) throw new Error('深度回答默认是开着的')
 })
 
-await step('A-02 打开「深度回答」', async () => {
-  await page.click('.chat__mode')
-  await page.waitForFunction(
-    () => document.querySelector('.chat__mode')?.getAttribute('aria-pressed') === 'true',
-    { timeout: 5000 },
-  )
+await step('A-02 有推理能力时可独立开启和关闭「深度回答」', async () => {
+  const control = await page.$('.chat__mode--reasoning')
+  if (!control) return
+  await control.click()
+  if ((await control.evaluate((el) => el.getAttribute('aria-pressed'))) !== 'true') {
+    throw new Error('推理开关未开启')
+  }
+  await control.click()
+  if ((await control.evaluate((el) => el.getAttribute('aria-pressed'))) !== 'false') {
+    throw new Error('推理开关未关闭')
+  }
 })
 
 await step('A-03 新建会话并发送需要工具的问题', async () => {
@@ -131,17 +135,20 @@ await step('A-03 新建会话并发送需要工具的问题', async () => {
   await page.waitForSelector('.chat__item', { timeout: 10000 })
 })
 
-await step('A-04 请求走的是 agent 流式接口', async () => {
+await step('A-04 普通聊天走统一消息流接口', async () => {
   await page.waitForFunction(() => document.querySelector('.timeline'), { timeout: 60000 })
   if (agentCalls.length !== 1) throw new Error(`agent 请求次数=${agentCalls.length}`)
   if (!agentCalls[0].startsWith('POST ')) throw new Error(`方法不对：${agentCalls[0]}`)
 })
 
 await step('A-05 时间线出现工具调用与结果', async () => {
+  await waitIdle()
   await page.waitForFunction(
     () => document.querySelectorAll('.timeline__item--tool_result').length >= 1,
     { timeout: 60000 },
   )
+  await page.click('.timeline > summary')
+  await page.click('.timeline__item--tool_result > summary')
   const tools = await page.$$eval('.timeline__tool', (els) =>
     els.map((el) => el.textContent.trim()),
   )
@@ -165,22 +172,70 @@ await step('A-06 最终答复进了气泡并含正确数字', async () => {
   await page.screenshot({ path: `${OUT}/agent-01-timeline.png` })
 })
 
-await step('A-07 刷新后仍能看到上次的工具过程', async () => {
-  await page.reload({ waitUntil: 'networkidle2' })
-  await page.waitForSelector('.timeline', { timeout: 15000 })
-  const tools = await page.$$eval('.timeline__tool', (els) =>
-    els.map((el) => el.textContent.trim()),
+await step('A-07 刷新和切换会话后可分别回放两条回复的工具结果', async () => {
+  const conversationUrl = page.url()
+  await page.type('.chat__composer textarea', '用工具计算 6 乘以 7，再告诉我结果')
+  await page.click('.chat__composer .el-button--primary')
+  await page.waitForFunction(
+    () => document.querySelectorAll('.chat__row--assistant').length === 2,
+    { timeout: 60000 },
   )
-  if (!tools.includes('calculator')) throw new Error(`回放里没有工具：${JSON.stringify(tools)}`)
+  await waitIdle()
+  const another = await api('/api/conversations', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: '另一个会话' }),
+  })
+  if (!another.ok) throw new Error('创建切换验证会话失败')
+  await page.reload({ waitUntil: 'networkidle2' })
+  const conversationTitle = await page.$eval('.chat__item-main[aria-current="true"]', (el) =>
+    el.textContent.trim(),
+  )
+
+  const verifyReplay = async (index, expected) => {
+    await page.waitForFunction(
+      () => document.querySelectorAll('.chat__row--assistant + .timeline').length === 2,
+      { timeout: 15000 },
+    )
+    const timelines = await page.$$('.chat__row--assistant + .timeline')
+    const timeline = timelines[index]
+    const summary = await timeline.$('summary')
+    await summary.click()
+    await page.waitForFunction(
+      (element) => element.querySelector('.timeline__item--tool_result'),
+      { timeout: 15000 },
+      timeline,
+    )
+    const row = await timeline.$('.timeline__item--tool_result > summary')
+    await row.click()
+    const result = await timeline.$eval('.timeline__item--tool_result .timeline__text', (el) =>
+      (el.textContent ?? '').trim(),
+    )
+    if (!result.includes(expected)) throw new Error(`期望工具结果 ${expected}，实际为 ${result}`)
+  }
+  await verifyReplay(0, '243')
+  await verifyReplay(1, '42')
+
+  const switchTo = async (title) => {
+    const buttons = await page.$$('.chat__item-main')
+    for (const button of buttons) {
+      if ((await button.evaluate((el) => el.textContent.trim())) === title) {
+        await button.click()
+        return
+      }
+    }
+    throw new Error(`会话列表找不到 ${title}`)
+  }
+  await switchTo('另一个会话')
+  await page.waitForSelector('.chat__empty-title')
+  if (await page.$('.timeline')) throw new Error('另一会话中出现了旧对话的执行过程')
+  await switchTo(conversationTitle)
+  await page.waitForFunction((url) => location.href === url, {}, conversationUrl)
+  await verifyReplay(0, '243')
   await page.screenshot({ path: `${OUT}/agent-02-replay.png` })
 })
 
-await step('A-08 关掉开关后回到普通对话', async () => {
-  await page.click('.chat__mode')
-  await page.waitForFunction(
-    () => document.querySelector('.chat__mode')?.getAttribute('aria-pressed') === 'false',
-    { timeout: 5000 },
-  )
+await step('A-08 普通问候复用同一接口且不需要工具', async () => {
   const before = agentCalls.length
   const beforeCount = await page.$$eval('.chat__row--assistant', (els) => els.length)
   await page.type('.chat__composer textarea', '一句话介绍你自己')
@@ -190,21 +245,26 @@ await step('A-08 关掉开关后回到普通对话', async () => {
   if (afterCount !== beforeCount + 1) {
     throw new Error(`助手气泡数 ${beforeCount} → ${afterCount}`)
   }
-  if (agentCalls.length !== before) throw new Error('关掉后仍然走了 agent 接口')
+  if (agentCalls.length !== before + 1) throw new Error('问候没有使用同一消息流接口')
+  if ((await page.$$('.chat__row--assistant + .timeline')).length !== 2) {
+    throw new Error('普通回复后原有执行记录的数量发生变化')
+  }
   await page.screenshot({ path: `${OUT}/agent-03-normal.png` })
 })
 
 await step('A-09 后端记录了这次运行', async () => {
-  // 取最新会话的运行记录，确认步骤落库（工具名、参数、状态）
-  const list = await (await api('/api/conversations?page=1&page_size=5')).json()
-  const conversationId = list.data.items[0].id
+  // 普通问候也有运行记录，从两条调用工具的回复核对步骤。
+  const conversationId = new URL(page.url()).pathname.split('/').at(-1)
   const runs = await (await api(`/api/conversations/${conversationId}/agent/runs`)).json()
-  const run = runs.data.items[0]
-  if (!run) throw new Error('没有运行记录')
-  if (run.status !== 'completed') throw new Error(`状态=${run.status}`)
-  const kinds = run.steps.map((s) => s.kind)
-  if (!kinds.includes('tool_call') || !kinds.includes('tool_result')) {
-    throw new Error(`步骤=${JSON.stringify(kinds)}`)
+  const toolRuns = runs.data.items.filter((run) =>
+    run.steps.some((step) => step.kind === 'tool_call'),
+  )
+  if (toolRuns.length !== 2) throw new Error(`带工具的运行数量=${toolRuns.length}`)
+  for (const run of toolRuns) {
+    if (run.status !== 'completed') throw new Error(`状态=${run.status}`)
+    if (!run.steps.some((step) => step.kind === 'tool_result')) {
+      throw new Error('运行缺少工具结果')
+    }
   }
 })
 

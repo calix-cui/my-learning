@@ -2,17 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { useChatStore } from '@/stores/chat'
-import type { ChatMessage } from '@/types/api'
-
-/** 被测试拿在手里的流控制器：由它决定什么时候吐 delta / done */
-let streamHandlers: {
-  onMeta?: (m: ChatMessage) => void
-  onDelta?: (d: string) => void
-  onDone?: (e: unknown) => void
-} = {}
-
-/** 由测试决定什么时候结束这次 SSE */
-let finishStream: (() => void) | null = null
+import type { AgentRunSummary, AgentStep, ChatMessage } from '@/types/api'
 
 const conversations: Record<number, ChatMessage[]> = {}
 
@@ -35,14 +25,6 @@ vi.mock('@/api/chat', () => ({
   })),
   renameConversation: vi.fn(),
   deleteConversation: vi.fn(),
-  // 手动控制何时结束：这样才能模拟「流还没跑完就切走」
-  sendMessageStream: vi.fn(
-    (_id: number, _text: string, handlers: typeof streamHandlers) =>
-      new Promise<void>((resolve) => {
-        streamHandlers = handlers
-        finishStream = resolve
-      }),
-  ),
 }))
 
 vi.mock('element-plus', () => ({
@@ -63,7 +45,7 @@ let agentHandlers: {
 let finishAgent: (() => void) | null = null
 
 vi.mock('@/api/agent', () => ({
-  listAgentRuns: vi.fn(async () => ({ items: [] })),
+  getAgentSteps: vi.fn(async () => [] as AgentStep[]),
   listApprovals: vi.fn(async () => []),
   // 写操作会挂起：先吐 approval_required，再由测试决定批准后怎么走
   sendAgentStream: vi.fn(
@@ -101,8 +83,8 @@ function msg(
 describe('chat store：会话状态按会话隔离', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    streamHandlers = {}
-    finishStream = null
+    agentHandlers = {}
+    finishAgent = null
     for (const key of Object.keys(conversations)) delete conversations[Number(key)]
     conversations[2] = [msg(20, 2, 'user', '第二个会话的历史')]
   })
@@ -112,23 +94,30 @@ describe('chat store：会话状态按会话隔离', () => {
     chat.activeId = 1
     const pending = chat.send('第一个会话的问题')
 
-    // 服务端刚回 meta + 一个 delta，用户就点开了另一个会话
-    streamHandlers.onMeta?.(msg(11, 1, 'user', '第一个会话的问题'))
-    streamHandlers.onDelta?.('半句')
+    // 服务端刚返回消息 ID 和一个分片，用户就点开了另一个会话。
+    agentHandlers.onEvent?.({
+      type: 'run_started',
+      run_id: 7,
+      conversation_id: 1,
+      user_message_id: 11,
+    })
+    agentHandlers.onEvent?.({ type: 'assistant_delta', content: '半句' })
     await chat.openConversation(2)
 
     // 旧会话接着吐完（这一步以前会把内容塞进「当前会话」）
-    streamHandlers.onDelta?.('话')
+    agentHandlers.onEvent?.({ type: 'assistant_delta', content: '话' })
     const answer = msg(12, 1, 'assistant', '第一个会话的回答')
-    streamHandlers.onDone?.({
-      assistant_message: answer,
-      conversation_title: '第一个会话的问题',
-      message_count: 2,
+    agentHandlers.onFinished?.({
+      type: 'run_finished',
+      run_id: 7,
+      assistant_message_id: 12,
+      content: answer.content,
+      model: null,
+      steps: 2,
     })
-    finishStream?.()
-    await pending
-    // 服务端把它落库了；下一次打开会话时从服务端读到
     conversations[1] = [msg(11, 1, 'user', '第一个会话的问题'), answer]
+    finishAgent?.()
+    await pending
 
     // 新会话的内容不受影响
     expect(chat.messages.map((m) => m.content)).toEqual(['第二个会话的历史'])
@@ -146,7 +135,7 @@ describe('chat store：会话状态按会话隔离', () => {
     // 切到会话二：二没在发，所以按钮可用
     expect(chat.sending).toBe(false)
     expect(chat.isBusy(1)).toBe(true)
-    finishStream?.()
+    finishAgent?.()
     await pending
     expect(chat.isBusy(1)).toBe(false)
   })
@@ -202,7 +191,7 @@ describe('chat store · 工具审批', () => {
     await chat.loadConversations()
     chat.agentMode = true
 
-    const sending = chat.sendWithAgent('把会话改名为周报')
+    const sending = chat.send('把会话改名为周报')
     await vi.waitFor(() => expect(agentHandlers.onEvent).toBeTruthy())
 
     // 服务端先回一个 tool_call，再挂起等审批
@@ -255,6 +244,7 @@ describe('chat store · 工具审批', () => {
     agentHandlers.onFinished?.({
       type: 'run_finished',
       run_id: 7,
+      assistant_message_id: 22,
       content: '已经把会话改名为「周报」。',
       steps: 3,
       model: 'deepseek-chat',
@@ -263,8 +253,8 @@ describe('chat store · 工具审批', () => {
     await deciding
 
     expect(chat.pendingApproval).toBeNull()
-    // 收尾会重新拉一次会话详情覆盖消息，所以这里看时间线：工具真的执行了
-    expect(chat.agentSteps.at(-1)).toMatchObject({
+    expect(chat.runsByMessage[22]?.[0].id).toBe(7)
+    expect(chat.replayDetails[7]?.steps.at(-1)).toMatchObject({
       kind: 'tool_result',
       tool_name: 'rename_conversation',
       ok: true,
@@ -274,17 +264,21 @@ describe('chat store · 工具审批', () => {
 
 describe('chat store · Skill 时间线', () => {
   it('传递自动模式，隔离异步事件并回放已保存的 Skill 步骤', async () => {
-    const { sendAgentStream, listAgentRuns } = await import('@/api/agent')
+    const { sendAgentStream, getAgentSteps } = await import('@/api/agent')
+    const { getConversation } = await import('@/api/chat')
     setActivePinia(createPinia())
     const chat = useChatStore()
     chat.activeId = 1
-    const sending = chat.sendWithAgent('整理会议', 'auto')
+    const sending = chat.send('整理会议', 'auto')
     expect(sendAgentStream).toHaveBeenLastCalledWith(
       1,
       '整理会议',
       expect.any(Object),
       undefined,
       'auto',
+      'none',
+      [],
+      undefined,
     )
     await chat.openConversation(2)
     agentHandlers.onEvent?.({
@@ -326,24 +320,160 @@ describe('chat store · Skill 时间线', () => {
       tool_args: { path: 'references/checklist.md' },
     })
     const savedSteps = JSON.parse(JSON.stringify(chat.agentSteps))
-    vi.mocked(listAgentRuns).mockResolvedValueOnce({
-      items: [
-        {
-          id: 7,
-          model: null,
-          status: 'completed',
-          step_count: 3,
-          error_message: null,
-          started_time: '',
-          finished_time: null,
-          steps: savedSteps,
-        },
-      ],
+    vi.mocked(getConversation).mockResolvedValueOnce({
+      id: 1,
+      title: '会话一',
+      skill_slug: null,
+      agent_key: 'default',
+      create_time: '',
+      update_time: '',
+      messages: [msg(11, 1, 'assistant', '会议纪要')],
+      runs: [completedRun(7, 10, 11, savedSteps.length)],
     })
+    vi.mocked(getAgentSteps).mockResolvedValueOnce(savedSteps)
     setActivePinia(createPinia())
     const refreshed = useChatStore()
-    refreshed.activeId = 1
-    await refreshed.loadAgentRuns(1)
-    expect(refreshed.agentSteps).toEqual(savedSteps)
+    await refreshed.openConversation(1)
+    expect(refreshed.runsByMessage[11]?.[0].id).toBe(7)
+    expect(refreshed.replayDetails[7]).toBeUndefined()
+    await refreshed.loadExecutionSteps(7)
+    expect(refreshed.replayDetails[7]?.steps).toEqual(savedSteps)
   })
+})
+
+function completedRun(
+  id: number,
+  userMessageId: number,
+  assistantMessageId: number,
+  visibleStepCount = 2,
+): AgentRunSummary {
+  return {
+    id,
+    user_message_id: userMessageId,
+    assistant_message_id: assistantMessageId,
+    status: 'completed',
+    visible_step_count: visibleStepCount,
+  }
+}
+
+it('刷新、切换会话和分页后分别从对应运行加载执行过程', async () => {
+  const { getConversation } = await import('@/api/chat')
+  const { getAgentSteps } = await import('@/api/agent')
+  const first = completedRun(101, 9, 10)
+  const second = completedRun(102, 19, 20)
+  const older = completedRun(100, 1, 2)
+  const other = completedRun(103, 29, 30)
+  const conversation = {
+    id: 1,
+    title: '会话历史',
+    skill_slug: null,
+    agent_key: 'default',
+    update_time: '',
+    create_time: '',
+  }
+  const latestPage = {
+    ...conversation,
+    messages: [msg(10, 1, 'assistant', '第一次'), msg(20, 1, 'assistant', '第二次')],
+    next_before_message_id: 10,
+    runs: [second, first],
+  }
+  vi.mocked(getConversation).mockImplementation(async (id, page) => {
+    if (id === 2) {
+      return { ...conversation, id, messages: [msg(30, 2, 'assistant', '另外一条')], runs: [other] }
+    }
+    if (page?.before_message_id === 10) {
+      return { ...conversation, messages: [msg(2, 1, 'assistant', '更早')], runs: [older] }
+    }
+    return latestPage
+  })
+  vi.mocked(getAgentSteps).mockImplementation(async (runId) => [
+    {
+      seq: 2,
+      kind: 'tool_result',
+      content: `结果 ${runId}`,
+      tool_name: 'calculator',
+      tool_args: null,
+      skill_key: null,
+      skill_name: null,
+      skill_source: null,
+      skill_version: null,
+      ok: true,
+      duration_ms: 0,
+      create_time: '',
+    },
+  ])
+  try {
+    setActivePinia(createPinia())
+    const chat = useChatStore()
+    await chat.openConversation(1)
+    expect(chat.runsByMessage).toEqual({ 10: [first], 20: [second] })
+    expect(chat.replayDetails).toEqual({})
+    await chat.loadExecutionSteps(101)
+    await chat.loadExecutionSteps(102)
+    expect(chat.replayDetails[101]?.steps[0].content).toBe('结果 101')
+    expect(chat.replayDetails[102]?.steps[0].content).toBe('结果 102')
+
+    expect(await chat.loadOlderMessages()).toBe(true)
+    expect(chat.messages.map(({ id }) => id)).toEqual([2, 10, 20])
+    expect(chat.runsByMessage[2]).toEqual([older])
+    expect(chat.hasOlderMessages).toBe(false)
+    await chat.openConversation(2)
+    expect(chat.runsByMessage).toEqual({ 30: [other] })
+    expect(chat.replayDetails).toEqual({})
+    await chat.openConversation(1)
+    expect(chat.messages.map(({ id }) => id)).toEqual([2, 10, 20])
+    expect(chat.replayDetails[101]?.steps[0].content).toBe('结果 101')
+  } finally {
+    vi.mocked(getConversation).mockRestore()
+    vi.mocked(getAgentSteps).mockRestore()
+  }
+})
+
+it('本条 Skill 选择随草稿发送，成功后清除，下一次提问不自动继承', async () => {
+  setActivePinia(createPinia())
+  const chat = useChatStore()
+  chat.selectedSkillKey = 'user:guide'
+  const pending = chat.send('第一条', 'manual', 'none', 'catalog1')
+  await vi.waitFor(() => expect(chat.sending).toBe(true))
+  const { sendAgentStream } = await import('@/api/agent')
+  expect(sendAgentStream).toHaveBeenLastCalledWith(
+    1,
+    '第一条',
+    expect.any(Object),
+    undefined,
+    'manual',
+    'none',
+    ['user:guide'],
+    'catalog1',
+  )
+  agentHandlers.onEvent?.({
+    type: 'run_started',
+    run_id: 10,
+    conversation_id: 1,
+    user_message_id: 50,
+  })
+  agentHandlers.onFinished?.({
+    type: 'run_finished',
+    run_id: 10,
+    assistant_message_id: 51,
+    content: '已处理',
+    steps: 2,
+    model: null,
+  })
+  finishAgent?.()
+  expect(await pending).toBe(true)
+  expect(chat.selectedSkillKey).toBeNull()
+  const next = chat.send('第二条')
+  expect(sendAgentStream).toHaveBeenLastCalledWith(
+    1,
+    '第二条',
+    expect.any(Object),
+    undefined,
+    'auto',
+    'none',
+    [],
+    undefined,
+  )
+  finishAgent?.()
+  await next
 })

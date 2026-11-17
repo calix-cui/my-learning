@@ -6,184 +6,212 @@ import type { AgentStep } from '@/types/api'
 const props = defineProps<{
   steps: AgentStep[]
   running: boolean
+  lazy?: boolean
+  loadStatus?: 'loading' | 'loaded' | 'error'
 }>()
+const emit = defineEmits<{ requestSteps: [] }>()
 
-/** 只展示「过程」：工具调用/结果与模型的思考，最终答复另有气泡 */
-const visible = computed(() =>
-  props.steps.filter(
-    (step) =>
-      step.kind === 'tool_call' ||
-      step.kind === 'tool_result' ||
-      step.kind === 'assistant_text' ||
-      step.kind === 'skill_loaded' ||
-      step.kind === 'skill_load_failed' ||
-      step.kind === 'skill_resource',
-  ),
-)
-
-function argsText(step: AgentStep): string {
-  if (!step.tool_args) return ''
-  return Object.entries(step.tool_args)
-    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
-    .join('，')
+function handleToggle(event: Event) {
+  if (props.lazy && (event.currentTarget as HTMLDetailsElement).open && !props.loadStatus) {
+    emit('requestSteps')
+  }
 }
 
-function kindLabel(step: AgentStep): string {
-  if (step.kind === 'assistant_text') return '思考'
-  if (step.kind === 'skill_loaded') return '已采用技能'
-  if (step.kind === 'skill_load_failed') return '技能未加载'
+type TimelineEntry = { step: AgentStep; result?: AgentStep }
+
+/** 历史回放和实时事件使用相同的配对规则，调用和结果合并为一行。 */
+const entries = computed(() => {
+  const rows: TimelineEntry[] = []
+  const pending = new Map<string | null, TimelineEntry>()
+  for (const step of props.steps) {
+    if (step.kind === 'tool_call') {
+      const entry = { step }
+      rows.push(entry)
+      pending.set(step.tool_name, entry)
+    } else if (step.kind === 'tool_result') {
+      const entry = pending.get(step.tool_name)
+      if (entry) {
+        entry.result = step
+        pending.delete(step.tool_name)
+      } else {
+        rows.push({ step, result: step })
+      }
+    } else if (['skill_loaded', 'skill_load_failed', 'skill_resource'].includes(step.kind)) {
+      rows.push({ step })
+    }
+  }
+  return rows
+})
+
+function label(step: AgentStep) {
+  if (step.kind === 'skill_loaded') return '已加载 Skill'
+  if (step.kind === 'skill_load_failed') return 'Skill 未加载'
   if (step.kind === 'skill_resource') return step.ok ? '已读取参考资料' : '参考资料未读取'
-  if (step.kind === 'tool_call') return '调用工具'
-  return step.ok ? '工具结果' : '工具失败'
+  return '调用了工具'
+}
+
+function name(step: AgentStep) {
+  if (step.kind.startsWith('skill_')) return step.skill_name || step.skill_key
+  return step.tool_name
+}
+
+function detail({ step, result }: TimelineEntry) {
+  if (result) return result.content || '（无返回内容）'
+  if (step.kind === 'skill_loaded') {
+    return step.skill_source === 'builtin'
+      ? '内置 Skill'
+      : step.skill_source === 'local'
+        ? '本地 Skill'
+        : '旧版 Skill'
+  }
+  if (step.kind === 'tool_call') return props.running ? '等待执行结果' : '暂无运行结果'
+  return step.content || '（无详情）'
+}
+
+function parameters({ step, result }: TimelineEntry) {
+  const args = step.tool_args ?? result?.tool_args
+  return args && Object.keys(args).length ? JSON.stringify(args, null, 2) : '（无参数）'
 }
 </script>
 
 <template>
-  <section v-if="visible.length || running" class="timeline" aria-live="polite">
-    <header class="timeline__head">
-      <span class="timeline__title">执行过程</span>
-      <span v-if="running" class="timeline__badge">进行中</span>
-    </header>
-
-    <ol class="timeline__list">
-      <li
-        v-for="step in visible"
-        :key="step.seq"
-        class="timeline__item"
-        :class="`timeline__item--${step.kind}`"
-      >
-        <span class="timeline__dot" aria-hidden="true" />
-        <div class="timeline__body">
-          <p class="timeline__label">
-            {{ kindLabel(step) }}
-            <code
-              v-if="
-                step.skill_name ||
-                step.skill_key ||
-                (step.tool_name && step.kind !== 'skill_resource')
-              "
-              class="timeline__tool"
-            >
-              {{ step.skill_name || step.skill_key || step.tool_name }}
-            </code>
-            <span v-if="step.duration_ms !== null" class="timeline__time"
-              >{{ step.duration_ms }}ms</span
-            >
-          </p>
-          <p v-if="step.kind === 'skill_loaded'" class="timeline__text timeline__text--muted">
-            {{ step.skill_source === 'builtin' ? '内置技能' : '自建技能' }}
-          </p>
-          <p v-else-if="step.kind === 'tool_call'" class="timeline__text timeline__text--muted">
-            {{ argsText(step) || '（无参数）' }}
-          </p>
-          <p v-else class="timeline__text">{{ step.content }}</p>
-        </div>
-      </li>
-      <li v-if="running && !visible.length" class="timeline__item">
-        <span class="timeline__dot" aria-hidden="true" />
-        <div class="timeline__body">
-          <p class="timeline__text timeline__text--muted">正在思考…</p>
-        </div>
-      </li>
-    </ol>
-  </section>
+  <details v-if="entries.length || lazy" class="timeline" @toggle="handleToggle">
+    <summary class="timeline__summary u-tint">
+      <span>{{ running ? '正在思考...' : '执行过程' }}</span>
+      <span class="timeline__chevron" aria-hidden="true">›</span>
+    </summary>
+    <p v-if="loadStatus === 'loading'" class="timeline__text" role="status">正在加载…</p>
+    <button
+      v-else-if="loadStatus === 'error'"
+      type="button"
+      class="timeline__summary timeline__retry u-tint"
+      @click="emit('requestSteps')"
+    >
+      读取失败，重试
+    </button>
+    <details
+      v-for="entry in entries"
+      :key="entry.step.seq"
+      class="timeline__entry"
+      :class="{ 'timeline__item--tool_result': entry.result }"
+    >
+      <summary class="timeline__summary u-tint">
+        <span class="timeline__label">
+          {{ label(entry.step) }}
+          <span v-if="name(entry.step)" class="timeline__tool">{{ name(entry.step) }}</span>
+        </span>
+        <span class="timeline__hint">查看详情</span>
+        <span class="timeline__chevron" aria-hidden="true">›</span>
+      </summary>
+      <div class="timeline__detail">
+        <template v-if="entry.step.kind.startsWith('tool_')">
+          <div>参数</div>
+          <pre>{{ parameters(entry) }}</pre>
+          <div>{{ entry.result?.ok === false ? '运行失败' : '运行结果' }}</div>
+        </template>
+        <p class="timeline__text">{{ detail(entry) }}</p>
+      </div>
+    </details>
+  </details>
+  <div v-else-if="running" class="timeline" role="status" aria-label="正在思考">
+    <span aria-hidden="true"
+      >正在思考<span class="timeline__dots"><span>.</span><span>.</span><span>.</span></span></span
+    >
+  </div>
 </template>
 
 <style scoped>
 .timeline {
-  border: 1px solid var(--ma-color-line);
-  border-radius: var(--ma-radius-md);
-  background: var(--ma-color-surface);
-  padding: 12px 14px;
+  color: var(--ma-color-muted);
+  font-size: small;
+  line-height: 1.5;
 }
 
-.timeline__head {
+.timeline__summary {
   display: flex;
+  gap: 0.5em;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.timeline__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ma-color-ink);
-}
-
-.timeline__badge {
-  font-size: 12px;
-  color: var(--ma-color-accent);
-  background: var(--ma-color-accent-soft);
-  border-radius: 999px;
-  padding: 1px 8px;
-}
-
-.timeline__list {
+  width: fit-content;
+  max-width: 100%;
   list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  cursor: pointer;
+  border-radius: var(--ma-radius-sm);
 }
 
-.timeline__item {
-  display: flex;
-  gap: 8px;
-  position: relative;
+.timeline__summary::-webkit-details-marker {
+  display: none;
 }
 
-.timeline__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ma-color-faint);
-  margin-top: 7px;
+.timeline__summary:focus-visible {
+  outline: thin solid var(--ma-color-accent);
+}
+
+.timeline__retry {
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+}
+
+.timeline__entry,
+.timeline__detail {
+  margin-inline-start: 1em;
+}
+
+.timeline__chevron,
+.timeline__hint {
   flex: none;
 }
 
-.timeline__item--tool_result .timeline__dot,
-.timeline__item--tool_call .timeline__dot {
-  background: var(--ma-color-accent);
-}
-
-.timeline__body {
-  min-width: 0;
+details[open] > .timeline__summary > .timeline__chevron {
+  transform: rotate(90deg);
 }
 
 .timeline__label {
-  margin: 0;
-  font-size: 12px;
-  color: var(--ma-color-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.timeline__tool {
-  font-family: var(--ma-font-mono);
-  font-size: 12px;
-  color: var(--ma-color-ink);
-  background: var(--ma-color-sunken);
-  border-radius: 4px;
-  padding: 0 4px;
-}
-
-.timeline__time {
-  color: var(--ma-color-faint);
-  font-variant-numeric: tabular-nums;
-}
-
+.timeline__detail pre,
 .timeline__text {
-  margin: 2px 0 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ma-color-ink);
+  margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.timeline__text--muted {
-  color: var(--ma-color-muted);
+.timeline__detail pre {
+  font-family: var(--ma-font-mono);
+}
+
+.timeline__dots > span {
+  display: inline-block;
+  animation: think-dot 1.2s ease-in-out infinite;
+}
+
+.timeline__dots > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.timeline__dots > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes think-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-0.2em);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline__dots > span {
+    animation: none;
+  }
 }
 </style>

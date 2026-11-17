@@ -1,492 +1,174 @@
 <script setup lang="ts">
-/**
- * 技能：一套可复用的「工作方法」。
- *
- * 内置技能随代码发布、只读；用户自建的存在库里，可以改和删。
- * 挂载在对话页的工具条上——这里只管「有哪些」和「怎么写」。
- */
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getSkill, exportLegacySkills } from '@/api/skills'
+import { useSkillsStore } from '@/stores/skills'
+import { useSessionStore } from '@/stores/session'
+import MarkdownContent from '@/components/chat/MarkdownContent.vue'
+import type { LocalSkill } from '@/types/api'
 
-import AppIcon from '@/components/ui/AppIcon.vue'
-import { confirmDialog } from '@/components/ui/messageBox'
-import { createSkill, deleteSkill, listSkills, updateSkill } from '@/api/skills'
-import { fetchToolSettings, type ToolItem } from '@/api/settings'
-import type { ChatSkill, SkillPayload } from '@/types/api'
-
-const skills = ref<ChatSkill[]>([])
-const toolOptions = ref<ToolItem[]>([])
-const loading = ref(false)
-const saving = ref(false)
-const editing = ref<number | null>(null) // null = 没在编辑；0 = 新建
+const catalog = useSkillsStore()
+const session = useSessionStore()
 const expanded = ref<string | null>(null)
+const instructions = ref('')
+const detailError = ref('')
+const detailLoading = ref(false)
+let detailRequest = 0
 
-const form = reactive({
-  slug: '',
-  name: '',
-  description: '',
-  instructions: '',
-  tools: [] as string[],
-})
-
-const formTitle = computed(() => (editing.value === 0 ? '新建技能' : '编辑技能'))
-const builtinCount = computed(() => skills.value.filter((item) => item.source === 'builtin').length)
-
-function resetForm() {
-  form.slug = ''
-  form.name = ''
-  form.description = ''
-  form.instructions = ''
-  form.tools = []
+async function refresh() {
+  detailRequest++
+  expanded.value = null
+  instructions.value = ''
+  await catalog.scan()
 }
 
-async function load() {
-  loading.value = true
-  try {
-    const [list, tools] = await Promise.all([listSkills(), fetchToolSettings()])
-    skills.value = list.items
-    toolOptions.value = tools.items
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '读取技能失败')
-  } finally {
-    loading.value = false
+async function openDetail(skill: LocalSkill) {
+  if (expanded.value === skill.key) {
+    expanded.value = null
+    detailRequest++
+    return
   }
-}
-
-function startCreate() {
-  resetForm()
-  editing.value = 0
-}
-
-async function startEdit(skill: ChatSkill) {
-  if (skill.skill_id === null) return
-  resetForm()
-  form.slug = skill.slug
-  form.name = skill.name
-  form.description = skill.description
-  form.tools = [...skill.tools]
-  editing.value = skill.skill_id
-  // 列表里不带正文，编辑时再取一次详情
+  expanded.value = skill.key
+  instructions.value = ''
+  detailError.value = ''
+  detailLoading.value = true
+  const request = ++detailRequest
   try {
-    const { getSkill } = await import('@/api/skills')
-    const detail = await getSkill(skill.slug)
-    form.instructions = detail.instructions
+    const detail = await getSkill(skill.key, catalog.version)
+    if (request === detailRequest) instructions.value = detail.instructions
   } catch {
-    ElMessage.error('正文读取失败')
-  }
-}
-
-function cancelEdit() {
-  editing.value = null
-  resetForm()
-}
-
-function toggleTool(name: string) {
-  const index = form.tools.indexOf(name)
-  if (index >= 0) form.tools.splice(index, 1)
-  else form.tools.push(name)
-}
-
-async function submit() {
-  const payload: SkillPayload = {
-    name: form.name.trim(),
-    description: form.description.trim(),
-    instructions: form.instructions,
-    tools: [...form.tools],
-  }
-  saving.value = true
-  try {
-    if (editing.value === 0) {
-      await createSkill({ ...payload, slug: form.slug.trim().toLowerCase() })
-      ElMessage.success('技能已创建')
-    } else if (editing.value !== null) {
-      await updateSkill(editing.value, payload)
-      ElMessage.success('技能已更新')
-    }
-    cancelEdit()
-    await load()
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败')
+    if (request === detailRequest) detailError.value = '读取失败，请重新扫描后重试'
   } finally {
-    saving.value = false
+    if (request === detailRequest) detailLoading.value = false
   }
 }
 
-async function remove(skill: ChatSkill) {
-  if (skill.skill_id === null) return
-  const ok = await confirmDialog({
-    title: `删除「${skill.name}」？`,
-    description: '正在使用它的会话会回到「不挂技能」，对话本身不受影响。',
-    confirmText: '删除',
-    danger: true,
-  })
-  if (!ok) return
+async function downloadLegacy() {
   try {
-    await deleteSkill(skill.skill_id)
-    ElMessage.success('已删除')
-    await load()
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '删除失败')
+    const blob = await exportLegacySkills()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'legacy-skills.zip'
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  } catch {
+    ElMessage.error('导出旧 Skill 失败')
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  if (catalog.accountId === session.user?.id) {
+    void catalog.scan()
+  } else {
+    void catalog.initialize(session.user?.id ?? null)
+  }
+})
 </script>
 
 <template>
   <section class="skills">
     <header class="skills__head">
-      <div>
-        <h3 class="skills__title">技能</h3>
-        <p class="skills__desc">
-          一套可复用的工作方法：步骤、检查项、输出格式，外加该用哪些工具。挂到对话上才会生效。
-        </p>
-      </div>
-      <button type="button" class="skills__new" @click="startCreate">
-        <AppIcon name="plus" :size="15" />
-        新建技能
+      <h3>Skill</h3>
+      <button
+        type="button"
+        class="skills__action u-tint"
+        :disabled="catalog.loading"
+        @click="refresh"
+      >
+        {{ catalog.loading ? '正在扫描…' : '重新扫描' }}
       </button>
     </header>
 
-    <p v-if="loading" class="skills__hint">正在读取…</p>
+    <p class="skills__hint">从后端配置的本地目录发现。安装或更新 SKILL.md 后，重新扫描即可使用。</p>
+    <p v-if="catalog.error" role="alert">{{ catalog.error }}</p>
+    <p v-else-if="!catalog.loading && !catalog.items.length" class="skills__hint">尚未发现 Skill</p>
 
-    <form v-else-if="editing !== null" class="skills__form" @submit.prevent="submit">
-      <h4 class="skills__form-title">{{ formTitle }}</h4>
-      <div class="skills__row">
-        <div class="skills__field">
-          <span class="skills__label">标识</span>
-          <input
-            v-model="form.slug"
-            :disabled="editing !== 0"
-            placeholder="code-review"
-            aria-label="技能标识"
-          />
+    <div v-for="skill in catalog.items" :key="skill.key" class="skills__item">
+      <div class="skills__head">
+        <div>
+          <h4>{{ skill.name }}</h4>
+          <p class="skills__hint">{{ skill.key }}</p>
         </div>
-        <div class="skills__field">
-          <span class="skills__label">名称</span>
-          <input v-model="form.name" placeholder="代码审查" aria-label="技能名称" />
-        </div>
-      </div>
-      <div class="skills__field">
-        <span class="skills__label">说明</span>
-        <input v-model="form.description" placeholder="一句话说清它干什么" aria-label="技能说明" />
-      </div>
-      <div class="skills__field">
-        <span class="skills__label">正文（Markdown，会整体注入系统提示）</span>
-        <textarea
-          v-model="form.instructions"
-          rows="8"
-          placeholder="## 步骤&#10;1. …"
-          aria-label="技能正文"
-        />
-      </div>
-      <div class="skills__field">
-        <span class="skills__label">工具白名单（不选 = 不限制）</span>
-        <div class="skills__chips">
-          <button
-            v-for="tool in toolOptions"
-            :key="tool.name"
-            type="button"
-            class="skills__chip"
-            :class="{ 'is-on': form.tools.includes(tool.name) }"
-            @click="toggleTool(tool.name)"
-          >
-            {{ tool.name }}
-          </button>
-          <span v-if="!toolOptions.length" class="skills__hint">还没有可用工具</span>
-        </div>
-      </div>
-      <div class="skills__actions">
-        <button type="button" class="skills__ghost" @click="cancelEdit">取消</button>
-        <button type="submit" class="skills__primary" :disabled="saving">
-          {{ saving ? '保存中…' : '保存' }}
+        <button
+          type="button"
+          class="skills__action u-tint"
+          :aria-expanded="expanded === skill.key"
+          :disabled="catalog.loading"
+          @click="openDetail(skill)"
+        >
+          {{ expanded === skill.key ? '收起说明' : '查看说明' }}
         </button>
       </div>
-    </form>
+      <p>{{ skill.description }}</p>
+      <template v-if="expanded === skill.key">
+        <p v-if="detailLoading" role="status">正在读取…</p>
+        <p v-else-if="detailError" role="alert">{{ detailError }}</p>
+        <MarkdownContent v-else :content="instructions" />
+      </template>
+    </div>
 
-    <template v-else>
-      <p class="skills__hint">
-        内置 {{ builtinCount }} 个（只读），自建 {{ skills.length - builtinCount }} 个
+    <div v-if="catalog.legacyCount" class="skills__legacy">
+      <p>
+        有 {{ catalog.legacyCount }} 个旧版数据库
+        Skill。导出后解压到账号对应的本地目录，再重新扫描。
       </p>
-      <ul class="skills__list">
-        <li v-for="skill in skills" :key="skill.slug" class="skills__item">
-          <div class="skills__item-main">
-            <div class="skills__item-head">
-              <span class="skills__item-name">{{ skill.name }}</span>
-              <span class="skills__tag">{{ skill.source === 'builtin' ? '内置' : '自建' }}</span>
-              <span class="skills__tag skills__tag--plain">{{ skill.tool_count }} 个工具</span>
-            </div>
-            <p class="skills__item-desc">{{ skill.description }}</p>
-            <p v-if="expanded === skill.slug" class="skills__more">
-              工具：{{ skill.tools.length ? skill.tools.join('、') : '不限制' }}
-            </p>
-          </div>
-          <div class="skills__item-actions">
-            <button
-              type="button"
-              class="skills__mini"
-              @click="expanded = expanded === skill.slug ? null : skill.slug"
-            >
-              {{ expanded === skill.slug ? '收起' : '详情' }}
-            </button>
-            <template v-if="skill.source === 'custom'">
-              <button type="button" class="skills__mini" @click="startEdit(skill)">编辑</button>
-              <button type="button" class="skills__mini is-danger" @click="remove(skill)">
-                删除
-              </button>
-            </template>
-          </div>
-        </li>
-      </ul>
-    </template>
+      <button type="button" class="skills__action u-tint" @click="downloadLegacy">
+        导出旧 Skill
+      </button>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.skills {
+.skills,
+.skills__item {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--ma-space-sm);
+}
+
+.skills {
+  gap: var(--ma-space-md);
+}
+
+.skills h3,
+.skills h4,
+.skills p {
+  margin: 0;
 }
 
 .skills__head {
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.skills__head > div {
-  flex: 1;
-  min-width: 0;
-}
-
-.skills__title {
-  margin: 0 0 6px;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.skills__desc {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--ma-color-muted);
-}
-
-.skills__new {
-  display: inline-flex;
-  flex: none;
-  gap: 5px;
   align-items: center;
-  padding: 8px 14px;
-  font-size: 13px;
-  color: var(--ma-color-on-accent);
-  white-space: nowrap;
-  cursor: pointer;
-  background: var(--ma-color-accent);
-  border: 0;
-  border-radius: 999px;
+  justify-content: space-between;
+  gap: var(--ma-space-sm);
 }
 
 .skills__hint {
-  margin: 0;
-  font-size: 12px;
   color: var(--ma-color-muted);
-}
-
-.skills__list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
+  overflow-wrap: anywhere;
 }
 
 .skills__item {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 14px 16px;
-  /* 用底色而不是投影分层：投影落在相邻两行之间会读成一条分割线 */
+  padding: var(--ma-space-md);
   background: var(--ma-color-canvas);
-  border-radius: 16px;
+  border-radius: var(--ma-radius-md);
 }
 
-.skills__item-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.skills__item-head {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.skills__item-name {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.skills__tag {
-  padding: 1px 8px;
-  font-size: 11px;
-  color: var(--ma-color-accent-ink, var(--ma-color-accent));
-  background: var(--ma-color-accent-soft);
-  border-radius: 999px;
-}
-
-.skills__tag--plain {
-  color: var(--ma-color-muted);
-  background: color-mix(in srgb, var(--ma-color-ink) 6%, transparent);
-}
-
-.skills__item-desc {
-  margin: 6px 0 0;
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: var(--ma-color-muted);
-}
-
-.skills__more {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--ma-color-muted);
-}
-
-.skills__item-actions {
-  display: flex;
-  flex: none;
-  gap: 4px;
-  align-items: center;
-}
-
-.skills__mini {
-  padding: 5px 10px;
-  font-size: 12px;
-  color: var(--ma-color-muted);
+.skills__action {
+  flex-shrink: 0;
+  padding: var(--ma-space-xs) var(--ma-space-sm);
+  font: inherit;
+  color: var(--ma-color-accent);
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: 8px;
-  transition: background-color var(--ma-motion-hover) ease;
+  border-radius: var(--ma-radius-sm);
 }
 
-.skills__mini:hover {
-  background: color-mix(in srgb, var(--ma-color-ink) 6%, transparent);
-}
-
-.skills__mini.is-danger {
-  color: var(--ma-color-danger);
-}
-
-.skills__form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px;
-  background: var(--ma-color-surface);
-  border-radius: 18px;
-  box-shadow: 0 1px 2px rgb(23 32 27 / 4%);
-}
-
-.skills__form-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.skills__row {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-.skills__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.skills__label {
-  font-size: 12px;
-  color: var(--ma-color-muted);
-}
-
-.skills__field input,
-.skills__field textarea {
-  padding: 9px 12px;
-  font: inherit;
-  font-size: 13px;
-  color: var(--ma-color-ink);
-  background: var(--ma-color-canvas);
-  border: 1px solid transparent;
-  border-radius: 10px;
-}
-
-.skills__field textarea {
-  line-height: 1.7;
-  resize: none;
-}
-
-.skills__field input:focus,
-.skills__field textarea:focus {
-  background: var(--ma-color-surface);
-  border-color: var(--ma-color-accent);
-  outline: none;
-}
-
-.skills__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.skills__chip {
-  padding: 4px 10px;
-  font-size: 12px;
-  color: var(--ma-color-muted);
-  cursor: pointer;
-  background: color-mix(in srgb, var(--ma-color-ink) 5%, transparent);
-  border: 0;
-  border-radius: 999px;
-}
-
-.skills__chip.is-on {
-  color: var(--ma-color-accent-ink, var(--ma-color-accent));
-  background: var(--ma-color-accent-soft);
-}
-
-.skills__actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.skills__ghost,
-.skills__primary {
-  padding: 8px 16px;
-  font-size: 13px;
-  cursor: pointer;
-  border: 0;
-  border-radius: 999px;
-}
-
-.skills__ghost {
-  color: var(--ma-color-muted);
-  background: color-mix(in srgb, var(--ma-color-ink) 6%, transparent);
-}
-
-.skills__primary {
-  color: var(--ma-color-on-accent);
-  background: var(--ma-color-accent);
-}
-
-.skills__primary:disabled {
-  opacity: 0.6;
+.skills__action:disabled {
+  color: var(--ma-color-faint);
   cursor: default;
 }
 </style>

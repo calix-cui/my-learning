@@ -1,12 +1,15 @@
-import type { AgentRunList, ChatMessage } from '@/types/api'
+import type { AgentStep, ChatMessage } from '@/types/api'
 
+export type ReasoningEffort = 'none' | 'high'
 export type AgentSkillMode = 'off' | 'manual' | 'auto'
 
 /** agent 流式事件（与后端 SSE 负载一一对应） */
 export type AgentStreamEvent =
-  | { type: 'run_started'; run_id: number; conversation_id: number }
+  | { type: 'run_started'; run_id: number; conversation_id: number; user_message_id: number | null }
   | { type: 'step_started'; seq: number; kind: string }
   | { type: 'assistant_text'; seq: number; content: string }
+  | { type: 'assistant_delta'; content: string }
+  | { type: 'assistant_preview_reset' }
   | {
       type: 'skill_loaded'
       seq: number
@@ -52,6 +55,7 @@ export type AgentStreamEvent =
   | {
       type: 'run_finished'
       run_id: number
+      assistant_message_id: number
       content: string
       steps: number
       model: string | null
@@ -96,68 +100,93 @@ async function consume(
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let complete = false
 
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
 
-    let index = buffer.indexOf('\n\n')
-    while (index >= 0) {
-      const frame = buffer.slice(0, index)
-      buffer = buffer.slice(index + 2)
-      index = buffer.indexOf('\n\n')
-      const payload = frame
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trim())
-        .join('')
-      if (!payload) continue
-      const event = JSON.parse(payload) as AgentStreamEvent
-      if (import.meta.env.DEV) {
-        if ('run_id' in event) runId = event.run_id
-        console.debug('[my-agent] agent.sse', {
-          type: event.type,
-          runId,
-          seq: 'seq' in event ? event.seq : undefined,
-          tool: 'tool' in event ? event.tool : undefined,
-          ok: 'ok' in event ? event.ok : undefined,
-          code: 'code' in event ? event.code : undefined,
-        })
-      }
-      handlers.onEvent?.(event)
-      if (event.type === 'run_finished') {
-        handlers.onFinished(event)
-      } else if (event.type === 'approval_required') {
-        handlers.onApproval?.(event)
-      } else if (event.type === 'error') {
-        handlers.onError?.(event.message)
-        throw new Error(event.message)
+      let index = buffer.indexOf('\n\n')
+      while (index >= 0) {
+        const frame = buffer.slice(0, index)
+        buffer = buffer.slice(index + 2)
+        index = buffer.indexOf('\n\n')
+        const payload = frame
+          .split('\n')
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trim())
+          .join('')
+        if (!payload) continue
+        const event = JSON.parse(payload) as AgentStreamEvent
+        if (import.meta.env.DEV) {
+          if ('run_id' in event) runId = event.run_id
+          console.debug('[my-agent] agent.sse', {
+            type: event.type,
+            runId,
+            seq: 'seq' in event ? event.seq : undefined,
+            tool: 'tool' in event ? event.tool : undefined,
+            ok: 'ok' in event ? event.ok : undefined,
+            code: 'code' in event ? event.code : undefined,
+          })
+        }
+        handlers.onEvent?.(event)
+        if (event.type === 'run_finished') {
+          complete = true
+          handlers.onFinished(event)
+        } else if (event.type === 'approval_required') {
+          complete = true
+          handlers.onApproval?.(event)
+        } else if (event.type === 'error') {
+          handlers.onError?.(event.message)
+          throw new Error(event.message)
+        }
       }
     }
+  } finally {
+    if (!complete) await reader.cancel().catch(() => undefined)
+    reader.releaseLock()
   }
+  if (!complete) throw new Error('回复连接已中断，请刷新查看执行状态')
 }
 
 /**
  * 跑一次 agent 循环（SSE）。
  *
  * 和普通对话一样用 fetch + ReadableStream：POST 带 body，EventSource 做不到。
- * 请求只传用户消息和 Skill 模式，工具定义和执行权限由后端组装。
+ * 推理强度与 Skill 选择独立传输，工具定义和执行权限由后端组装。
  */
 export async function sendAgentStream(
   id: number,
   content: string,
   handlers: AgentStreamHandlers,
   signal?: AbortSignal,
-  skillMode: AgentSkillMode = 'manual',
+  skillMode: AgentSkillMode = 'auto',
+  reasoningEffort: ReasoningEffort = 'none',
+  skillKeys: string[] = [],
+  catalogVersion?: string,
 ): Promise<void> {
   if (import.meta.env.DEV) {
-    console.debug('[my-agent] agent.send', { conversationId: id, skillMode, chars: content.length })
+    console.debug('[my-agent] agent.send', {
+      conversationId: id,
+      skillMode,
+      reasoningEffort,
+      chars: content.length,
+    })
   }
-  const response = await fetch(`/api/conversations/${id}/agent/stream`, {
+  const response = await fetch(`/api/conversations/${id}/messages/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ content, skill_mode: skillMode }),
+    body: JSON.stringify({
+      content,
+      execution: 'auto',
+      request_id: globalThis.crypto?.randomUUID?.(),
+      skill_mode: skillMode,
+      skill_keys: skillKeys,
+      skill_catalog_version: catalogVersion,
+      reasoning_effort: reasoningEffort,
+    }),
     signal,
   })
   await consume(response, handlers)
@@ -196,22 +225,15 @@ export async function listApprovals(runId: number, signal?: AbortSignal): Promis
   return body.data.items
 }
 
-/** 取最近的运行记录，用于刷新后回放（失败不打扰用户，返回空） */
-export async function listAgentRuns(
-  id: number,
-  limit = 3,
-  signal?: AbortSignal,
-): Promise<AgentRunList> {
-  const response = await fetch(`/api/conversations/${id}/agent/runs?limit=${limit}`, {
+/** 按运行标识读取对应的执行步骤。 */
+export async function getAgentSteps(runId: number): Promise<AgentStep[]> {
+  const response = await fetch(`/api/agent/runs/${runId}/steps`, {
     headers: { Accept: 'application/json' },
     credentials: 'same-origin',
-    signal,
   })
-  if (!response.ok) {
-    return { items: [] }
-  }
-  const body = (await response.json()) as { data: AgentRunList }
-  return body.data
+  if (!response.ok) throw new Error('读取执行过程失败')
+  const body = (await response.json()) as { data: { items: AgentStep[] } }
+  return body.data.items
 }
 
 export type { ChatMessage }

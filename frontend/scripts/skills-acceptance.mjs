@@ -1,270 +1,255 @@
 /**
- * 阶段 7「技能」端到端验收：真实浏览器 + 真实后端，不 mock 前端。
- *
- * 跑法：BASE=http://127.0.0.1:5173 pnpm acceptance:skills
- * 断言：内置技能只读、自建技能能增删改、挂载状态能持久化到会话。
- * 不调用模型——技能是否真的被模型"学会"由后端单测（system 消息注入）保证。
+ * Skill 目录验收。需要前后端已启动，使用临时账号验证初始化、切换与只读设置。
+ * SKILL_ACCEPTANCE_ROOT 可选，指向测试服务配置的共享目录，用于安装后重扫验证。
  */
+import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 import puppeteer from 'puppeteer-core'
 
 const BASE = process.env.BASE ?? 'http://127.0.0.1:5173'
-const OUT = process.env.OUT ?? '.acceptance'
+const ROOT = process.env.SKILL_ACCEPTANCE_ROOT
 const CHROME =
   process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-
 const browser = await puppeteer.launch({
   executablePath: CHROME,
-  headless: 'new',
-  args: ['--no-sandbox', '--disable-gpu', '--user-data-dir=/tmp/cp-skills-e2e'],
+  headless: true,
+  args: ['--no-sandbox', '--disable-gpu'],
 })
 const page = await browser.newPage()
-await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 })
-
+await page.setViewport({ width: 1440, height: 900 })
+const requests = []
+const messages = []
 const errors = []
-page.on('console', (message) => {
-  const text = message.text()
-  if (message.type() === 'error' && !text.includes('401')) errors.push(text)
-})
-page.on('pageerror', (error) => errors.push(String(error)))
-
-const email = `skills-e2e-${Date.now()}@example.com`
-const registerResponse = await fetch(`${BASE}/api/auth/register`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ email, password: 'password123' }),
-})
-if (!registerResponse.ok) {
-  throw new Error(`注册失败：${registerResponse.status} ${await registerResponse.text()}`)
-}
-const sessionCookie = registerResponse.headers
-  .getSetCookie()
-  .map((cookie) => cookie.split(';')[0])
-  .find((cookie) => cookie.startsWith('my_agent_session='))
-if (!sessionCookie) throw new Error('注册响应没有下发 my_agent_session Cookie')
-
-const api = (path, init = {}) =>
-  fetch(`${BASE}${path}`, { ...init, headers: { ...(init.headers ?? {}), cookie: sessionCookie } })
-
-let failures = 0
-const step = async (name, fn) => {
-  try {
-    await fn()
-    console.log('PASS', name)
-  } catch (error) {
-    failures += 1
-    console.log('FAIL', name, '-', error.message)
+page.on('request', (request) => {
+  if (request.url().includes('/api/skills')) requests.push(request.url())
+  if (request.method() === 'POST' && request.url().includes('/messages/stream')) {
+    messages.push(JSON.parse(request.postData()))
   }
-}
+})
+page.on('pageerror', (error) => errors.push(error.message))
 
-const clickByText = async (selector, text) => {
-  for (const handle of await page.$$(selector)) {
-    const label = await handle.evaluate((el) => (el.textContent ?? '').trim())
-    if (label === text) {
-      await handle.click()
-      return true
+async function clickText(selector, text) {
+  await page.waitForSelector(selector)
+  for (const button of await page.$$(selector)) {
+    if ((await button.evaluate((el) => el.textContent.trim())) === text) {
+      await button.click()
+      return
     }
   }
-  return false
+  throw new Error(`找不到按钮 ${text}`)
 }
-
-/** 清空输入再打字：默认值会被追加（`uvx` + `uv` → `uvxuv` 那次的教训） */
-const typeInto = async (selector, text) => {
-  await page.click(selector, { clickCount: 3 })
-  await page.keyboard.press('Backspace')
-  await page.type(selector, text)
+const scans = () => requests.filter((url) => url.endsWith('/catalog/rescan')).length
+async function waitReady() {
+  await page.waitForSelector('.chat__skill:not(:disabled)')
 }
-
-const openSettings = async () => {
-  if (await page.$('.settings-window')) return
+async function openSettings() {
   await page.click('.aside__user-trigger')
-  await page.waitForSelector('.my-menu__item', { visible: true, timeout: 5000 })
-  if (!(await clickByText('.my-menu__item', '系统设置')))
-    throw new Error('用户菜单里没有「系统设置」')
-  await page.waitForSelector('.settings-window', { visible: true, timeout: 5000 })
+  await clickText('.my-menu__item', '系统设置')
+  await page.waitForSelector('.settings__item')
+  const scanned = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/skills/catalog/rescan') &&
+      response.request().method() === 'POST',
+  )
+  await clickText('.settings__item', 'Skill')
+  assert.equal((await scanned).status(), 200)
+  await page.waitForSelector('.skills__head')
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('.skills__head button')].some(
+      (el) => el.textContent.trim() === '重新扫描' && !el.disabled,
+    ),
+  )
 }
 
-const openSkillsSection = async () => {
-  await openSettings()
-  if (!(await clickByText('.settings__item', '技能'))) throw new Error('设置里没有「技能」分节')
-  await page.waitForSelector('.skills__list', { visible: true, timeout: 5000 })
-}
-
-const skillNames = () =>
-  page.$$eval('.skills__item-name', (items) => items.map((el) => (el.textContent ?? '').trim()))
-
-await fs.mkdir(OUT, { recursive: true })
-const origin = new URL(BASE)
-await page.setCookie({
-  name: 'my_agent_session',
-  value: sessionCookie.split('=')[1],
-  domain: origin.hostname,
-  path: '/',
-  httpOnly: true,
-})
-
-await page.goto(`${BASE}/chat`, { waitUntil: 'networkidle2' })
-await page.waitForSelector('.chat', { timeout: 10000 })
-
-// 造一个会话：工具条上的技能胶囊只在有会话时可点
-const conversation = (
-  await (
-    await api('/api/conversations', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ title: '技能验收' }),
+let installedDirectory
+let accountCookie
+try {
+  const registration = await fetch(`${BASE}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: `skill-catalog-${Date.now()}@example.com`,
+      password: 'password123',
+    }),
+  })
+  assert.equal(registration.status, 200)
+  const cookie = registration.headers
+    .getSetCookie()
+    .find((value) => value.startsWith('my_agent_session='))
+    .split(';')[0]
+  accountCookie = cookie
+  const api = (url, body) =>
+    fetch(BASE + url, {
+      method: body ? 'POST' : 'GET',
+      headers: { cookie, 'content-type': 'application/json' },
+      ...(body && { body: JSON.stringify(body) }),
     })
-  ).json()
-).data
-
-await page.reload({ waitUntil: 'networkidle2' })
-await page.waitForSelector('.chat__bar', { timeout: 10000 })
-
-await step('S-01 设置「技能」节列出 3 个内置技能并标「内置」', async () => {
-  await openSkillsSection()
-  const names = await skillNames()
-  for (const expected of ['代码审查', '会议纪要', '决策简报']) {
-    if (!names.includes(expected)) throw new Error(`缺少内置技能：${expected}`)
+  const conversations = []
+  for (const title of ['目录验收一', '目录验收二']) {
+    const response = await api('/api/conversations', { title })
+    conversations.push((await response.json()).data.id)
   }
-  const builtinTags = await page.$$eval(
-    '.skills__tag',
-    (items) => items.filter((el) => (el.textContent ?? '').trim() === '内置').length,
-  )
-  if (builtinTags < 3) throw new Error(`内置标签只有 ${builtinTags} 个`)
-  await page.screenshot({ path: `${OUT}/skills-01-list.png` })
-})
+  await page.setCookie({
+    name: 'my_agent_session',
+    value: cookie.split('=')[1],
+    url: BASE,
+    httpOnly: true,
+  })
+  await page.goto(`${BASE}/chat/${conversations[0]}`, { waitUntil: 'networkidle2' })
+  await waitReady()
+  assert.equal(scans(), 1)
+  console.log('PASS 登录后获取一次 Skill 目录')
 
-await step('S-02 内置技能没有编辑与删除入口', async () => {
-  const rows = await page.$$('.skills__item')
-  const first = rows[0]
-  const text = await first.evaluate((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
-  if (!text.includes('内置')) throw new Error('第一个技能不是内置技能')
-  const actions = await first.$$eval('.skills__mini', (items) =>
-    items.map((el) => (el.textContent ?? '').trim()),
+  await clickText('.chat__item-main', '目录验收二')
+  await page.waitForFunction((id) => location.pathname.endsWith('/' + id), {}, conversations[1])
+  await clickText('.chat__item-main', '目录验收一')
+  await page.waitForFunction((id) => location.pathname.endsWith('/' + id), {}, conversations[0])
+  assert.equal(scans(), 1)
+  assert.equal(
+    requests.some((url) => url.includes('conversation_id')),
+    false,
   )
-  if (actions.includes('编辑') || actions.includes('删除')) {
-    throw new Error(`内置技能出现了不该有的操作：${actions.join('/')}`)
-  }
-})
-
-await step('S-03 新建自定义技能', async () => {
-  if (!(await clickByText('.skills__new', '新建技能'))) throw new Error('没有「新建技能」按钮')
-  await page.waitForSelector('.skills__form', { visible: true, timeout: 5000 })
-  await typeInto('.skills__form input[aria-label="技能标识"]', 'weekly-report')
-  await typeInto('.skills__form input[aria-label="技能名称"]', '周报')
-  await typeInto('.skills__form input[aria-label="技能说明"]', '把零散进展整理成周报')
-  await typeInto(
-    '.skills__form textarea[aria-label="技能正文"]',
-    '## 步骤\n1. 按项目分组\n2. 每条写清进展与风险',
-  )
-  // 白名单只勾一个工具，验证 chip 是真实交互
-  const chip = await page.$('.skills__chip')
-  if (chip) await chip.click()
-  await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().includes('/api/skills') && response.request().method() === 'POST',
-    ),
-    clickByText('.skills__primary', '保存'),
-  ])
-  await page.waitForSelector('.skills__list', { timeout: 5000 })
-  const names = await skillNames()
-  if (!names.includes('周报')) throw new Error(`新建后列表里没有「周报」：${names.join('、')}`)
-})
-
-await step('S-04 编辑自定义技能改名', async () => {
-  const rows = await page.$$('.skills__item')
-  for (const row of rows) {
-    const text = await row.evaluate((el) => (el.textContent ?? '').trim())
-    if (!text.startsWith('周报')) continue
-    const edit = await row.$('.skills__mini:nth-of-type(2)')
-    await edit?.click()
-    break
-  }
-  await page.waitForSelector('.skills__form', { visible: true, timeout: 5000 })
-  await typeInto('.skills__form input[aria-label="技能名称"]', '周报速记')
-  await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().includes('/api/skills/') && response.request().method() === 'PATCH',
-    ),
-    clickByText('.skills__primary', '保存'),
-  ])
-  await page.waitForSelector('.skills__list', { timeout: 5000 })
-  const names = await skillNames()
-  if (!names.includes('周报速记')) throw new Error(`改名没生效：${names.join('、')}`)
-})
-
-await step('S-05 对话工具条能挂载技能，且刷新后仍在', async () => {
-  // 关设置会把 ?settings=1 从地址栏摘掉；不按 Esc 直接刷新会让设置窗重新弹出来盖住工具条
-  await page.keyboard.press('Escape')
-  await page.waitForSelector('.settings-layer', { hidden: true, timeout: 5000 })
-  if (new URL(page.url()).searchParams.has('settings')) {
-    throw new Error(`关窗后地址栏还带着 settings：${page.url()}`)
-  }
-
-  // 技能列表是进页面时拉的，改完名字重新加载才能看到新菜单
-  await page.reload({ waitUntil: 'networkidle2' })
-  await page.waitForSelector('button.chat__skill', { timeout: 10000 })
-  await page.click('button.chat__skill')
-  await page.waitForSelector('.my-menu', { timeout: 5000 })
-  const menuLabels = await page.$$eval('.my-menu__item', (items) =>
-    items.map((el) => (el.textContent ?? '').trim()),
-  )
-  if (!(await clickByText('.my-menu__item', '周报速记'))) {
-    throw new Error(`菜单里没有「周报速记」，只有：${menuLabels.join('、')}`)
-  }
-  await page.waitForFunction(
-    () => (document.querySelector('.chat__skill-label')?.textContent ?? '').trim() === '周报速记',
-    { timeout: 10000 },
-  )
-  await page.screenshot({ path: `${OUT}/skills-02-mounted.png` })
+  console.log('PASS 切换会话不再查询 Skill')
 
   await page.reload({ waitUntil: 'networkidle2' })
-  await page.waitForSelector('button.chat__skill', { timeout: 10000 })
-  const label = await page.$eval('.chat__skill-label', (el) => (el.textContent ?? '').trim())
-  if (label !== '周报速记') throw new Error(`刷新后技能胶囊是「${label}」`)
+  await waitReady()
+  assert.equal(scans(), 2)
+  console.log('PASS 刷新页面重新获取一次 Skill 目录')
 
-  const detail = await (await api(`/api/skills?conversation_id=${conversation.id}`)).json()
-  if (detail.data.mounted !== 'weekly-report') {
-    throw new Error(`后端记录的挂载是 ${detail.data.mounted}`)
-  }
-})
-
-await step('S-06 删除自定义技能后会话回落到不挂技能', async () => {
-  await openSkillsSection()
-  const rows = await page.$$('.skills__item')
-  for (const row of rows) {
-    const text = await row.evaluate((el) => (el.textContent ?? '').trim())
-    if (!text.startsWith('周报速记')) continue
-    const danger = await row.$('.skills__mini.is-danger')
-    await danger?.click()
-    break
-  }
-  await page.waitForSelector('.my-box', { visible: true, timeout: 5000 })
-  await clickByText('.my-box .my-box__btn--primary', '删除')
-  await page.waitForFunction(
-    () =>
-      ![...document.querySelectorAll('.skills__item-name')].some((el) =>
-        (el.textContent ?? '').includes('周报速记'),
-      ),
-    { timeout: 10000 },
+  await openSettings()
+  assert.equal(scans(), 3)
+  assert.equal(
+    await page.$$eval('.skills form, .skills input, .skills textarea', (els) => els.length),
+    0,
   )
+  const settingsText = await page.$eval('.skills', (el) => el.textContent)
+  assert.equal(settingsText.includes('编辑'), false)
+  assert.equal(settingsText.includes('新建'), false)
+  await clickText('.skills__action', '查看说明')
+  await page.waitForSelector('.skills .markdown-content')
+  console.log('PASS 设置只读，说明按需加载')
+  if (process.env.OUT) {
+    await fs.mkdir(process.env.OUT, { recursive: true })
+    for (const mode of ['light', 'dark']) {
+      await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: mode }])
+      await page.waitForFunction(
+        (value) => document.documentElement.dataset.mode === value,
+        {},
+        mode,
+      )
+      await page.screenshot({ path: path.join(process.env.OUT, `skill-catalog-${mode}.png`) })
+    }
+    await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }])
+  }
+
+  if (ROOT) {
+    installedDirectory = path.join(ROOT, `acceptance-extra-${Date.now()}`)
+    await fs.mkdir(installedDirectory, { recursive: true })
+    await fs.writeFile(
+      path.join(installedDirectory, 'SKILL.md'),
+      [
+        '---',
+        'name: 浏览器新安装流程',
+        'description: 用于验证安装与重新扫描',
+        '---',
+        '',
+        '按要求整理用户输入。',
+      ].join('\n'),
+    )
+  }
+  const rescanned = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/skills/catalog/rescan') &&
+      response.request().method() === 'POST',
+  )
+  await clickText('.skills__action', '重新扫描')
+  assert.equal((await rescanned).status(), 200)
+  if (ROOT) {
+    await page.waitForFunction(() =>
+      document.querySelector('.skills')?.textContent.includes('浏览器新安装流程'),
+    )
+  }
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('.skills__head button')].some(
+      (el) => el.textContent.trim() === '重新扫描' && !el.disabled,
+    ),
+  )
+  assert.equal(scans(), 4)
+  if (ROOT)
+    assert.ok((await page.$eval('.skills', (el) => el.textContent)).includes('浏览器新安装流程'))
+  console.log('PASS 设置重新扫描后更新目录')
 
   await page.keyboard.press('Escape')
-  await page.waitForSelector('.settings-layer', { hidden: true, timeout: 5000 })
-  await page.reload({ waitUntil: 'networkidle2' })
-  await page.waitForSelector('button.chat__skill', { timeout: 10000 })
-  const label = await page.$eval('.chat__skill-label', (el) => (el.textContent ?? '').trim())
-  if (label !== '技能') throw new Error(`删掉技能后胶囊仍显示「${label}」`)
-})
+  await page.waitForFunction(() => !document.querySelector('.settings'))
+  await page.click('.chat__new')
+  await waitReady()
+  await page.click('.chat__skill')
+  const choices = await page.$$eval('.my-menu__item', (els) =>
+    els.map((el) => el.textContent.trim()),
+  )
+  const choice = choices.find((label) => label.includes('builtin:meeting-notes'))
+  assert.ok(choice)
+  await clickText('.my-menu__item', choice)
+  await page.waitForFunction(() =>
+    document.querySelector('.chat__skill-label')?.textContent.includes('会议纪要'),
+  )
+  assert.equal(scans(), 4)
+  console.log('PASS 空白草稿可为本条消息选择 Skill')
 
-await step('S-07 控制台没有报错', async () => {
-  if (errors.length) throw new Error(errors.join(' | '))
-})
+  if (process.env.SKILL_ACCEPTANCE_SEND === '1') {
+    await page.type('.chat__composer textarea', '整理这条记录，按本次 Skill 输出')
+    await page.click('.composer__send')
+    await page.waitForSelector('.chat__row--assistant + .timeline', { timeout: 45000 })
+    await page.waitForFunction(
+      () =>
+        !document.querySelector('.composer__send.is-loading') &&
+        document.querySelector('.chat__skill-label')?.textContent === 'Skill',
+    )
+    await page.click('.timeline > summary')
+    await page.waitForFunction(() =>
+      document.querySelector('.timeline')?.textContent.includes('会议纪要'),
+    )
+    assert.equal(scans(), 4)
+    assert.deepEqual(messages[0].skill_keys, ['builtin:meeting-notes'])
+    console.log('PASS 发送后清除本条选择，回复保留 Skill 加载记录')
 
-await page.screenshot({ path: `${OUT}/skills-03-final.png` })
-await browser.close()
-
-console.log(failures === 0 ? '\n技能验收全部通过' : `\n${failures} 项失败`)
-process.exit(failures === 0 ? 0 : 1)
+    if (ROOT && process.env.SKILL_ACCEPTANCE_AUTO === '1') {
+      await page.type(
+        '.chat__composer textarea',
+        '请使用目录中的「浏览器新安装流程」Skill，把这段信息整理成一句话：今天完成了本地目录和只读设置。',
+      )
+      await page.click('.composer__send')
+      await page.waitForFunction(
+        () =>
+          document.querySelectorAll('.chat__row--assistant').length === 2 &&
+          !document.querySelector('.composer__send.is-loading'),
+        { timeout: 60000 },
+      )
+      const timelines = await page.$$('.chat__row--assistant + .timeline')
+      assert.equal(timelines.length, 2)
+      await (await timelines[1].$('summary')).click()
+      await page.waitForFunction(
+        (element) => element.textContent.includes('浏览器新安装流程'),
+        { timeout: 15000 },
+        timelines[1],
+      )
+      assert.deepEqual(messages[1].skill_keys, [])
+      assert.equal(scans(), 4)
+      console.log('PASS 模型根据任务按需加载本地 Skill，发送期间没有目录查询')
+    }
+  }
+  assert.deepEqual(errors, [])
+  console.log('Skill 浏览器验收全部通过')
+} finally {
+  if (accountCookie) {
+    const response = await fetch(BASE + '/api/auth/me', {
+      method: 'DELETE',
+      headers: { cookie: accountCookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ password: 'password123' }),
+    })
+    if (!response.ok) console.error('临时账号清理失败', response.status)
+  }
+  if (installedDirectory) await fs.rm(installedDirectory, { recursive: true, force: true })
+  await browser.close()
+}

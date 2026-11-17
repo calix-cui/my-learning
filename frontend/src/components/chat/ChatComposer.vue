@@ -9,6 +9,7 @@ const props = defineProps<{
   disabled: boolean
   maxLength: number
   agentMode: boolean
+  supportsReasoning?: boolean
   autoSkills: boolean
 }>()
 
@@ -72,12 +73,13 @@ defineExpose({ focus })
       <div class="composer__bar">
         <div class="composer__modes">
           <button
+            v-if="supportsReasoning"
             type="button"
-            class="chat__mode"
+            class="chat__mode chat__mode--reasoning"
             :class="{ 'is-on': agentMode }"
             :aria-pressed="agentMode"
             :disabled="sending || disabled"
-            title="打开后会先思考、必要时调用工具，再给出回答"
+            title="提高模型处理复杂问题时的推理强度"
             @click="emit('toggle-agent-mode')"
           >
             <AppIcon name="sparkle" :size="15" />
@@ -85,17 +87,16 @@ defineExpose({ focus })
           </button>
 
           <button
-            v-if="agentMode"
             type="button"
             class="chat__mode"
             :class="{ 'is-on': autoSkills }"
             :aria-pressed="autoSkills"
             :disabled="sending || disabled"
-            title="根据本次任务选择技能；已挂载的技能仍会优先使用"
+            title="根据本次任务按需加载 Skill"
             @click="emit('toggle-auto-skills')"
           >
             <AppIcon name="sparkle" :size="14" />
-            自动挑选技能
+            自动选择 Skill
           </button>
         </div>
 

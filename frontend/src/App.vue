@@ -8,6 +8,7 @@ import SettingsDialog from '@/components/settings/SettingsDialog.vue'
 import MyMessageBox from '@/components/ui/MyMessageBox.vue'
 import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
+import { useSkillsStore } from '@/stores/skills'
 import { useSettingsStore } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
 
@@ -16,6 +17,7 @@ const router = useRouter()
 const session = useSessionStore()
 const chat = useChatStore()
 const settings = useSettingsStore()
+const skills = useSkillsStore()
 const theme = useThemeStore()
 
 /** 登录/注册页不套应用外壳（没有侧边栏与对话区） */
@@ -62,10 +64,20 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => session.user?.id ?? null,
+  (id, previousId) => {
+    if (previousId != null && previousId !== id) chat.reset()
+    void skills.initialize(id)
+  },
+  { immediate: true },
+)
+
 async function handleLogout() {
   await session.logout()
   chat.reset()
   settings.reset()
+  skills.reset()
   ElMessage.success('已退出登录')
   await router.replace({ name: 'login' })
 }

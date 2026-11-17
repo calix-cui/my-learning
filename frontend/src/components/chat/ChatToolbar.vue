@@ -7,14 +7,14 @@ import MyDropdownMenu, { type MenuItem } from '@/components/ui/MyDropdownMenu.vu
 defineProps<{
   title: string
   model: string
-  /** 当前挂载的技能名；没有就是空串 */
+  /** 本条消息选择的 Skill 名；没有就是空串 */
   skillName?: string
-  /** 技能菜单项：key 是 skill slug，'none' 表示卸载 */
+  /** Skill 菜单项使用来源隔离的 key */
   skillItems?: MenuItem[]
-  /** 草稿态还不能挂技能（会话还没建） */
+  /** 发送或扫描时暂时锁定选择 */
   skillDisabled?: boolean
 }>()
-const emit = defineEmits<{ selectSkill: [slug: string | null] }>()
+const emit = defineEmits<{ selectSkill: [key: string | null] }>()
 
 function onSelectSkill(key: string) {
   emit('selectSkill', key === 'none' ? null : key)
@@ -27,24 +27,22 @@ function onSelectSkill(key: string) {
     <span v-else class="chat__title" aria-hidden="true" />
 
     <div class="chat__bar-right">
-      <MyDropdownMenu
-        v-if="!skillDisabled || skillName"
-        :items="skillItems ?? []"
-        align="end"
-        @select="onSelectSkill"
-      >
+      <MyDropdownMenu :items="skillItems ?? []" align="end" @select="onSelectSkill">
         <!-- 触发器必须自己接 toggle：组件把开关方法作为插槽参数给出来 -->
         <template #default="{ toggle }">
-          <button type="button" class="chat__skill" :class="{ 'is-on': skillName }" @click="toggle">
+          <button
+            type="button"
+            class="chat__skill u-tint"
+            :class="{ 'is-on': skillName }"
+            :disabled="skillDisabled"
+            title="仅用于下一条消息"
+            @click="toggle"
+          >
             <AppIcon name="sparkle" :size="14" />
-            <span class="chat__skill-label">{{ skillName || '技能' }}</span>
+            <span class="chat__skill-label">{{ skillName || 'Skill' }}</span>
           </button>
         </template>
       </MyDropdownMenu>
-      <span v-else class="chat__skill is-off" title="先发一条消息建会话，再挂技能">
-        <AppIcon name="sparkle" :size="14" />
-        <span class="chat__skill-label">技能</span>
-      </span>
       <span class="layout__model" :title="`当前模型：${model}`">{{ model }}</span>
       <IconButton label="分享（待实现）">
         <AppIcon name="share" :size="17" />

@@ -149,7 +149,7 @@ await step('UI-06 输入框发送后清空', async () => {
   if (v !== '') throw new Error('输入框残留: ' + v)
 })
 
-// 流式中间态：再发一条，抓「正在输入…」与逐字渲染
+// 流式中间态：再发一条，检查分片和最终消息
 await step('UI-08 流式回复确实是分块到达', async () => {
   // 真实模型的首字可能几百毫秒就结束，靠轮询 DOM 抓「半截文本」必然偶发失败；
   // 这里在 fetch 层数 SSE 的 delta 帧——它同时说明「链路上没有被整段缓冲」。
@@ -173,7 +173,7 @@ await step('UI-08 流式回复确实是分块到达', async () => {
             const frames = buffer.split('\n\n')
             buffer = frames.pop() ?? ''
             for (const frame of frames) {
-              if (frame.includes('"type": "delta"') || frame.includes('"type":"delta"')) {
+              if (/"type"\s*:\s*"assistant_delta"/.test(frame)) {
                 window.__deltaCount += 1
               }
             }
@@ -187,16 +187,11 @@ await step('UI-08 流式回复确实是分块到达', async () => {
   await page.type('.chat__composer textarea', '第二个问题看看流式，请多说两句')
   await page.click('.chat__composer .el-button--primary')
 
-  // 点下发送后立刻要有状态提示（等待首字时也不该静默）
-  await page.waitForFunction(() => document.body.innerText.includes('正在输入'), {
-    timeout: 5000,
-    polling: 20,
-  })
-
-  await page.waitForFunction(() => !document.body.innerText.includes('正在输入'), {
-    timeout: 60000,
-  })
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  // 流式正文只在收到内容后出现；以第二条正式助手消息作为完成信号。
+  await page.waitForFunction(
+    () => document.querySelectorAll('.chat__row--assistant .chat__content').length === 2,
+    { timeout: 60000 },
+  )
 
   const deltas = await page.evaluate(() => window.__deltaCount)
   if (deltas < 2) throw new Error('delta 帧数=' + deltas + '，说明被整段返回了')

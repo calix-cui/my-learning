@@ -26,9 +26,14 @@ export async function listConversations(page = 1, page_size = 50): Promise<ChatC
   return data.data
 }
 
-/** 会话详情（含全部消息） */
-export async function getConversation(id: number): Promise<ChatConversationDetail> {
-  const { data } = await client.get<ApiResponse<ChatConversationDetail>>(`/conversations/${id}`)
+/** 会话详情；聊天页指定条数时按消息 ID 读取历史。 */
+export async function getConversation(
+  id: number,
+  page?: { message_limit: number; before_message_id?: number },
+): Promise<ChatConversationDetail> {
+  const { data } = await client.get<ApiResponse<ChatConversationDetail>>(`/conversations/${id}`, {
+    params: page,
+  })
   return data.data
 }
 

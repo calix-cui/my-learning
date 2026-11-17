@@ -22,7 +22,14 @@ it.each(['off', 'manual', 'auto'] as const)(
         error_code: 'unknown_skill',
         message: '技能不可用',
       },
-      { type: 'run_finished', run_id: 1, content: '完成', steps: 4, model: null },
+      {
+        type: 'run_finished',
+        run_id: 1,
+        assistant_message_id: 2,
+        content: '完成',
+        steps: 4,
+        model: null,
+      },
     ]
     const bytes = new TextEncoder().encode(
       events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
@@ -41,11 +48,25 @@ it.each(['off', 'manual', 'auto'] as const)(
     const onEvent = vi.fn()
     const onFinished = vi.fn()
     await sendAgentStream(1, '整理会议', { onEvent, onFinished }, undefined, mode)
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/conversations/1/messages/stream')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
       content: '整理会议',
       skill_mode: mode,
+      skill_keys: [],
+      execution: 'auto',
+      reasoning_effort: 'none',
     })
     expect(onEvent.mock.calls.map(([event]) => event)).toEqual(events)
     expect(onFinished).toHaveBeenCalledExactlyOnceWith(events[2])
   },
 )
+
+it('流在结束事件之前关闭时报告中断', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValue(new Response('data: {"type":"assistant_delta","content":"半句"}\n\n')),
+  )
+  await expect(sendAgentStream(1, '测试', { onFinished: vi.fn() })).rejects.toThrow('连接已中断')
+})

@@ -45,6 +45,9 @@ export interface ChatConversationListItem extends ChatConversation {
 /** 会话详情，带全部消息 */
 export interface ChatConversationDetail extends ChatConversation {
   messages: ChatMessage[]
+  next_before_message_id?: number | null
+  runs?: AgentRunSummary[]
+  legacy_runs?: AgentRunSummary[]
 }
 
 /** 会话分页响应 */
@@ -87,6 +90,7 @@ export interface LoginSession {
 
 /** 当前用户生效的模型配置（Key 只有末四位） */
 export interface ModelSettings {
+  supports_reasoning_effort?: boolean
   provider: 'fake' | 'openai'
   base_url: string | null
   model: string | null
@@ -141,20 +145,13 @@ export interface AgentStep {
   create_time: string
 }
 
-/** 一次 agent 运行（含步骤，用于刷新后回放时间线） */
-export interface AgentRun {
+/** 供消息历史定位执行记录，步骤明细在展开时读取。 */
+export interface AgentRunSummary {
   id: number
+  user_message_id: number | null
+  assistant_message_id: number | null
   status: 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled'
-  step_count: number
-  model: string | null
-  started_time: string
-  finished_time: string | null
-  error_message: string | null
-  steps: AgentStep[]
-}
-
-export interface AgentRunList {
-  items: AgentRun[]
+  visible_step_count: number
 }
 
 /** 工具市场里的一张卡片 */
@@ -235,39 +232,21 @@ export interface McpTestResult {
   duration_ms: number
 }
 
-/** 技能来源：随代码发布的内置技能，或用户自建 */
-export type SkillSource = 'builtin' | 'custom'
-
-/** 技能元数据（列表项） */
-export interface ChatSkill {
+/** 后端本地 Skill 目录只包含元数据。 */
+export interface LocalSkill {
+  key: string
   slug: string
   name: string
   description: string
+  source: 'builtin' | 'local'
+  trust: string
+  version: string
   tools: string[]
-  tool_count: number
   icon: string
-  source: SkillSource
-  skill_id: number | null
-  mounted: boolean
 }
 
-/** 技能详情，多一段 Markdown 正文 */
-export interface ChatSkillDetail extends ChatSkill {
-  instructions: string
-}
-
-/** 技能列表响应 */
-export interface ChatSkillList {
-  items: ChatSkill[]
-  mounted: string | null
-}
-
-/** 新建/修改技能的载荷 */
-export interface SkillPayload {
-  slug?: string
-  name?: string
-  description?: string
-  instructions?: string
-  tools?: string[]
-  icon?: string
+export interface SkillCatalog {
+  items: LocalSkill[]
+  version: string
+  legacy_count: number
 }

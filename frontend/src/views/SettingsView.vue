@@ -15,7 +15,7 @@ const sections = [
   { key: 'model', label: '模型接入', component: ModelPanel },
   { key: 'tools', label: '工具', component: ToolsPanel },
   { key: 'market', label: '工具市场', component: MarketPanel },
-  { key: 'skills', label: '技能', component: SkillsPanel },
+  { key: 'skills', label: 'Skill', component: SkillsPanel },
   { key: 'account', label: '账号资料', component: AccountPanel },
   { key: 'devices', label: '登录设备', component: DevicesPanel },
   { key: 'appearance', label: '外观', component: AppearancePanel },

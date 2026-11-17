@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import AgentTimeline from '@/components/chat/AgentTimeline.vue'
 import ApprovalCard from '@/components/chat/ApprovalCard.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
@@ -9,10 +8,9 @@ import ChatEmpty from '@/components/chat/ChatEmpty.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import MarkdownContent from '@/components/chat/MarkdownContent.vue'
 import ChatToolbar from '@/components/chat/ChatToolbar.vue'
-import { listSkills, mountSkill } from '@/api/skills'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
-import type { ChatSkill } from '@/types/api'
+import { useSkillsStore } from '@/stores/skills'
 
 const MAX_LENGTH = 4000
 
@@ -22,49 +20,24 @@ const router = useRouter()
 const settings = useSettingsStore()
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null)
 const scroller = ref<HTMLElement | null>(null)
-const skills = ref<ChatSkill[]>([])
-const autoSkills = ref(false)
+const skillCatalog = useSkillsStore()
+const autoSkills = ref(true)
 
 const hasConversation = computed(() => chat.activeId !== null)
 
-/** 技能列表跟着当前会话走：换会话要重拉，才能标出「哪个是挂着的」 */
-let skillRequest = 0
-async function loadSkills() {
-  const request = ++skillRequest
-  const conversationId = chat.activeId
-  skills.value = []
-  try {
-    const { items } = await listSkills(conversationId)
-    if (request === skillRequest && conversationId === chat.activeId) {
-      skills.value = items
-      if (import.meta.env.DEV) {
-        console.debug('[my-agent] skill.view.catalog', { conversationId, count: items.length })
-      }
-    }
-  } catch {
-    // 保持空列表；手动模式仍由后端读取真实挂载状态。
-  }
-}
-
-const mountedSkill = computed(() => skills.value.find((item) => item.mounted) ?? null)
+const selectedSkill = computed(
+  () => skillCatalog.items.find((item) => item.key === chat.selectedSkillKey) ?? null,
+)
 const skillItems = computed(() => [
-  { key: 'none', label: '不挂技能' },
-  ...skills.value.map((item) => ({ key: item.slug, label: item.name })),
+  { key: 'none', label: '取消本次选择' },
+  ...skillCatalog.items.map((item) => ({
+    key: item.key,
+    label: `${item.name} · ${item.source === 'builtin' ? '内置' : '本地'} (${item.key})`,
+  })),
 ])
 
-async function handleSelectSkill(slug: string | null) {
-  const id = chat.activeId
-  if (!id || chat.sending) return
-  try {
-    await mountSkill(id, slug)
-    if (import.meta.env.DEV) {
-      console.debug('[my-agent] skill.view.mount', { conversationId: id, mounted: slug !== null })
-    }
-    await loadSkills()
-    ElMessage.success(slug ? '已挂上技能，下次提问生效' : '已取消技能')
-  } catch {
-    ElMessage.error('技能切换失败，请重试')
-  }
+function handleSelectSkill(key: string | null) {
+  if (!chat.sending) chat.selectedSkillKey = key
 }
 
 /** 优先显示账号里配置的模型；没配过才退回上一条回复用的模型 */
@@ -76,17 +49,6 @@ const modelLabel = computed(() => {
 const showEmptyState = computed(
   () => !chat.loadingMessages && chat.messages.length === 0 && !chat.streamingText,
 )
-
-/** 时间线跟着「这一次运行」走：有步骤或正在跑才显示 */
-const showTimeline = computed(() => chat.agentSteps.length > 0 || chat.agentRunning)
-
-/** 时间线插在最后一条用户消息之后，保证「问 → 过程 → 答」的阅读顺序 */
-const lastUserIndex = computed(() => {
-  for (let i = chat.messages.length - 1; i >= 0; i -= 1) {
-    if (chat.messages[i].role === 'user') return i
-  }
-  return -1
-})
 
 const streamingPreview = ref('')
 let renderFrame: number | null = null
@@ -136,34 +98,27 @@ async function handleApproval(decision: 'approve' | 'reject', note?: string) {
 
 async function handleSend() {
   const content = chat.composerText
-  if (!content.trim() || chat.sending || chat.loadingMessages) return
+  if (!content.trim() || chat.sending || chat.loadingMessages || chat.pendingApproval) return
   // 失败时保留草稿，用户不用重打；成功由 store 清掉自己会话的草稿
   const skillMode = autoSkills.value ? 'auto' : 'manual'
+  const effort = chat.agentMode && settings.model?.supports_reasoning_effort ? 'high' : 'none'
   if (import.meta.env.DEV) {
     console.debug('[my-agent] chat.view.send', {
       conversationId: chat.activeId,
-      mode: chat.agentMode ? 'agent' : 'stream',
-      skillMode: chat.agentMode ? skillMode : undefined,
+      reasoningEffort: effort,
+      skillMode,
       chars: content.length,
     })
   }
-  // 深度回答进入支持模型工具调用的 Agent 接口，普通回答走消息流接口。
-  const ok = chat.agentMode
-    ? await chat.sendWithAgent(content, skillMode)
-    : await chat.send(content)
+  if (chat.selectedSkillKey && !selectedSkill.value) return
+  const ok = await chat.send(content, skillMode, effort, skillCatalog.version || undefined)
   if (ok) {
     composer.value?.focus()
   }
   scheduleMessageRender()
 }
 
-watch(
-  () => chat.activeId,
-  () => {
-    void loadSkills()
-  },
-)
-// 深度回答的步骤是逐个到达的，来一步滚一次
+// 执行步骤逐个到达，新增步骤时跟随滚动。
 watch(
   () => chat.agentSteps.length,
   () => scheduleMessageRender(),
@@ -177,9 +132,23 @@ watch(
   { immediate: true },
 )
 watch(
-  () => chat.messages.length,
+  () => chat.messages.at(-1)?.id,
   () => scheduleMessageRender(),
 )
+
+async function loadOlderMessages() {
+  const el = scroller.value
+  const conversationId = chat.activeId
+  if (!el) return
+  const previousHeight = el.scrollHeight
+  const previousTop = el.scrollTop
+  if (await chat.loadOlderMessages()) {
+    await nextTick()
+    if (chat.activeId === conversationId && scroller.value === el) {
+      el.scrollTop = previousTop + el.scrollHeight - previousHeight
+    }
+  }
+}
 
 // 深链、刷新和历史导航都以路由参数为准。
 watch(
@@ -197,9 +166,6 @@ watch(
     }
     if (chat.activeId === id && chat.sending) return
     await chat.openConversation(id)
-    if (chat.activeId === id && !chat.sending) {
-      await chat.loadAgentRuns(id).catch(() => undefined)
-    }
   },
   { immediate: true },
 )
@@ -218,8 +184,6 @@ watch(
   },
   { flush: 'sync' },
 )
-
-void loadSkills()
 </script>
 
 <template>
@@ -227,42 +191,75 @@ void loadSkills()
     <ChatToolbar
       :title="hasConversation ? chat.activeTitle : ''"
       :model="modelLabel"
-      :skill-name="mountedSkill?.name ?? ''"
+      :skill-name="selectedSkill?.name ?? chat.selectedSkillKey ?? ''"
       :skill-items="skillItems"
-      :skill-disabled="!hasConversation || chat.sending"
+      :skill-disabled="chat.sending || skillCatalog.loading || !!chat.pendingApproval"
       @select-skill="handleSelectSkill"
     />
+
+    <p
+      v-if="chat.selectedSkillKey && !selectedSkill && !skillCatalog.loading"
+      class="chat__skill-status"
+      role="status"
+    >
+      选中的 Skill 已移除或不可用，请重新选择。
+    </p>
+    <p v-else-if="skillCatalog.error" class="chat__skill-status" role="status">
+      Skill 目录读取失败，可在设置中重新扫描。
+    </p>
 
     <div ref="scroller" v-loading="chat.loadingMessages" class="chat__scroll">
       <ChatEmpty v-if="showEmptyState" />
 
       <div v-else class="chat__col">
-        <template v-for="(message, index) in chat.messages" :key="message.id">
+        <button
+          v-if="chat.hasOlderMessages"
+          type="button"
+          class="chat__older u-tint"
+          :disabled="chat.loadingOlderMessages || chat.sending"
+          @click="loadOlderMessages"
+        >
+          {{ chat.loadingOlderMessages ? '正在加载…' : '加载更早消息' }}
+        </button>
+
+        <details v-if="chat.legacyRuns.length" class="chat__legacy">
+          <summary>旧执行记录</summary>
+          <AgentTimeline
+            v-for="run in chat.legacyRuns"
+            :key="run.id"
+            :steps="chat.replayDetails[run.id]?.steps ?? []"
+            :running="false"
+            lazy
+            :load-status="chat.replayDetails[run.id]?.status"
+            @request-steps="chat.loadExecutionSteps(run.id)"
+          />
+        </details>
+
+        <template v-for="message in chat.messages" :key="message.id">
           <ChatMessage :message="message" />
           <AgentTimeline
-            v-if="showTimeline && index === lastUserIndex"
-            class="chat__timeline"
+            v-if="message.id === chat.activeUserMessageId"
             :steps="chat.agentSteps"
             :running="chat.agentRunning"
           />
+          <template v-else>
+            <AgentTimeline
+              v-for="run in chat.runsByMessage[message.id]"
+              :key="run.id"
+              :steps="chat.replayDetails[run.id]?.steps ?? []"
+              :running="false"
+              lazy
+              :load-status="chat.replayDetails[run.id]?.status"
+              @request-steps="chat.loadExecutionSteps(run.id)"
+            />
+          </template>
         </template>
 
-        <!-- 首批 Markdown 渲染前保留等待提示。 -->
-        <div v-if="streamingPreview" class="chat__row chat__row--assistant chat__bubble--streaming">
-          <MarkdownContent :content="streamingPreview" />
-          <span class="chat__meta">正在输入…</span>
-        </div>
-        <div
-          v-else-if="chat.sending && !(chat.agentMode && chat.agentSteps.length)"
-          class="chat__row chat__row--assistant"
-        >
-          <span class="chat__who"><i />助手</span>
-          <div class="chat__bubble chat__bubble--streaming">
-            <span class="chat__dots"><i /><i /><i /></span>
-          </div>
-          <!-- 首字之前也要给一句状态，否则用户只看到三个点在跳 -->
-          <span class="chat__meta">正在输入…</span>
-        </div>
+        <MarkdownContent
+          v-if="streamingPreview"
+          class="chat__bubble--streaming"
+          :content="streamingPreview"
+        />
 
         <!-- 写操作挂起时服务端已暂停，卡片插在消息列末尾等用户决定 -->
         <ApprovalCard
@@ -278,9 +275,15 @@ void loadSkills()
       ref="composer"
       v-model="chat.composerText"
       :sending="chat.sending"
-      :disabled="chat.loadingMessages"
+      :disabled="
+        chat.loadingMessages ||
+        !!chat.pendingApproval ||
+        skillCatalog.loading ||
+        (!!chat.selectedSkillKey && !selectedSkill)
+      "
       :max-length="MAX_LENGTH"
       :agent-mode="chat.agentMode"
+      :supports-reasoning="settings.model?.supports_reasoning_effort"
       :auto-skills="autoSkills"
       @send="handleSend"
       @toggle-agent-mode="chat.toggleAgentMode(!chat.agentMode)"
@@ -304,62 +307,32 @@ void loadSkills()
   overflow-y: auto;
 }
 
+.chat__skill-status {
+  padding-inline: var(--ma-space-md);
+  color: var(--ma-color-muted);
+}
+
+.chat__older,
+.chat__legacy {
+  color: var(--ma-color-muted);
+  font: inherit;
+}
+
+.chat__older {
+  display: block;
+  margin-inline: auto;
+  background: transparent;
+  border: 0;
+  border-radius: var(--ma-radius-sm);
+  cursor: pointer;
+}
+
+.chat__legacy > summary {
+  cursor: pointer;
+}
+
 .chat__col {
   max-width: var(--ma-reading-width);
   margin: 0 auto;
-}
-
-/* 空态：标题用衬线，与登录页呼应；不放大插图 */
-
-.chat__bubble.chat__bubble--streaming {
-  max-width: 100%;
-  /* 按内容收窄：三个点的占位才不会拉成一整条 */
-  width: fit-content;
-  padding: 12px 16px;
-  background: var(--ma-color-surface);
-  border: 1px solid var(--ma-color-line);
-  border-radius: var(--ma-radius-lg);
-}
-
-.chat__dots {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.chat__dots i {
-  width: 6px;
-  height: 6px;
-  background: var(--ma-color-faint);
-  border-radius: 999px;
-  animation: chat-dot 1.2s ease-in-out infinite;
-}
-
-.chat__dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.chat__dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-@keyframes chat-dot {
-  0%,
-  60%,
-  100% {
-    opacity: 0.25;
-    transform: translateY(0);
-  }
-
-  30% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat__dots i {
-    animation: none;
-  }
 }
 </style>
