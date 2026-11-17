@@ -78,7 +78,11 @@ export interface AgentStreamHandlers {
 }
 
 /** 一个 SSE 响应读到结尾：按 `data:` 帧解析，事件交给 handlers 分发 */
-async function consume(response: Response, handlers: AgentStreamHandlers): Promise<void> {
+async function consume(
+  response: Response,
+  handlers: AgentStreamHandlers,
+  runId?: number,
+): Promise<void> {
   if (!response.ok || !response.body) {
     const text = await response.text().catch(() => '')
     try {
@@ -110,6 +114,17 @@ async function consume(response: Response, handlers: AgentStreamHandlers): Promi
         .join('')
       if (!payload) continue
       const event = JSON.parse(payload) as AgentStreamEvent
+      if (import.meta.env.DEV) {
+        if ('run_id' in event) runId = event.run_id
+        console.debug('[my-agent] agent.sse', {
+          type: event.type,
+          runId,
+          seq: 'seq' in event ? event.seq : undefined,
+          tool: 'tool' in event ? event.tool : undefined,
+          ok: 'ok' in event ? event.ok : undefined,
+          code: 'code' in event ? event.code : undefined,
+        })
+      }
       handlers.onEvent?.(event)
       if (event.type === 'run_finished') {
         handlers.onFinished(event)
@@ -136,6 +151,9 @@ export async function sendAgentStream(
   signal?: AbortSignal,
   skillMode: AgentSkillMode = 'manual',
 ): Promise<void> {
+  if (import.meta.env.DEV) {
+    console.debug('[my-agent] agent.send', { conversationId: id, skillMode, chars: content.length })
+  }
   const response = await fetch(`/api/conversations/${id}/agent/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
@@ -154,13 +172,16 @@ export async function decideApprovalStream(
   note?: string,
   signal?: AbortSignal,
 ): Promise<void> {
+  if (import.meta.env.DEV) {
+    console.debug('[my-agent] agent.approval', { runId, approvalId, decision })
+  }
   const response = await fetch(`/api/agent/runs/${runId}/approvals/${approvalId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify({ decision, note: note ?? null }),
     signal,
   })
-  await consume(response, handlers)
+  await consume(response, handlers, runId)
 }
 
 /** 取某次运行的审批（刷新后把待决定的卡片复原） */

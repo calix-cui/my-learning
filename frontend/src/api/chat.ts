@@ -88,6 +88,9 @@ export async function sendMessageStream(
   handlers: ChatStreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
+  if (import.meta.env.DEV) {
+    console.debug('[my-agent] chat.sse.request', { conversationId: id, chars: content.length })
+  }
   const response = await fetch(`/api/conversations/${id}/messages/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
@@ -95,6 +98,9 @@ export async function sendMessageStream(
     signal,
   })
 
+  if (import.meta.env.DEV) {
+    console.debug('[my-agent] chat.sse.http', { conversationId: id, status: response.status })
+  }
   if (!response.ok || !response.body) {
     // 校验失败（400/404）走的是普通 JSON，不是事件流
     const fallback = `请求失败（${response.status}）`
@@ -110,6 +116,8 @@ export async function sendMessageStream(
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let deltaCount = 0
+  let deltaChars = 0
 
   for (;;) {
     const { done, value } = await reader.read()
@@ -130,6 +138,22 @@ export async function sendMessageStream(
         .join('')
       if (payload) {
         const event = JSON.parse(payload) as ChatStreamEvent
+        if (import.meta.env.DEV) {
+          if (event.type === 'delta') {
+            deltaCount++
+            deltaChars += event.content.length
+          }
+          // 分片只记录首帧和累计值，避免控制台输出拖慢流式渲染。
+          if (event.type !== 'delta' || deltaCount === 1) {
+            console.debug('[my-agent] chat.sse.event', {
+              conversationId: id,
+              type: event.type,
+              deltaCount,
+              deltaChars,
+              code: event.type === 'error' ? event.code : undefined,
+            })
+          }
+        }
         if (event.type === 'meta') {
           handlers.onMeta?.(event.user_message)
         } else if (event.type === 'delta') {

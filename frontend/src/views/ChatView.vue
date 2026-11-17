@@ -35,7 +35,12 @@ async function loadSkills() {
   skills.value = []
   try {
     const { items } = await listSkills(conversationId)
-    if (request === skillRequest && conversationId === chat.activeId) skills.value = items
+    if (request === skillRequest && conversationId === chat.activeId) {
+      skills.value = items
+      if (import.meta.env.DEV) {
+        console.debug('[my-agent] skill.view.catalog', { conversationId, count: items.length })
+      }
+    }
   } catch {
     // 保持空列表；手动模式仍由后端读取真实挂载状态。
   }
@@ -52,6 +57,9 @@ async function handleSelectSkill(slug: string | null) {
   if (!id || chat.sending) return
   try {
     await mountSkill(id, slug)
+    if (import.meta.env.DEV) {
+      console.debug('[my-agent] skill.view.mount', { conversationId: id, mounted: slug !== null })
+    }
     await loadSkills()
     ElMessage.success(slug ? '已挂上技能，下次提问生效' : '已取消技能')
   } catch {
@@ -131,6 +139,14 @@ async function handleSend() {
   if (!content.trim() || chat.sending || chat.loadingMessages) return
   // 失败时保留草稿，用户不用重打；成功由 store 清掉自己会话的草稿
   const skillMode = autoSkills.value ? 'auto' : 'manual'
+  if (import.meta.env.DEV) {
+    console.debug('[my-agent] chat.view.send', {
+      conversationId: chat.activeId,
+      mode: chat.agentMode ? 'agent' : 'stream',
+      skillMode: chat.agentMode ? skillMode : undefined,
+      chars: content.length,
+    })
+  }
   // 深度回答进入支持模型工具调用的 Agent 接口，普通回答走消息流接口。
   const ok = chat.agentMode
     ? await chat.sendWithAgent(content, skillMode)

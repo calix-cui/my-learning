@@ -89,6 +89,62 @@ function resolveErrorMessage(error: AxiosError<unknown>): string {
   return `请求失败（HTTP ${response.status}）`
 }
 
+// 只跟踪工具和技能接口，路径分类时不保留动态片段和查询参数。
+if (import.meta.env.DEV) {
+  function traceRoute(url?: string) {
+    const path = url?.split('?')[0] ?? ''
+    if (/^\/settings\/tools(?:\/stats)?$/.test(path)) return path
+    if (/^\/mcp\/(?:catalog|servers)$/.test(path)) return path
+    if (/^\/mcp\/servers\/\d+(?:\/test)?$/.test(path)) return path
+    if (/^\/conversations\/\d+\/skill$/.test(path)) return path
+    if (path === '/skills') return path
+    if (/^\/skills\/[^/]+$/.test(path)) return '/skills/:id'
+    return null
+  }
+
+  client.interceptors.request.use((config) => {
+    const route = traceRoute(config.url)
+    if (route) {
+      console.debug('[my-agent] tool-skill.api.request', { method: config.method, route })
+    }
+    return config
+  })
+
+  client.interceptors.response.use(
+    (response) => {
+      const route = traceRoute(response.config.url)
+      if (route) {
+        const body: unknown = response.data
+        const data = isApiResponse(body) ? body.data : null
+        const summary =
+          typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {}
+        console.debug('[my-agent] tool-skill.api.response', {
+          method: response.config.method,
+          route,
+          status: response.status,
+          code: isApiResponse(body) ? body.code : undefined,
+          count: Array.isArray(summary.items) ? summary.items.length : undefined,
+          ok: typeof summary.ok === 'boolean' ? summary.ok : undefined,
+          toolCount: Array.isArray(summary.tools) ? summary.tools.length : undefined,
+        })
+      }
+      return response
+    },
+    (error: AxiosError<unknown>) => {
+      const route = traceRoute(error.config?.url)
+      if (route) {
+        console.debug('[my-agent] tool-skill.api.error', {
+          method: error.config?.method,
+          route,
+          status: error.response?.status,
+          code: isApiResponse(error.response?.data) ? error.response.data.code : undefined,
+        })
+      }
+      return Promise.reject(error)
+    },
+  )
+}
+
 client.interceptors.response.use(
   (response: AxiosResponse<unknown>) => {
     const body = response.data

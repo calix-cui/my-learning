@@ -247,6 +247,9 @@ export const useChatStore = defineStore('chat', () => {
     if (activeId.value !== null) return activeId.value
     const draftThread = threadOf(DRAFT_KEY)
     const created = await createConversation()
+    if (import.meta.env.DEV) {
+      console.debug('[my-agent] chat.store.created', { conversationId: created.id })
+    }
     conversations.value = [{ ...created, message_count: 0 }, ...conversations.value]
     // 草稿里已经写好的用户消息搬到真实会话下，避免视觉上「跳一下」
     threadOf(created.id).draftText = draftThread.draftText
@@ -333,6 +336,12 @@ export const useChatStore = defineStore('chat', () => {
         onMeta: (message) => {
           currentUserId = message.id
           thread.messages = thread.messages.map((m) => (m.id === optimisticId ? message : m))
+          if (import.meta.env.DEV) {
+            console.debug('[my-agent] chat.store.meta', {
+              conversationId: id,
+              messageId: message.id,
+            })
+          }
         },
         onDelta: (delta) => {
           thread.streamingText += delta
@@ -341,6 +350,13 @@ export const useChatStore = defineStore('chat', () => {
           thread.streamingText = ''
           thread.messages = [...thread.messages, event.assistant_message]
           thread.loaded = true
+          if (import.meta.env.DEV) {
+            console.debug('[my-agent] chat.store.complete', {
+              conversationId: id,
+              messageId: event.assistant_message.id,
+              chars: event.assistant_message.content.length,
+            })
+          }
           patchConversation(id, {
             title: event.conversation_title,
             message_count: event.message_count,
@@ -355,6 +371,9 @@ export const useChatStore = defineStore('chat', () => {
       // 后端已回滚这次提问，前端也要撤掉乐观消息
       thread.messages = thread.messages.filter((m) => m.id !== currentUserId)
       thread.streamingText = ''
+      if (import.meta.env.DEV) {
+        console.debug('[my-agent] chat.store.rollback', { conversationId: id })
+      }
       ElMessage.error(error instanceof Error ? error.message : '发送失败，请稍后重试')
       return false
     } finally {
@@ -374,7 +393,7 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 用 agent 循环发一条消息：过程进时间线，最终答复进 messages */
   /** 将后端工具调用和结果映射到所属会话的时间线，供执行过程组件展示。 */
-  function applyAgentEvent(thread: ChatThread, event: AgentStreamEvent) {
+  function applyAgentEvent(conversationId: number, thread: ChatThread, event: AgentStreamEvent) {
     const base = {
       seq: 0,
       content: null,
@@ -464,6 +483,15 @@ export const useChatStore = defineStore('chat', () => {
         reason: event.reason,
       }
     }
+    if (import.meta.env.DEV && 'seq' in event) {
+      console.debug('[my-agent] agent.store.timeline', {
+        conversationId,
+        type: event.type,
+        seq: event.seq,
+        stepCount: thread.steps.length,
+        awaitingApproval: thread.approval !== null,
+      })
+    }
   }
 
   /** 最终答复落进消息列表，并更新会话列表里的条数与时间 */
@@ -489,6 +517,13 @@ export const useChatStore = defineStore('chat', () => {
       update_time: formatNow(),
     })
     sortByRecent()
+    if (import.meta.env.DEV) {
+      console.debug('[my-agent] agent.store.complete', {
+        conversationId,
+        runId: event.run_id,
+        chars: event.content.length,
+      })
+    }
   }
 
   async function sendWithAgent(
@@ -529,7 +564,7 @@ export const useChatStore = defineStore('chat', () => {
         conversationId,
         text,
         {
-          onEvent: (event: AgentStreamEvent) => applyAgentEvent(thread, event),
+          onEvent: (event: AgentStreamEvent) => applyAgentEvent(conversationId, thread, event),
           onApproval: () => {
             // 服务端已经暂停：流结束，等用户点批准/拒绝
             thread.runningAgent = false
@@ -599,7 +634,7 @@ export const useChatStore = defineStore('chat', () => {
         pending.approvalId,
         decision,
         {
-          onEvent: (event: AgentStreamEvent) => applyAgentEvent(thread, event),
+          onEvent: (event: AgentStreamEvent) => applyAgentEvent(conversationId, thread, event),
           onApproval: () => {
             thread.runningAgent = false
           },

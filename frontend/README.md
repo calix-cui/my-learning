@@ -21,6 +21,14 @@ My Agent 的聊天界面，基于 Vue 3 + TypeScript + Vite + Element Plus 实�
 
 `/chat` 打开空白草稿。首次发送创建会话后，地址更新为 `/chat/:conversationId`，例如 `/chat/123`。打开已有会话、刷新或使用浏览器历史时，按地址加载会话及执行记录。需要登录时，登录成功后回到原地址。
 
+## 浏览器调试日志
+
+用 `pnpm dev` 启动前端，在浏览器控制台启用 Verbose（详细），搜索 `[my-agent]`。普通回复从 `chat.view.send` 跟到 `chat.sse.*`、`chat.store.*` 和 `chat.view.render`。深度回答从 `agent.send` 跟到 `agent.sse` 和 `agent.store.*`，审批请求可以用 `agent.approval` 定位。用 `conversationId`、`runId` 和步骤号对照前后端日志。
+
+高频的普通 SSE 分片只单独记录首个，结束时提供分片数和总字符数。Markdown 更新按渲染帧记录字符数和滚动位置。日志只包含摘要，生产构建会移除这些语句。
+
+Tool 设置、MCP 市场和 Skill 管理接口用 `tool-skill.api.request`、`tool-skill.api.response`、`tool-skill.api.error` 查看请求与结果。会话内的技能列表和挂载用 `skill.view.*` 查看。运行中用 `agent.sse` 和 `agent.store.timeline` 查找工具、审批与技能事件。
+
 ## 启动方式
 
 ```bash
