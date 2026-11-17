@@ -121,6 +121,65 @@ def test_single_tool_round_trip(db_session: Session):
     assert result_step.tool_args == {"expression": "3^5"}
 
 
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_tool_trace_is_development_only(db_session, monkeypatch, caplog, environment):
+    from app.common.dev_trace import settings
+
+    monkeypatch.setattr(settings, "app_env", environment)
+    monkeypatch.setattr(settings, "llm_log_payloads", False)
+    user, conversation = _setup(db_session)
+    llm = FakeLLM(
+        tool_script=[
+            tool_reply("calculator", {"expression": "123456+7"}),
+            final_reply("仅供测试的助手正文"),
+        ]
+    )
+    with caplog.at_level("INFO", logger="uvicorn.error.my_agent.trace"):
+        _, run, messages, first = prepare_run(
+            db_session,
+            user_id=user.id,
+            conversation_id=conversation.id,
+            content="仅供测试的原始提问",
+        )
+        result = list(
+            stream_run(
+                db_session,
+                run=run,
+                conversation=conversation,
+                messages=messages,
+                llm=llm,
+                is_first_message=first,
+                user_id=user.id,
+            )
+        )
+    assert result[-1]["type"] == "run_finished"
+    logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "uvicorn.error.my_agent.trace"
+    ]
+    if environment == "production":
+        assert not logs
+        return
+    text = "\n".join(logs)
+    for stage in (
+        "agent.prepare",
+        "agent.prompt.compose",
+        "agent.model.request",
+        "agent.model.response",
+        "agent.tool.policy",
+        "tool.arguments.validate",
+        "agent.tool.result",
+        "agent.context.tool_added",
+        "agent.finish",
+    ):
+        assert stage in text
+    assert f'"run_id": {run.id}' in text
+    assert '"role": "tool"' in text
+    for raw in ("仅供测试的原始提问", "仅供测试的助手正文", "123456+7", "123463"):
+        assert raw not in text
+
+
 def test_tool_failure_is_fed_back_to_model(db_session: Session):
     user, conversation = _setup(db_session, email="exec-fail@example.com")
     llm = FakeLLM(

@@ -9,6 +9,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.common.dev_trace import trace
 from app.common.exceptions import BusinessError
 from app.models import Conversation
 from app.models import Skill as SkillRow
@@ -129,6 +130,7 @@ def create_skill(
     db.add(row)
     db.commit()
     db.refresh(row)
+    trace("skill.settings.create", skill_id=row.id, tool_count=len(row.tools or []))
     return _row_to_skill(row)
 
 
@@ -171,6 +173,7 @@ def update_skill(
         row.icon = icon or "sparkle"
     db.commit()
     db.refresh(row)
+    trace("skill.settings.update", skill_id=row.id, tool_count=len(row.tools or []))
     return _row_to_skill(row)
 
 
@@ -184,6 +187,7 @@ def delete_skill(db: Session, user_id: int, skill_id: int) -> None:
     )
     db.delete(row)
     db.commit()
+    trace("skill.settings.delete", skill_id=skill_id)
 
 
 def mount_skill(db: Session, user_id: int, conversation_id: int, slug: str | None) -> Conversation:
@@ -202,6 +206,9 @@ def mount_skill(db: Session, user_id: int, conversation_id: int, slug: str | Non
         conversation.skill_slug = None
     db.commit()
     db.refresh(conversation)
+    trace(
+        "skill.settings.mount", conversation_id=conversation_id, slug=slug, mounted=slug is not None
+    )
     return conversation
 
 

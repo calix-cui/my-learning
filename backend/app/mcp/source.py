@@ -19,6 +19,7 @@ from jsonschema.exceptions import ValidationError
 from pydantic import BaseModel, ConfigDict
 
 from app.agent.tools.base import ToolError, ToolLevel, ToolSpec
+from app.common.dev_trace import trace
 from app.mcp.client import McpClient
 from app.mcp.specs import McpToolInfo, input_schema_validator
 
@@ -81,9 +82,13 @@ class McpTool:
         try:
             self._input_validator.validate(payload)
         except ValidationError as exc:
+            trace("tool.mcp.validate", tool=self.name, ok=False)
             path = ".".join(str(part) for part in exc.absolute_path) or "参数"
             raise ToolError(f"参数不符合 MCP Schema：{path}") from exc
+        trace("tool.mcp.validate", tool=self.name, ok=True)
+        trace("tool.mcp.call", tool=self.name)
         result = self._client.call_tool(self._remote_name, payload or None)
+        trace("tool.mcp.result", tool=self.name, ok=result.ok, chars=len(result.text or ""))
         if not result.ok:
             # `isError` 是工具自己报告的业务失败，按 ToolError 交给执行器转成 ok=False
             raise ToolError(result.text or "工具返回了错误")

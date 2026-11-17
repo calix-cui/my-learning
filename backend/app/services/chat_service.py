@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.common.dev_trace import trace, trace_context
 from app.common.exceptions import BusinessError
 from app.llm import ChatMessage, LLMClient, LLMError
 from app.models import Conversation, Message
@@ -132,7 +133,16 @@ def build_context(db: Session, conversation_id: int) -> list[ChatMessage]:
         .limit(CONTEXT_LIMIT)
     ).all()
     ordered = [*system_rows, *reversed(recent_rows)]
-    return [ChatMessage(role=row.role, content=row.content) for row in ordered]
+    context = [ChatMessage(role=row.role, content=row.content) for row in ordered]
+    trace_context(
+        "chat.context.history",
+        context,
+        conversation_id=conversation_id,
+        system_count=len(system_rows),
+        history_count=len(recent_rows),
+        history_limit=CONTEXT_LIMIT,
+    )
+    return context
 
 
 def send_message(
@@ -160,7 +170,15 @@ def send_message(
         # flush 而不是 commit：先拿到 id，让本次提问进入上下文，同时保持一个事务
         db.flush()
 
-        reply = llm.chat(build_context(db, conversation_id))
+        context = build_context(db, conversation_id)
+        trace_context("chat.model.request", context, conversation_id=conversation_id, mode="sync")
+        reply = llm.chat(context)
+        trace(
+            "chat.model.result",
+            conversation_id=conversation_id,
+            model=reply["model"],
+            chars=len(reply["content"]),
+        )
 
         assistant_message = Message(
             conversation_id=conversation_id,
@@ -245,12 +263,19 @@ def stream_reply(
             "user_message": MessageResponse.model_validate(user_message).model_dump(),
         }
 
+        trace_context("chat.model.request", context, conversation_id=conversation.id, mode="stream")
         pieces: list[str] = []
         for piece in llm.stream(context):
             pieces.append(piece)
             yield {"type": "delta", "content": piece}
 
         reply_text = "".join(pieces).strip()
+        trace(
+            "chat.model.stream_result",
+            conversation_id=conversation.id,
+            chunks=len(pieces),
+            chars=len(reply_text),
+        )
         if not reply_text:
             raise LLMError("模型返回内容为空")
 
@@ -269,6 +294,12 @@ def stream_reply(
         db.commit()
         committed = True
         db.refresh(assistant_message)
+        trace(
+            "chat.message.commit",
+            conversation_id=conversation.id,
+            message_id=assistant_message.id,
+            mode="stream",
+        )
 
         yield {
             "type": "done",
@@ -282,6 +313,7 @@ def stream_reply(
         }
     except BusinessError as exc:
         db.rollback()
+        trace("chat.model.error", conversation_id=conversation.id, code=exc.code)
         yield {"type": "error", "code": exc.code, "message": str(exc)}
     except Exception:
         db.rollback()

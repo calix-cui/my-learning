@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.common import crypto
+from app.common.dev_trace import trace
 from app.common.exceptions import BusinessError
 from app.mcp.catalog import CATALOG, CATALOG_UPDATED, find_entry
 from app.mcp.errors import McpError
@@ -149,6 +150,7 @@ def list_catalog(db: Session, user_id: int) -> CatalogResponse:
                 last_status=installed.last_status if installed else None,
             )
         )
+    trace("tool.mcp.catalog", count=len(items), installed=len(rows))
     return CatalogResponse(items=items, updated=CATALOG_UPDATED)
 
 
@@ -156,7 +158,9 @@ def list_servers(db: Session, user_id: int) -> McpServerListResponse:
     rows = db.scalars(
         select(McpServer).where(McpServer.user_id == user_id).order_by(McpServer.create_time.desc())
     )
-    return McpServerListResponse(items=[_to_item(row) for row in rows])
+    items = [_to_item(row) for row in rows]
+    trace("tool.mcp.servers", count=len(items))
+    return McpServerListResponse(items=items)
 
 
 # ---------- 写 ----------
@@ -196,6 +200,7 @@ def create_server(db: Session, user_id: int, payload: McpServerCreateRequest) ->
     db.add(row)
     db.commit()
     db.refresh(row)
+    trace("tool.mcp.install", server_id=row.id, transport=row.transport)
     return _to_item(row)
 
 
@@ -250,6 +255,7 @@ def update_server(
     db.refresh(row)
     # 配置变了：丢掉旧连接，否则下次 run 连的还是老进程
     get_manager().forget(row.id)
+    trace("tool.mcp.update", server_id=row.id, enabled=row.enabled)
     return _to_item(row)
 
 
@@ -258,6 +264,7 @@ def delete_server(db: Session, user_id: int, server_id: int) -> None:
     get_manager().forget(row.id)
     db.delete(row)
     db.commit()
+    trace("tool.mcp.delete", server_id=server_id)
 
 
 def test_server(db: Session, user_id: int, server_id: int) -> McpTestResponse:
@@ -273,6 +280,7 @@ def test_server(db: Session, user_id: int, server_id: int) -> McpTestResponse:
         row.last_connected_time = datetime.now()  # noqa: DTZ005
     db.commit()
 
+    trace("tool.mcp.probe", server_id=server_id, ok=ok, tool_count=len(tools), duration_ms=duration)
     return McpTestResponse(
         ok=ok,
         message=message,

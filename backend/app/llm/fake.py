@@ -16,6 +16,7 @@ from app.llm.base import (
     ToolCallReply,
     ToolSpec,
 )
+from app.llm.exchange_trace import llm_exchange, trace_llm_stream
 
 
 class FakeLLM:
@@ -41,6 +42,12 @@ class FakeLLM:
         self.tool_calls_seen: list[list[LLMMessage]] = []
 
     def chat(self, messages: list[ChatMessage]) -> LLMReply:
+        with llm_exchange(self.model, "chat", messages) as record:
+            reply = self._chat(messages)
+            record(reply)
+            return reply
+
+    def _chat(self, messages: list[ChatMessage]) -> LLMReply:
         if self.error is not None:
             raise self.error
         if self.delay_seconds:
@@ -48,6 +55,9 @@ class FakeLLM:
         return LLMReply(content=self._full_text(messages), model=self.model)
 
     def stream(self, messages: list[ChatMessage]) -> Iterator[str]:
+        return trace_llm_stream(self.model, messages, self._stream(messages))
+
+    def _stream(self, messages: list[ChatMessage]) -> Iterator[str]:
         """按固定步长切片，模拟逐块返回；拼起来与 chat() 的结果完全一致。"""
         if self.error is not None:
             raise self.error
@@ -58,7 +68,13 @@ class FakeLLM:
                 time.sleep(self.delay_seconds)
             yield text[index : index + step]
 
-    def chat_with_tools(
+    def chat_with_tools(self, messages: list[LLMMessage], tools: list[ToolSpec]) -> ToolCallReply:
+        with llm_exchange(self.model, "tools", messages, tools) as record:
+            reply = self._chat_with_tools(messages, tools)
+            record(reply)
+            return reply
+
+    def _chat_with_tools(
         self,
         messages: list[LLMMessage],
         tools: list[ToolSpec],  # noqa: ARG002 —— 假实现不看工具声明，只照剧本演

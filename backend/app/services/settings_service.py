@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.common import crypto
+from app.common.dev_trace import trace
 from app.common.exceptions import BusinessError
 from app.config import settings
 from app.llm import ModelConfig, build_llm_for, config_from_env, config_from_row
@@ -273,6 +274,13 @@ def read_tool_settings(db: Session, user_id: int) -> ToolSettingsResponse:
         for meta in registry.metas()
     ]
     used = sum(counts.values())
+    trace(
+        "tool.settings.read",
+        item_count=len(items),
+        disabled_count=len(disabled),
+        budget=budget,
+        used_today=used,
+    )
     return ToolSettingsResponse(items=items, daily_tool_budget=budget, used_today=used)
 
 
@@ -292,6 +300,11 @@ def update_tool_settings(
         row.daily_tool_budget = payload.daily_tool_budget
     db.commit()
     db.refresh(row)
+    trace(
+        "tool.settings.update",
+        disabled_count=len(payload.disabled),
+        budget=payload.daily_tool_budget,
+    )
     return read_tool_settings(db, user_id)
 
 
@@ -319,7 +332,9 @@ def read_tool_stats(db: Session, user_id: int, *, days: int = 7) -> ToolStatsRes
             item.failures += count
 
     items = sorted(stats.values(), key=lambda entry: entry.calls, reverse=True)
-    return ToolStatsResponse(days=days, items=items, total=sum(entry.calls for entry in items))
+    total = sum(entry.calls for entry in items)
+    trace("tool.settings.stats", days=days, tool_count=len(items), total=total)
+    return ToolStatsResponse(days=days, items=items, total=total)
 
 
 def _today_tool_counts(db: Session, user_id: int) -> dict[str, int]:

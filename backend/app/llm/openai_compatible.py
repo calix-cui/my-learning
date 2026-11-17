@@ -9,6 +9,7 @@ from collections.abc import Iterator
 
 import httpx
 
+from app.common.dev_trace import trace
 from app.llm.base import (
     ChatMessage,
     LLMError,
@@ -19,6 +20,7 @@ from app.llm.base import (
     ToolCallReply,
     ToolSpec,
 )
+from app.llm.exchange_trace import llm_exchange, trace_llm_stream
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,7 @@ class OpenAICompatibleClient:
         return {"Authorization": f"Bearer {self.api_key}"}
 
     def _raise_for_status(self, status_code: int) -> None:
+        trace("llm.http.response", status=status_code, model=self.model)
         if status_code in (401, 403):
             raise LLMError("模型服务鉴权失败，请检查 LLM_API_KEY")
         if status_code == 402:
@@ -111,6 +114,9 @@ class OpenAICompatibleClient:
             raise LLMError()
 
     def stream(self, messages: list[ChatMessage]) -> Iterator[str]:
+        return trace_llm_stream(self.model, messages, self._stream(messages))
+
+    def _stream(self, messages: list[ChatMessage]) -> Iterator[str]:
         """按 OpenAI 的 SSE 约定逐块产出增量文本。"""
         try:
             with self._client.stream(
@@ -141,6 +147,12 @@ class OpenAICompatibleClient:
             raise LLMError() from exc
 
     def chat(self, messages: list[ChatMessage]) -> LLMReply:
+        with llm_exchange(self.model, "chat", messages) as record:
+            reply = self._chat(messages)
+            record(reply)
+            return reply
+
+    def _chat(self, messages: list[ChatMessage]) -> LLMReply:
         payload = self._payload(messages, stream=False)
         headers = self._headers
         try:
@@ -169,12 +181,25 @@ class OpenAICompatibleClient:
         return LLMReply(content=content, model=str(model))
 
     def chat_with_tools(self, messages: list[LLMMessage], tools: list[ToolSpec]) -> ToolCallReply:
+        with llm_exchange(self.model, "tools", messages, tools) as record:
+            reply = self._chat_with_tools(messages, tools)
+            record(reply)
+            return reply
+
+    def _chat_with_tools(self, messages: list[LLMMessage], tools: list[ToolSpec]) -> ToolCallReply:
         """一轮带工具的补全。
 
         不做任何文本解析：工具调用来自 `choices[0].message.tool_calls`，
         参数保持上游给的原始 JSON 字符串，交给工具层做 pydantic 校验。
         """
         payload = self._tool_payload(messages, tools)
+        trace(
+            "llm.function.request",
+            model=self.model,
+            message_count=len(messages),
+            tool_count=len(tools),
+            tool_choice=payload.get("tool_choice"),
+        )
         try:
             response = self._client.post(
                 f"{self.base_url}/chat/completions",
@@ -226,6 +251,7 @@ class OpenAICompatibleClient:
         if not calls and not content.strip():
             raise LLMError("模型返回内容为空")
 
+        trace("llm.function.parsed", model=self.model, call_count=len(calls), chars=len(content))
         return ToolCallReply(
             content=content,
             tool_calls=calls,

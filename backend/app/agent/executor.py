@@ -15,6 +15,7 @@
 
 import json
 import logging
+import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
@@ -28,6 +29,7 @@ from sqlalchemy.orm import Session
 from app.agent import events
 from app.agent import policy as policy_module
 from app.agent.tools import BuiltinSource, ToolRegistry, ToolSource
+from app.common.dev_trace import trace, trace_context, trace_enabled
 from app.common.exceptions import BusinessError
 from app.llm import LLMClient, LLMError
 from app.llm.base import LLMMessage, ToolCall, ToolSpec
@@ -160,6 +162,15 @@ def prepare_run(
         for item in chat_service.build_context(db, conversation_id)
     ]
     db.commit()
+    trace_context(
+        "agent.prepare",
+        context,
+        run_id=run.id,
+        conversation_id=conversation_id,
+        skill_mode=skill_mode,
+        catalog_count=len(catalog),
+        first_message=is_first_message,
+    )
     return conversation, run, context, is_first_message
 
 
@@ -181,6 +192,7 @@ def stream_run(
     state = _loop_state(db, run)
     skill_registry = skill_service.registry_for(db, user_id)
 
+    trace("agent.start", run_id=run.id, conversation_id=conversation.id, skill_mode=run.skill_mode)
     yield events.run_started(run.id, conversation.id)
     if run.skill_mode in {"manual", "auto"} and conversation.skill_slug and not state.loaded_skills:
         descriptor = next(
@@ -194,6 +206,7 @@ def stream_run(
             registry=skill_registry,
             key=key,
         )
+        trace("agent.skill.mounted", run_id=run.id, seq=state.seq, result=event["type"])
         yield event
     yield from _run_loop(
         db,
@@ -238,6 +251,15 @@ def resume_run(
     tool_policy.registry = tools
     skill_registry = skill_service.registry_for(db, user_id)
     messages, pending = _replay_messages(db, run)
+    trace_context(
+        "agent.approval.replay",
+        messages,
+        run_id=run.id,
+        approval_id=approval.id,
+        status=approval.status,
+        pending_step=pending.seq if pending else None,
+        loaded_skills=len(state.loaded_skills),
+    )
     if approval.status not in {APPROVAL_APPROVED, APPROVAL_REJECTED}:
         _fail(db, run, "审批状态无效，已拒绝恢复执行")
         yield events.error(409, "审批状态无效，无法继续此运行")
@@ -258,7 +280,7 @@ def resume_run(
         _fail(db, run, "审批后的工具定义发生变化，已拒绝执行")
         yield events.error(409, "工具定义在审批后发生变化，请重新发起任务")
         return
-    messages = _messages_with_runtime_skills(messages, state, tools)
+    messages = _messages_with_runtime_skills(messages, state, tools, run_id=run.id)
 
     call: ToolCall = {
         "id": f"call_{pending.seq if pending else approval.seq}",
@@ -277,6 +299,14 @@ def resume_run(
             approval.tool_name,
             approval.tool_args,
             approval_granted=True,
+        )
+        trace(
+            "agent.approval.policy",
+            run_id=run.id,
+            approval_id=approval.id,
+            tool=approval.tool_name,
+            action=decision.action,
+            fatal=decision.fatal,
         )
         if decision.action == "deny":
             result = _denied(decision.reason)
@@ -318,6 +348,15 @@ def resume_run(
     )
     messages.append(LLMMessage(role="tool", content=result["content"], tool_call_id=call["id"]))
     db.commit()
+    trace(
+        "agent.approval.result",
+        run_id=run.id,
+        approval_id=approval.id,
+        seq=state.seq,
+        tool=approval.tool_name,
+        ok=result["ok"],
+        duration_ms=result["duration_ms"],
+    )
     yield events.tool_result(
         state.seq,
         approval.tool_name,
@@ -371,7 +410,7 @@ def _run_loop(
     db.commit()
 
     try:
-        for _ in range(MAX_STEPS):
+        for round_number in range(1, MAX_STEPS + 1):
             # 每轮按已加载的 Skill 收窄工具集合，模型和执行策略使用同一注册表。
             tools = _tools_for_skills(base_tools, state.loaded_skills)
             policy.registry = tools
@@ -387,11 +426,28 @@ def _run_loop(
                 specs.append(_skill_load_tool_spec())
             if any(item.resources for item in state.loaded_skills):
                 specs.append(_skill_resource_tool_spec())
-            try:
-                reply = llm.chat_with_tools(
-                    _messages_with_runtime_skills(messages, state, tools), specs
+            round_messages = _messages_with_runtime_skills(messages, state, tools, run_id=run.id)
+            if trace_enabled():
+                trace_context(
+                    "agent.model.request",
+                    round_messages,
+                    run_id=run.id,
+                    round=round_number,
+                    seq=state.seq,
+                    tools=[spec["name"] for spec in specs],
+                    loaded_skills=len(state.loaded_skills),
                 )
+            started = time.perf_counter()
+            try:
+                reply = llm.chat_with_tools(round_messages, specs)
             except LLMError as exc:
+                trace(
+                    "agent.model.error",
+                    run_id=run.id,
+                    round=round_number,
+                    code=exc.code,
+                    error_type=type(exc).__name__,
+                )
                 _fail(db, run, str(exc))
                 yield events.error(exc.code, str(exc))
                 return
@@ -400,6 +456,24 @@ def _run_loop(
                 run.model = reply["model"]
 
             calls = reply["tool_calls"]
+            if trace_enabled():
+                trace(
+                    "agent.model.response",
+                    run_id=run.id,
+                    round=round_number,
+                    model=reply["model"],
+                    finish_reason=reply["finish_reason"],
+                    chars=len(reply["content"] or ""),
+                    duration_ms=round((time.perf_counter() - started) * 1000),
+                    calls=[
+                        {
+                            "tool": call["name"],
+                            "id": call["id"],
+                            "argument_chars": len(call["arguments"]),
+                        }
+                        for call in calls
+                    ],
+                )
 
             # 只有「说完话接着调工具」才算 Thought；没有工具调用时这段文本就是最终答复，
             # 不能既记一条 assistant_text 又记一条 final_answer（内容会重复一遍）
@@ -434,6 +508,7 @@ def _run_loop(
                 run.step_count = state.seq
                 db.commit()
                 state.finished = True
+                trace("agent.finish", run_id=run.id, seq=state.seq, chars=len(final))
                 yield events.run_finished(run.id, final, state.seq, run.model)
                 return
 
@@ -458,10 +533,18 @@ def _run_loop(
             ):
                 # 加载指引或读取资源会改变下一轮上下文，同批普通工具暂缓执行。
                 for call in calls:
+                    trace(
+                        "agent.skill.dispatch",
+                        run_id=run.id,
+                        round=round_number,
+                        call_id=call["id"],
+                        tool=call["name"],
+                    )
                     if call["name"] == SKILL_RESOURCE_TOOL_NAME:
                         event = _read_skill_resource(
                             db, run, state, skill_registry, call["arguments"]
                         )
+                        trace("agent.skill.resource", run_id=run.id, seq=state.seq, ok=event["ok"])
                         yield event
                         messages.append(
                             LLMMessage(
@@ -480,6 +563,13 @@ def _run_loop(
                             registry=skill_registry,
                             key=key,
                             model_requested=True,
+                        )
+                        trace(
+                            "agent.skill.load",
+                            run_id=run.id,
+                            seq=state.seq,
+                            result=event["type"],
+                            error_code=event.get("error_code"),
                         )
                         yield event
                         observation = (
@@ -541,6 +631,16 @@ def _run_loop(
 
                 # 模型提出请求，后端决定放行、拒绝或等待用户审批。
                 decision = policy.check(call["name"], _safe_json(call["arguments"]))
+                trace(
+                    "agent.tool.policy",
+                    run_id=run.id,
+                    round=round_number,
+                    seq=state.seq,
+                    tool=call["name"],
+                    call_id=call["id"],
+                    action=decision.action,
+                    fatal=decision.fatal,
+                )
 
                 if decision.needs_approval:
                     # 保存待审批请求并结束当前流，用户决定后从运行记录恢复。
@@ -554,6 +654,9 @@ def _run_loop(
                         tool_fingerprint=tools.fingerprint(call["name"]),
                     )
                     state.suspended = True
+                    trace(
+                        "agent.approval.wait", run_id=run.id, approval_id=approval.id, seq=state.seq
+                    )
                     yield events.approval_required(
                         run.id,
                         approval.id,
@@ -571,6 +674,13 @@ def _run_loop(
                         return
                     result = _denied(decision.reason)
                 else:
+                    trace(
+                        "agent.tool.execute",
+                        run_id=run.id,
+                        seq=state.seq,
+                        call_id=call["id"],
+                        tool=call["name"],
+                    )
                     result = _execute(tools, call, user_id=user_id)
                     policy.daily_used += 1
 
@@ -587,6 +697,18 @@ def _run_loop(
                     duration_ms=result["duration_ms"],
                 )
                 db.commit()
+                trace(
+                    "agent.tool.result",
+                    run_id=run.id,
+                    round=round_number,
+                    seq=state.seq,
+                    tool=call["name"],
+                    call_id=call["id"],
+                    ok=result["ok"],
+                    duration_ms=result["duration_ms"],
+                    chars=len(result["content"]),
+                    timeout=result.get("error") in ("timeout_uncertain", "timeout_cancelled"),
+                )
                 yield events.tool_result(
                     state.seq,
                     call["name"],
@@ -610,6 +732,13 @@ def _run_loop(
                     )
                 )
 
+                trace(
+                    "agent.context.tool_added",
+                    run_id=run.id,
+                    round=round_number,
+                    call_id=call["id"],
+                    message_count=len(messages),
+                )
                 if not result["ok"]:
                     state.failures[call["name"]] = state.failures.get(call["name"], 0) + 1
                     if state.failures[call["name"]] >= MAX_CONSECUTIVE_FAILURES:
@@ -969,7 +1098,7 @@ def _skill_load_tool_spec() -> ToolSpec:
 
 
 def _messages_with_runtime_skills(
-    messages: list[LLMMessage], state: LoopState, tools: ToolRegistry
+    messages: list[LLMMessage], state: LoopState, tools: ToolRegistry, *, run_id: int
 ) -> list[LLMMessage]:
     loaded_keys = {item.descriptor.key for item in state.loaded_skills}
     catalog = (
@@ -981,6 +1110,14 @@ def _messages_with_runtime_skills(
         state.loaded_skills,
         tool_names=tools.enabled_names(),
         catalog=catalog,
+    )
+    trace(
+        "agent.prompt.compose",
+        run_id=run_id,
+        inserted=bool(prompt),
+        chars=len(prompt or ""),
+        loaded_skills=len(state.loaded_skills),
+        available_skills=len(catalog),
     )
     return [LLMMessage(role="system", content=prompt), *messages] if prompt else messages
 
@@ -1038,6 +1175,14 @@ def registry_for(
         )
         if descriptor is not None and descriptor.tools:
             registry = registry.only(descriptor.tools)
+    if trace_enabled():
+        trace(
+            "agent.tools.registry",
+            conversation_id=conversation_id,
+            skill_mode=skill_mode,
+            source_count=len(sources),
+            tools=registry.enabled_names(),
+        )
     return registry
 
 
@@ -1357,6 +1502,7 @@ def _fail(db: Session, run: AgentRun, message: str) -> None:
         run.finished_time = datetime.now()  # noqa: DTZ005
         db.add(run)
         db.commit()
+        trace("agent.fail", run_id=run.id, status=run.status)
     except Exception:
         logger.exception("标记 agent 运行失败时出错")
         db.rollback()

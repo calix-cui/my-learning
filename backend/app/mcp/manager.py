@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from app.common.dev_trace import trace
 from app.mcp.client import McpClient
 from app.mcp.errors import McpError
 from app.mcp.runner import AsyncRunner
@@ -66,6 +67,7 @@ class McpManager:
 
             if conn is not None and not conn.client.connected:
                 conn = None
+            trace("tool.mcp.connection", server_id=server.id, reused=conn is not None)
             if conn is None:
                 conn = _Connection(
                     user_id=server.user_id,
@@ -80,10 +82,19 @@ class McpManager:
                     for tool in conn.tools:
                         input_schema_validator(tool.input_schema)
                     conn.tools_at = now
+                    trace(
+                        "tool.mcp.discover",
+                        server_id=server.id,
+                        count=len(conn.tools),
+                        cached=False,
+                    )
                 except McpError:
                     # 列工具失败说明连接已坏：丢掉，下次重连（不要留半死连接）
                     self._drop(server.id or -1)
+                    trace("tool.mcp.discover", server_id=server.id, status="failed")
                     raise
+            else:
+                trace("tool.mcp.discover", server_id=server.id, count=len(conn.tools), cached=True)
 
             conn.used_at = now
             return McpSource(

@@ -150,6 +150,24 @@ make check-migration
 - 护栏：`MAX_STEPS = 8`、单工具 `TOOL_TIMEOUT_SECONDS = 2.0`、连续 `MAX_CONSECUTIVE_FAILURES = 3` 次失败即中止；客户端断流会整体回滚并把 run 标 `failed`。
 - 事件协议与回放接口见 [`../docs/api.md`](../docs/api.md) §6；设计与取舍见 [`../docs/agent.md`](../docs/agent.md)。
 
+### 开发环境链路日志
+
+后端以 `APP_ENV=development` 启动后，在 Uvicorn 控制台搜索 `[my-agent]`。建议发送一条深度回答，例如「调用计算器算 3 的 5 次方」，然后按 `run_id` 串起运行。
+
+| 日志前缀 | 查看内容 |
+| --- | --- |
+| `chat.context` / `chat.model` | 历史窗口、system 与历史消息的顺序和长度、普通回复的分片数 |
+| `agent.prepare` / `agent.prompt` / `agent.model` | Skill 目录与 prompt 注入摘要、每轮可用工具、模型调用请求、返回的调用 ID 和耗时 |
+| `llm.exchange.*` / `llm.http` | 每次模型交互的成对日志（`exchange_id`）、耗时、输出和工具调用摘要；HTTP 状态适用于真实接口 |
+| `agent.tool` / `tool.arguments` / `agent.context` | 工具发现、策略、参数校验、执行结果摘要及回灌 |
+| `agent.skill` / `agent.approval` / `agent.finish` / `agent.fail` | Skill 控制动作、审批暂停与恢复、运行结束状态 |
+
+Tool 管理可筛选 `tool.settings.*`，MCP 连接复用、发现、校验和远端调用可筛选 `tool.mcp.*`。Skill 管理、来源发现、加载和资源读取分别见 `skill.settings.*`、`skill.provider.*`、`skill.registry.*`；运行中对应 `agent.skill.*`。
+
+在后端 `.env` 设置 `APP_ENV=development` 和 `LLM_LOG_PAYLOADS=true` 后重启，可在 `llm.exchange.request.body` 查看实际发给模型的消息与工具定义，在 `llm.exchange.response.body` 查看解析后的回复和工具参数。流式回复完成后合并记录，正文最多保留 32,000 字符，超出时标记 `truncated`。这会把提示词、对话和工具数据写到终端，建议仅用于本地测试数据。HTTP 认证头与供应商错误原文不加入这些记录。
+
+前端通过 Vite 开发服务器运行时，在浏览器控制台启用 Debug 或 Verbose，再搜索 `[my-agent]` 查看发送、SSE 与审批事件摘要。默认日志只保留结构化元数据。后端其他环境和前端生产构建均关闭这些调试日志，原有服务错误日志仍按原配置输出。
+
 ## 账号体系
 
 - 密码：Argon2id（`argon2-cffi`），`password_hash` 不可逆；登录成功会顺带 rehash 旧参数。

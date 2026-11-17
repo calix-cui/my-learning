@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from app.common.dev_trace import trace
 from app.skills.models import LoadedSkill, SkillDescriptor
 from app.skills.resources import SkillResourceError
 
@@ -27,13 +28,18 @@ class SkillRegistry:
         by_slug: dict[str, SkillDescriptor] = {}
         by_key: dict[str, tuple[SkillDescriptor, SkillProvider]] = {}
         for provider in self._providers:
-            for descriptor in provider.discover():
+            descriptors = provider.discover()
+            trace(
+                "skill.provider.discover", provider=type(provider).__name__, count=len(descriptors)
+            )
+            for descriptor in descriptors:
                 if descriptor.key in by_key:
                     raise ValueError(f"Skill key 重复：{descriptor.key}")
                 if descriptor.slug in by_slug:
                     continue
                 by_slug[descriptor.slug] = descriptor
                 by_key[descriptor.key] = (descriptor, provider)
+        trace("skill.registry.discover", count=len(by_key))
         self._by_key = by_key
         return list(by_slug.values())
 
@@ -42,10 +48,12 @@ class SkillRegistry:
             self.discover()
         entry = self._by_key.get(key)
         if entry is None:
+            trace("skill.registry.load", status="not_found")
             return None
         expected, provider = entry
         loaded = provider.load(key)
         if loaded is None:
+            trace("skill.registry.load", source=expected.source, status="unavailable")
             return None
         actual = loaded.descriptor
         if (
@@ -53,18 +61,40 @@ class SkillRegistry:
             or actual.slug != expected.slug
             or actual.version != expected.version
         ):
+            trace("skill.registry.load", source=expected.source, status="descriptor_mismatch")
             raise ValueError("Skill Provider 返回了与目录项不匹配的内容")
+        trace(
+            "skill.registry.load",
+            source=expected.source,
+            slug=expected.slug,
+            status="loaded",
+            chars=len(loaded.instructions),
+            resources=len(loaded.resources),
+        )
         return loaded
 
     def read_resource(self, loaded: LoadedSkill, path: str) -> str:
         if path not in loaded.resources:
+            trace("skill.registry.resource", status="not_listed")
             raise SkillResourceError("资源不在已加载 Skill 的清单中")
         if not self._by_key:
             self.discover()
         entry = self._by_key.get(loaded.descriptor.key)
         if entry is None or entry[0].version != loaded.descriptor.version:
+            trace("skill.registry.resource", status="unavailable")
             raise SkillResourceError("Skill 已更新或不可用，请重新发起任务")
-        return entry[1].read_resource(loaded.descriptor.key, path)
+        try:
+            content = entry[1].read_resource(loaded.descriptor.key, path)
+        except SkillResourceError:
+            trace("skill.registry.resource", status="rejected")
+            raise
+        trace(
+            "skill.registry.resource",
+            status="loaded",
+            source=loaded.descriptor.source,
+            chars=len(content),
+        )
+        return content
 
     def get_by_slug(self, slug: str) -> LoadedSkill | None:
         descriptor = next((item for item in self.discover() if item.slug == slug), None)

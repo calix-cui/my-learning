@@ -16,6 +16,8 @@ from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, ValidationError
 
+from app.common.dev_trace import trace
+
 
 class ToolLevel(StrEnum):
     """工具的风险级别。决定「能不能直接跑」，也是审批的默认依据。
@@ -176,6 +178,7 @@ def run_tool(tool: Tool, raw_arguments: str, *, user_id: int) -> ToolResult:
     """先按工具的参数模型验证请求，再执行工具，将校验或执行错误转为结果。"""
     started = time.perf_counter()
     model, data, error = validate_arguments(tool, raw_arguments)
+    trace("tool.arguments.validate", tool=tool.name, ok=error is None)
     if error is not None:
         return ToolResult(
             ok=False,

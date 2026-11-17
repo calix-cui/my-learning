@@ -412,3 +412,88 @@ def test_row_without_model_configured_falls_back_to_env():
     row.model_configured = 1
     assert config_from_row(row).provider == "openai"
     assert config_from_row(row).base_url == "https://example.invalid/v1"
+
+
+@pytest.mark.parametrize(
+    ("environment", "payloads", "expected"),
+    [
+        ("development", True, "body"),
+        ("development", False, "summary"),
+        ("production", True, "none"),
+    ],
+)
+def test_llm_exchange_logs_respect_environment_and_payload_switch(
+    monkeypatch, caplog, environment, payloads, expected
+):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "app_env", environment)
+    monkeypatch.setattr(settings, "llm_log_payloads", payloads)
+    llm = FakeLLM(tool_script=[tool_reply("calculator", {"expression": "12+73"})])
+    messages = [{"role": "user", "content": "私有测试消息"}]
+    with caplog.at_level("INFO", logger="uvicorn.error.my_agent.trace"):
+        llm.chat_with_tools(messages, [])
+        assert "".join(llm.stream(messages)).endswith("私有测试消息")
+        llm.chat(messages)
+
+    records = [record.getMessage() for record in caplog.records]
+    if expected == "none":
+        assert not records
+        return
+
+    requests = [
+        json.loads(item.split(" ", 2)[2])
+        for item in records
+        if item.startswith("[my-agent] llm.exchange.request ")
+    ]
+    results = [
+        json.loads(item.split(" ", 2)[2])
+        for item in records
+        if item.startswith("[my-agent] llm.exchange.response ")
+    ]
+    assert [request["mode"] for request in requests] == ["tools", "stream", "chat"]
+    assert [request["exchange_id"] for request in requests] == [
+        result["exchange_id"] for result in results
+    ]
+    output = "\n".join(records)
+    assert ("私有测试消息" in output) == (expected == "body")
+    assert ("12+73" in output) == (expected == "body")
+
+
+def test_openai_exchange_logs_error_without_credentials(monkeypatch, caplog):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "app_env", "development")
+    monkeypatch.setattr(settings, "llm_log_payloads", True)
+    llm = _client(lambda _: httpx.Response(401))
+    with caplog.at_level("INFO", logger="uvicorn.error.my_agent.trace"), pytest.raises(LLMError):
+        llm.chat([{"role": "user", "content": "测试"}])
+    assert "llm.exchange.request.body" in caplog.text
+    assert "llm.exchange.error" in caplog.text
+    assert "Authorization" not in caplog.text
+    assert llm.api_key not in caplog.text
+
+
+def test_llm_exchange_records_stream_cancellation(monkeypatch, caplog):
+    from app.config import settings
+    from app.llm.exchange_trace import trace_llm_stream
+
+    monkeypatch.setattr(settings, "app_env", "development")
+    upstream_closed = False
+
+    def upstream():
+        nonlocal upstream_closed
+        try:
+            yield "第一段"
+            yield "第二段"
+        finally:
+            upstream_closed = True
+
+    with caplog.at_level("INFO", logger="uvicorn.error.my_agent.trace"):
+        response = trace_llm_stream("fake", [], upstream())
+        assert next(response) == "第一段"
+        response.close()
+
+    assert upstream_closed
+    assert "llm.exchange.cancel" in caplog.text
+    assert "llm.exchange.response" not in caplog.text

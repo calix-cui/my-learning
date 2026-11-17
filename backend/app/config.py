@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     # 假模型每块的延迟：本地演示流式效果时调大一点（默认 0，测试不受影响）
     llm_fake_delay_seconds: float = 0.0
+    # 显式开启时，开发日志才包含实际发送给模型的正文。
+    llm_log_payloads: bool = False
 
     # 账号体系（阶段 4.5）。allow_registration=false 时注册接口直接返回 403，
     # 适合部署到公网后只允许管理员用脚本建号。
