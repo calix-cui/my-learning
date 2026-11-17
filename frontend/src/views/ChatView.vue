@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AgentTimeline from '@/components/chat/AgentTimeline.vue'
@@ -7,6 +7,7 @@ import ApprovalCard from '@/components/chat/ApprovalCard.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmpty from '@/components/chat/ChatEmpty.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
+import MarkdownContent from '@/components/chat/MarkdownContent.vue'
 import ChatToolbar from '@/components/chat/ChatToolbar.vue'
 import { listSkills, mountSkill } from '@/api/skills'
 import { useChatStore } from '@/stores/chat'
@@ -79,20 +80,50 @@ const lastUserIndex = computed(() => {
   return -1
 })
 
-/** 消息区滚到底：新消息、切换会话、Markdown 渲染后高度变化都要滚 */
-function scrollToBottom() {
-  void nextTick(() => {
-    requestAnimationFrame(() => {
+const streamingPreview = ref('')
+let renderFrame: number | null = null
+let unmounting = false
+
+/** 同一帧只提交最新累计文本，等 Markdown 进入 DOM 后再读取滚动高度。 */
+function scheduleMessageRender() {
+  if (unmounting || renderFrame !== null) return
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = null
+    const conversationId = chat.activeId
+    streamingPreview.value = chat.streamingText
+    void nextTick(() => {
       const el = scroller.value
-      if (el) el.scrollTop = el.scrollHeight
+      if (el && chat.activeId === conversationId) el.scrollTop = el.scrollHeight
     })
   })
 }
 
+function cancelMessageRender() {
+  if (renderFrame === null) return
+  cancelAnimationFrame(renderFrame)
+  renderFrame = null
+}
+
+onBeforeUnmount(() => {
+  unmounting = true
+  cancelMessageRender()
+})
+
+watch(
+  () => chat.activeId,
+  () => {
+    // 切换时立即清除旧会话的预览，下一帧读取新会话自己的文本。
+    cancelMessageRender()
+    streamingPreview.value = ''
+    scheduleMessageRender()
+  },
+  { flush: 'sync' },
+)
+
 async function handleApproval(decision: 'approve' | 'reject', note?: string) {
   const ok =
     decision === 'approve' ? await chat.approveApproval(note) : await chat.rejectApproval(note)
-  if (ok) scrollToBottom()
+  if (ok) scheduleMessageRender()
 }
 
 async function handleSend() {
@@ -100,31 +131,38 @@ async function handleSend() {
   if (!content.trim() || chat.sending || chat.loadingMessages) return
   // 失败时保留草稿，用户不用重打；成功由 store 清掉自己会话的草稿
   const skillMode = autoSkills.value ? 'auto' : 'manual'
+  // 深度回答进入支持模型工具调用的 Agent 接口，普通回答走消息流接口。
   const ok = chat.agentMode
     ? await chat.sendWithAgent(content, skillMode)
     : await chat.send(content)
   if (ok) {
     composer.value?.focus()
   }
-  scrollToBottom()
+  scheduleMessageRender()
 }
 
 watch(
   () => chat.activeId,
   () => {
-    scrollToBottom()
     void loadSkills()
   },
 )
 // 深度回答的步骤是逐个到达的，来一步滚一次
 watch(
   () => chat.agentSteps.length,
-  () => scrollToBottom(),
+  () => scheduleMessageRender(),
 )
-watch(() => chat.streamingText, scrollToBottom)
+watch(
+  () => chat.streamingText,
+  (text) => {
+    if (!text) streamingPreview.value = ''
+    scheduleMessageRender()
+  },
+  { immediate: true },
+)
 watch(
   () => chat.messages.length,
-  () => scrollToBottom(),
+  () => scheduleMessageRender(),
 )
 
 // 深链、刷新和历史导航都以路由参数为准。
@@ -193,12 +231,9 @@ void loadSkills()
           />
         </template>
 
-        <!-- 流式过程中的临时气泡：先显示已收到的半截文本，收到首字前显示三点 -->
-        <div v-if="chat.streamingText" class="chat__row chat__row--assistant">
-          <span class="chat__who"><i />助手</span>
-          <div class="chat__bubble chat__bubble--streaming">
-            <div class="chat__content">{{ chat.streamingText }}</div>
-          </div>
+        <!-- 首批 Markdown 渲染前保留等待提示。 -->
+        <div v-if="streamingPreview" class="chat__row chat__row--assistant chat__bubble--streaming">
+          <MarkdownContent :content="streamingPreview" />
           <span class="chat__meta">正在输入…</span>
         </div>
         <div
@@ -260,7 +295,7 @@ void loadSkills()
 
 /* 空态：标题用衬线，与登录页呼应；不放大插图 */
 
-.chat__bubble--streaming {
+.chat__bubble.chat__bubble--streaming {
   max-width: 100%;
   /* 按内容收窄：三个点的占位才不会拉成一整条 */
   width: fit-content;
