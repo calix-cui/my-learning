@@ -10,12 +10,25 @@ from typing import Any
 AgentEvent = dict[str, Any]
 
 
-def run_started(run_id: int, conversation_id: int) -> AgentEvent:
-    return {"type": "run_started", "run_id": run_id, "conversation_id": conversation_id}
+def run_started(run_id: int, conversation_id: int, user_message_id: int | None) -> AgentEvent:
+    return {
+        "type": "run_started",
+        "run_id": run_id,
+        "conversation_id": conversation_id,
+        "user_message_id": user_message_id,
+    }
 
 
 def step_started(seq: int, kind: str) -> AgentEvent:
     return {"type": "step_started", "seq": seq, "kind": kind}
+
+
+def assistant_delta(content: str) -> AgentEvent:
+    return {"type": "assistant_delta", "content": content}
+
+
+def assistant_preview_reset() -> AgentEvent:
+    return {"type": "assistant_preview_reset"}
 
 
 def assistant_text(seq: int, content: str) -> AgentEvent:
@@ -79,13 +92,16 @@ def approval_required(
     }
 
 
-def run_finished(run_id: int, content: str, steps: int, model: str | None) -> AgentEvent:
+def run_finished(
+    run_id: int, content: str, steps: int, model: str | None, assistant_message_id: int
+) -> AgentEvent:
     return {
         "type": "run_finished",
         "run_id": run_id,
         "content": content,
         "steps": steps,
         "model": model,
+        "assistant_message_id": assistant_message_id,
     }
 
 

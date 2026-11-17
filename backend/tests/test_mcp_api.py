@@ -34,7 +34,7 @@ def test_catalog_lists_builtin_entries(client: TestClient) -> None:
     assert resp.status_code == 200
     data = resp.json()["data"]
     slugs = [item["slug"] for item in data["items"]]
-    assert "filesystem" in slugs and "deepwiki" in slugs
+    assert {"filesystem", "deepwiki", "exa"} <= set(slugs)
     assert all(item["installed_id"] is None for item in data["items"])
     assert data["updated"]
 

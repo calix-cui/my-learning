@@ -4,7 +4,7 @@
 """
 
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from typing import Any
 
 from app.llm.base import (
@@ -12,6 +12,7 @@ from app.llm.base import (
     LLMError,
     LLMMessage,
     LLMReply,
+    ReasoningEffort,
     ToolCall,
     ToolCallReply,
     ToolSpec,
@@ -25,6 +26,22 @@ class FakeLLM:
     - `delay_seconds`：模拟慢请求，用于验证前端的「正在回复…」；
     - `error`：注入异常，用于验证 502/504 的错误映射。
     """
+
+    supports_tool_calls = True
+
+    def stream_with_tools(
+        self,
+        messages: list[LLMMessage],
+        tools: list[ToolSpec],
+        effort: ReasoningEffort,  # noqa: ARG002 -- 模拟模型使用固定剧本
+    ) -> Generator[str, None, ToolCallReply]:
+        reply = self.chat_with_tools(messages, tools)
+        content = reply["content"]
+        for index in range(0, len(content), 4):
+            if self.delay_seconds:
+                time.sleep(self.delay_seconds)
+            yield content[index : index + 4]
+        return reply
 
     def __init__(
         self,

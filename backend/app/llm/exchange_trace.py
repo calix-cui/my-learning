@@ -30,7 +30,12 @@ def llm_exchange(
         "llm.exchange.request", messages, **common, tools=[tool.get("name") for tool in tools]
     )
     if include_payloads:
-        trace("llm.exchange.request.body", **common, messages=messages, tools=tools)
+        trace(
+            "llm.exchange.request.body",
+            **common,
+            messages=[{k: v for k, v in m.items() if k != "reasoning_content"} for m in messages],
+            tools=tools,
+        )
 
     def record_result(reply: Mapping[str, object]) -> None:
         calls = reply.get("tool_calls")
@@ -45,7 +50,11 @@ def llm_exchange(
             call_count=len(calls) if isinstance(calls, list) else 0,
         )
         if include_payloads:
-            trace("llm.exchange.response.body", **common, reply=reply)
+            trace(
+                "llm.exchange.response.body",
+                **common,
+                reply={k: v for k, v in reply.items() if k != "reasoning_content"},
+            )
 
     try:
         yield record_result

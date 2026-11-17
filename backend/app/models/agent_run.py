@@ -10,7 +10,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -34,7 +34,10 @@ class AgentRun(Base):
     """一次 agent 运行。"""
 
     __tablename__ = "agent_runs"
-    __table_args__ = {"comment": "Agent 运行记录表"}
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "request_id", name="uq_agent_runs_request"),
+        {"comment": "Agent 运行记录表"},
+    )
 
     conversation_id: Mapped[int] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"),
@@ -48,6 +51,17 @@ class AgentRun(Base):
         nullable=False,
         index=True,
         comment="所属用户（数据隔离维度）",
+    )
+    user_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", name="fk_agent_runs_user_message", ondelete="SET NULL"),
+        index=True,
+        comment="触发运行的用户消息",
+    )
+    assistant_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", name="fk_agent_runs_assistant_message", ondelete="SET NULL"),
+        unique=True,
+        index=True,
+        comment="运行生成的最终助手消息",
     )
     status: Mapped[str] = mapped_column(
         String(16),
@@ -68,6 +82,15 @@ class AgentRun(Base):
     )
     skill_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True, comment="本次运行发现的 Skill 元数据与已加载内容快照"
+    )
+    request_id: Mapped[str | None] = mapped_column(
+        String(36), comment="同一会话内用于去重的客户端请求 ID"
+    )
+    reasoning_effort: Mapped[str | None] = mapped_column(
+        String(8), comment="聊天推理强度；空值用于旧版接口"
+    )
+    approval_context: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, comment="等待审批时用于模型续跑的私有上下文"
     )
     started_time: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.now, comment="开始时间"

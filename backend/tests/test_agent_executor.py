@@ -24,6 +24,7 @@ from app.agent.executor import (
 from app.agent.policy import ToolPolicy
 from app.agent.tools import ToolLevel, ToolRegistry
 from app.agent.tools.base import ToolSpec, spec_of
+from app.api.sse import encode_sse
 from app.auth.service import register_user
 from app.common.exceptions import BusinessError
 from app.llm.base import ToolCallReply
@@ -46,6 +47,33 @@ def _drain(events: Iterator[dict]) -> list[dict]:
 
 def _types(events: list[dict]) -> list[str]:
     return [event["type"] for event in events]
+
+
+def test_stream_closed_after_start_does_not_leave_running_row(db_session: Session):
+    user, conversation = _setup(db_session)
+    _, run, messages, is_first = prepare_run(
+        db_session,
+        user_id=user.id,
+        conversation_id=conversation.id,
+        content="查当前时间",
+        reasoning_effort="none",
+    )
+    stream = encode_sse(
+        stream_run(
+            db_session,
+            run=run,
+            conversation=conversation,
+            messages=messages,
+            llm=FakeLLM(),
+            is_first_message=is_first,
+            user_id=user.id,
+        )
+    )
+    assert '"type": "run_started"' in next(stream)
+    stream.close()
+    db_session.refresh(run)
+    assert run.status == "failed"
+    assert run.assistant_message_id is None
 
 
 def test_plain_answer_without_tools(db_session: Session):
@@ -639,15 +667,15 @@ def test_auto_skill_is_discovered_as_metadata_then_loaded_on_request(db_session:
             llm=llm,
             is_first_message=True,
             user_id=user.id,
-            registry=registry_for(db_session, user.id, conversation.id, skill_mode="auto"),
+            registry=registry_for(db_session, user.id, conversation.id),
         )
     )
 
     assert _types(events) == ["run_started", "skill_loaded", "run_finished"]
     assert events[1]["skill_key"] == descriptor.key
     assert SKILL_LOAD_TOOL_NAME in llm.tool_names_seen[0]
-    assert [name for name in llm.tool_names_seen[1] if name != SKILL_LOAD_TOOL_NAME] == ["now"]
-    # 其他 Skill 仍可发现；加载控制动作不属于被白名单收窄的执行工具。
+    assert {"calculator", "now"} <= set(llm.tool_names_seen[1])
+    # 其他 Skill 仍可发现。
     assert SKILL_LOAD_TOOL_NAME in llm.tool_names_seen[1]
     assert descriptor.description in llm.messages_seen[0][0]["content"]
     assert "AUTO_GUIDE_PRIVATE_INSTRUCTIONS" not in llm.messages_seen[0][0]["content"]
@@ -683,7 +711,7 @@ def test_auto_skill_load_failure_is_reported_and_model_can_continue(db_session: 
         llm=llm,
         is_first_message=True,
         user_id=user.id,
-        registry=registry_for(db_session, user.id, conversation.id, skill_mode="auto"),
+        registry=registry_for(db_session, user.id, conversation.id),
     )
     assert next(stream)["type"] == "run_started"
     failed = next(stream)
@@ -730,7 +758,7 @@ def test_off_mode_ignores_mounted_skill_and_does_not_expose_skill_control(db_ses
             llm=llm,
             is_first_message=True,
             user_id=user.id,
-            registry=registry_for(db_session, user.id, conversation.id, skill_mode="off"),
+            registry=registry_for(db_session, user.id, conversation.id),
         )
     )
 
@@ -756,7 +784,7 @@ def test_loaded_skill_snapshot_is_replayed_after_approval(db_session: Session):
         for item in skill_service.registry_for(db_session, user.id).discover()
         if item.slug == "approval-guide"
     )
-    registry = registry_for(db_session, user.id, conversation.id, skill_mode="auto")
+    registry = registry_for(db_session, user.id, conversation.id)
     _, run, messages, is_first = prepare_run(
         db_session,
         user_id=user.id,
@@ -798,7 +826,7 @@ def test_loaded_skill_snapshot_is_replayed_after_approval(db_session: Session):
         approved=True,
         note=None,
     )
-    base_registry = registry_for(db_session, user.id, conversation.id, skill_mode="off")
+    base_registry = registry_for(db_session, user.id, conversation.id)
     resumed_events = _drain(
         resume_run(
             db_session,
@@ -865,7 +893,7 @@ def test_skill_resources_survive_approval_and_do_not_reread_files(
             final_reply("完成"),
         ]
     )
-    registry = registry_for(db_session, user.id, conversation.id, skill_mode="off")
+    registry = registry_for(db_session, user.id, conversation.id)
     initial = list(
         stream_run(
             db_session,

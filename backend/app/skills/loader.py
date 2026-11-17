@@ -11,9 +11,6 @@ from pathlib import Path
 import yaml
 
 from app.skills.models import (
-    MAX_DESCRIPTION_CHARS,
-    MAX_INSTRUCTIONS_CHARS,
-    MAX_NAME_CHARS,
     MAX_TOOLS,
     SKILL_SLUG_PATTERN,
     SOURCE_BUILTIN,
@@ -24,6 +21,9 @@ from app.skills.models import (
 SKILLS_DIR = Path(__file__).resolve().parent
 SKILL_FILE = "SKILL.md"
 MAX_SKILL_FILE_BYTES = 65_536
+MAX_NAME_CHARS = 64
+MAX_DESCRIPTION_CHARS = 1024
+MAX_INSTRUCTIONS_CHARS = 12_000
 
 
 class SkillFormatError(ValueError):
@@ -48,6 +48,9 @@ def _split_frontmatter(text: str, *, origin: str) -> tuple[dict, str]:
 def _metadata_fields(
     meta: dict, *, origin: str, default_slug: str | None = None
 ) -> tuple[str, str, str, tuple[str, ...], str]:
+    for key in ("slug", "name", "description", "icon"):
+        if key in meta and not isinstance(meta[key], str):
+            raise SkillFormatError(f"{origin}: {key} 必须是文本")
     slug = str(meta.get("slug", default_slug or "")).strip()
     if not SKILL_SLUG_PATTERN.match(slug):
         raise SkillFormatError(f"{origin}: slug 不合法（{slug!r}），只允许小写字母数字与连字符")
@@ -60,8 +63,8 @@ def _metadata_fields(
     if not description or len(description) > MAX_DESCRIPTION_CHARS:
         raise SkillFormatError(f"{origin}: description 必填且不超过 {MAX_DESCRIPTION_CHARS} 字")
 
-    raw_tools = meta.get("tools") or []
-    if not isinstance(raw_tools, list):
+    raw_tools = meta.get("tools", [])
+    if not isinstance(raw_tools, list) or any(not isinstance(item, str) for item in raw_tools):
         raise SkillFormatError(f"{origin}: tools 必须是列表")
     tools = tuple(str(item).strip() for item in raw_tools if str(item).strip())
     if len(tools) > MAX_TOOLS:

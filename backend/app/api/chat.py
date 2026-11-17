@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api.agent import agent_stream_response
 from app.api.sse import SSE_HEADERS, encode_sse
 from app.auth.dependencies import CurrentUser
 from app.common.response import Response
@@ -18,6 +19,7 @@ from app.schemas.chat import (
     MessageCreateRequest,
     MessageExchangeResponse,
     MessageResponse,
+    MessageStreamRequest,
 )
 from app.schemas.skill import SkillMountRequest
 from app.services import chat_service, skill_service
@@ -69,8 +71,16 @@ def get_conversation(
     conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
     user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
+    message_limit: Annotated[int | None, Query(ge=1, le=100)] = None,
+    before_message_id: Annotated[int | None, Query(gt=0)] = None,
 ):
     conversation = chat_service.get_conversation(db, user.id, conversation_id)
+    if message_limit is not None or before_message_id is not None:
+        return Response.success(
+            data=chat_service.read_message_history(
+                db, conversation, limit=message_limit or 50, before_message_id=before_message_id
+            )
+        )
     data = {
         **ConversationResponse.model_validate(conversation).model_dump(),
         "messages": [MessageResponse.model_validate(m).model_dump() for m in conversation.messages],
@@ -155,8 +165,8 @@ def send_message(
     "/{conversation_id}/messages/stream",
     summary="发送消息（流式）",
     description=(
-        "写入用户消息并以 SSE 逐块返回助手回复。"
-        "事件类型：meta（带 user_message）/ delta（增量文本）/ done（最终消息）/ error。"
+        "写入用户消息并以 SSE 逐块返回助手回复。execution=auto 使用按需工具调用；"
+        "文本兼容模式保留 meta / delta / done / error。"
     ),
     response_class=StreamingResponse,
     responses={
@@ -168,11 +178,25 @@ def send_message(
 )
 def stream_message(
     conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
-    payload: MessageCreateRequest,
+    payload: MessageStreamRequest,
     user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(get_user_llm)],
 ):
+    if payload.execution == "auto":
+        return agent_stream_response(
+            db,
+            llm,
+            user.id,
+            conversation_id,
+            content=payload.content,
+            skill_mode=payload.skill_mode,
+            skill_keys=payload.skill_keys,
+            skill_catalog_version=payload.skill_catalog_version,
+            reasoning_effort=payload.reasoning_effort,
+            request_id=str(payload.request_id) if payload.request_id else None,
+        )
+
     # 先同步做完校验与落库：这样 404/400 仍是普通 JSON，而不是流里的错误事件
     conversation, user_message, context, is_first = chat_service.prepare_stream(
         db, user.id, conversation_id, payload.content

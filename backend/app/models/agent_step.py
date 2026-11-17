@@ -35,6 +35,16 @@ STEP_KINDS = (
 )
 
 
+# 历史时间线只读取可展示的执行步骤。
+REPLAY_STEP_KINDS = (
+    STEP_TOOL_CALL,
+    STEP_TOOL_RESULT,
+    STEP_SKILL_LOADED,
+    STEP_SKILL_LOAD_FAILED,
+    "skill_resource",
+)
+
+
 class AgentStep(Base):
     """运行的单个步骤。"""
 

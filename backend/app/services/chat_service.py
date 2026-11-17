@@ -2,16 +2,19 @@ import logging
 from collections.abc import Iterator
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.common.dev_trace import trace, trace_context
 from app.common.exceptions import BusinessError
 from app.llm import ChatMessage, LLMClient, LLMError
-from app.models import Conversation, Message
+from app.models import AgentRun, AgentStep, Conversation, Message
+from app.models.agent_run import RUN_RUNNING, RUN_WAITING_APPROVAL
+from app.models.agent_step import REPLAY_STEP_KINDS
 from app.schemas.chat import (
     ConversationCreateRequest,
+    ConversationHistoryResponse,
     ConversationResponse,
     ConversationUpdateRequest,
 )
@@ -77,16 +80,82 @@ def list_conversations(db: Session, user_id: int, page: int = 1, page_size: int 
         raise BusinessError("查询会话列表失败，请稍后重试", code=500) from exc
 
 
-def get_conversation(db: Session, user_id: int, conversation_id: int) -> Conversation:
-    """按「当前用户 + 会话 id」取会话：别人的会话在这里和不存在是一个结果（404）。"""
-    conversation = db.scalar(
-        select(Conversation).where(
-            Conversation.id == conversation_id, Conversation.user_id == user_id
-        )
+def get_conversation(
+    db: Session, user_id: int, conversation_id: int, *, lock: bool = False
+) -> Conversation:
+    """按「当前用户 + 会话 id」取会话；有锁的查询用于串行化同会话内的运行创建。"""
+    query = select(Conversation).where(
+        Conversation.id == conversation_id, Conversation.user_id == user_id
     )
+    conversation = db.scalar(query.with_for_update() if lock else query)
     if conversation is None:
         raise BusinessError("会话不存在", code=404)
     return conversation
+
+
+def read_message_history(
+    db: Session,
+    conversation: Conversation,
+    *,
+    limit: int,
+    before_message_id: int | None,
+) -> ConversationHistoryResponse:
+    """按消息主键翻页，同批返回该页执行摘要及当前活跃运行。"""
+    conversation_id = conversation.id
+    statement = select(Message).where(Message.conversation_id == conversation_id)
+    if before_message_id is not None:
+        statement = statement.where(Message.id < before_message_id)
+    rows = db.scalars(statement.order_by(Message.id.desc()).limit(limit + 1)).all()
+    messages = rows[:limit][::-1]
+    message_ids = [message.id for message in messages]
+    visible_count = (
+        select(func.count(AgentStep.id))
+        .where(AgentStep.run_id == AgentRun.id, AgentStep.kind.in_(REPLAY_STEP_KINDS))
+        .scalar_subquery()
+    )
+    summaries = select(
+        AgentRun.id,
+        AgentRun.user_message_id,
+        AgentRun.assistant_message_id,
+        AgentRun.status,
+        visible_count.label("visible_step_count"),
+    ).where(AgentRun.conversation_id == conversation_id, AgentRun.user_id == conversation.user_id)
+    active = AgentRun.status.in_((RUN_RUNNING, RUN_WAITING_APPROVAL))
+    runs = db.execute(
+        summaries.where(
+            or_(
+                AgentRun.assistant_message_id.in_(message_ids),
+                AgentRun.assistant_message_id.is_(None) & AgentRun.user_message_id.in_(message_ids),
+                active,
+            )
+        ).order_by(AgentRun.id.desc())
+    ).mappings()
+    # 老运行没有消息锚点，在首页单独显示最近记录。
+    legacy = (
+        list(
+            db.execute(
+                summaries.where(
+                    AgentRun.user_message_id.is_(None),
+                    AgentRun.assistant_message_id.is_(None),
+                    ~active,
+                    visible_count > 0,
+                )
+                .order_by(AgentRun.id.desc())
+                .limit(5)
+            ).mappings()
+        )
+        if before_message_id is None
+        else []
+    )
+    return ConversationHistoryResponse.model_validate(
+        {
+            **ConversationResponse.model_validate(conversation).model_dump(),
+            "messages": messages,
+            "next_before_message_id": messages[0].id if len(rows) > limit else None,
+            "runs": list(runs),
+            "legacy_runs": legacy,
+        }
+    )
 
 
 def rename_conversation(

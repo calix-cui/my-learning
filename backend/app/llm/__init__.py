@@ -45,6 +45,7 @@ class ModelConfig:
     api_key: str
     model: str
     timeout_seconds: float
+    tool_calls: bool = True
 
 
 def config_from_env() -> ModelConfig:
@@ -55,6 +56,7 @@ def config_from_env() -> ModelConfig:
         api_key=settings.llm_api_key.get_secret_value(),
         model=settings.llm_model,
         timeout_seconds=settings.llm_timeout_seconds,
+        tool_calls=settings.llm_tool_calls,
     )
 
 
@@ -87,6 +89,7 @@ def config_from_row(row: object | None) -> ModelConfig:
         timeout_seconds=float(
             getattr(row, "model_timeout_seconds", None) or settings.llm_timeout_seconds
         ),
+        tool_calls=settings.llm_tool_calls,
     )
 
 
@@ -105,6 +108,7 @@ def build_llm_for(config: ModelConfig) -> LLMClient:
         api_key=config.api_key,
         model=config.model,
         timeout_seconds=config.timeout_seconds,
+        supports_tool_calls=config.tool_calls,
     )
 
 

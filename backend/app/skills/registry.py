@@ -20,8 +20,9 @@ class SkillProvider(Protocol):
 class SkillRegistry:
     """Combines providers in priority order; earlier providers shadow duplicate slugs."""
 
-    def __init__(self, providers: list[SkillProvider]) -> None:
+    def __init__(self, providers: list[SkillProvider], *, preserve_sources: bool = False) -> None:
         self._providers = providers
+        self._preserve_sources = preserve_sources
         self._by_key: dict[str, tuple[SkillDescriptor, SkillProvider]] = {}
 
     def discover(self) -> list[SkillDescriptor]:
@@ -35,13 +36,13 @@ class SkillRegistry:
             for descriptor in descriptors:
                 if descriptor.key in by_key:
                     raise ValueError(f"Skill key 重复：{descriptor.key}")
-                if descriptor.slug in by_slug:
+                if descriptor.slug in by_slug and not self._preserve_sources:
                     continue
                 by_slug[descriptor.slug] = descriptor
                 by_key[descriptor.key] = (descriptor, provider)
         trace("skill.registry.discover", count=len(by_key))
         self._by_key = by_key
-        return list(by_slug.values())
+        return [item[0] for item in by_key.values()]
 
     def load(self, key: str) -> LoadedSkill | None:
         if not self._by_key:

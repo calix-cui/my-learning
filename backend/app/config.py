@@ -1,4 +1,5 @@
 # 读取连接信息
+from pathlib import Path
 from typing import Literal
 
 from pydantic import SecretStr, model_validator
@@ -17,12 +18,17 @@ class Settings(BaseSettings):
 
     database_url: str
 
+    # 本地 Skill 根目录由部署配置给出，用户根目录再按账号 ID 分隔。
+    skill_shared_dirs: list[Path] = []
+    skill_user_root: Path = Path(__file__).resolve().parents[2] / "data" / "skills"
+
     # 模型接入（阶段 4）。默认 fake：CI 与没有 key 的本地环境都能跑通整条链路。
     llm_provider: Literal["fake", "openai"] = "fake"
     llm_base_url: str = ""
     llm_api_key: SecretStr = SecretStr("")  # SecretStr 让日志/报错里显示为 **********
     llm_model: str = ""
     llm_timeout_seconds: float = 30.0
+    llm_tool_calls: bool = True
     # 假模型每块的延迟：本地演示流式效果时调大一点（默认 0，测试不受影响）
     llm_fake_delay_seconds: float = 0.0
     # 显式开启时，开发日志才包含实际发送给模型的正文。

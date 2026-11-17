@@ -36,10 +36,20 @@ class AgentStepResponse(BaseModel):
         return value.strftime("%Y-%m-%d %H:%M:%S")
 
 
+class AgentRunSummary(BaseModel):
+    id: int
+    user_message_id: int | None
+    assistant_message_id: int | None
+    status: Literal["running", "waiting_approval", "completed", "failed", "cancelled"]
+    visible_step_count: int
+
+
 class AgentRunResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    user_message_id: int | None = None
+    assistant_message_id: int | None = None
     status: Literal["running", "waiting_approval", "completed", "failed", "cancelled"] = Field(
         description="运行状态"
     )

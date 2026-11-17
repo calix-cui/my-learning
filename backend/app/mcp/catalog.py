@@ -126,6 +126,16 @@ CATALOG: tuple[CatalogEntry, ...] = (
         docs_url="https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
     ),
     CatalogEntry(
+        slug="exa",
+        display_name="网页搜索（Exa）",
+        summary="搜索公开网页，返回摘要和来源链接。发送查询前需要你确认。",
+        transport="http",
+        url="https://mcp.exa.ai/mcp?tools=web_search_exa",
+        icon="globe",
+        tags=("远程", "网络"),
+        docs_url="https://github.com/exa-labs/exa-mcp-server",
+    ),
+    CatalogEntry(
         slug="deepwiki",
         display_name="DeepWiki",
         summary="远程服务：问任意公开 GitHub 仓库的架构与用法。",

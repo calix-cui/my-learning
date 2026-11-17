@@ -5,10 +5,12 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from app.llm import get_user_llm
 from app.llm.fake import FakeLLM, final_reply, tool_reply
 from app.main import app
+from app.models import AgentRun
 
 
 def _read_events(response) -> list[dict]:
@@ -175,6 +177,11 @@ def test_write_tool_stops_at_approval_and_can_be_approved(client: TestClient):
 
         listed = client.get(f"/api/agent/runs/{approval['run_id']}/approvals")
         assert listed.json()["data"]["items"][0]["status"] == "pending"
+        history_path = f"/api/conversations/{conversation_id}"
+        waiting = client.get(history_path, params={"message_limit": 1}).json()["data"]
+        assert waiting["runs"][0]["id"] == approval["run_id"]
+        assert waiting["runs"][0]["user_message_id"] == events[0]["user_message_id"]
+        assert waiting["runs"][0]["assistant_message_id"] is None
 
         decided = client.post(
             f"/api/agent/runs/{approval['run_id']}/approvals/{approval['approval_id']}",
@@ -183,6 +190,9 @@ def test_write_tool_stops_at_approval_and_can_be_approved(client: TestClient):
         resumed = _read_events(decided)
         assert [event["type"] for event in resumed] == ["tool_result", "run_finished"]
         assert resumed[0]["ok"] is True
+        completed = client.get(history_path, params={"message_limit": 1}).json()["data"]
+        assert completed["runs"][0]["id"] == approval["run_id"]
+        assert completed["runs"][0]["assistant_message_id"] == resumed[-1]["assistant_message_id"]
 
         detail = client.get(f"/api/conversations/{conversation_id}").json()["data"]
         assert detail["title"] == "新名字"
@@ -250,3 +260,92 @@ def test_approvals_are_scoped_to_the_owner(client: TestClient, anon_client: Test
     )
     # 别人的 run：一律 404，不暴露存在性
     assert other.get(f"/api/agent/runs/{approval['run_id']}/approvals").status_code == 404
+
+
+def test_replay_is_linked_by_message_ids_across_runs_and_pages(client: TestClient):
+    conversation_id = _conversation(client)
+    fake = FakeLLM(
+        tool_script=[
+            tool_reply("calculator", {"expression": "2+3"}),
+            final_reply("计算完成"),
+            tool_reply("calculator", {"expression": "6*7"}),
+            final_reply("计算完成"),
+        ]
+    )
+    app.dependency_overrides[get_user_llm] = lambda: fake
+    path = f"/api/conversations/{conversation_id}"
+    runs = []
+    try:
+        for _ in range(2):
+            with client.stream(
+                "POST", f"{path}/agent/stream", json={"content": "计算一下"}
+            ) as stream:
+                events = _read_events(stream)
+                runs.append((events[0], events[-1]))
+    finally:
+        app.dependency_overrides.pop(get_user_llm, None)
+
+    latest = client.get(path, params={"message_limit": 2}).json()["data"]
+    older = client.get(
+        path, params={"message_limit": 2, "before_message_id": latest["next_before_message_id"]}
+    ).json()["data"]
+    assert older["next_before_message_id"] is None
+    for (started, finished), page, expression, value in zip(
+        runs, (older, latest), ("2+3", "6*7"), ("5", "42"), strict=True
+    ):
+        user_id, assistant_id = [message["id"] for message in page["messages"]]
+        assert started["user_message_id"] == user_id
+        assert finished["assistant_message_id"] == assistant_id
+        assert page["runs"] == [
+            {
+                "id": started["run_id"],
+                "user_message_id": user_id,
+                "assistant_message_id": assistant_id,
+                "status": "completed",
+                "visible_step_count": 2,
+            }
+        ]
+        response = client.get(f"/api/agent/runs/{started['run_id']}/steps")
+        assert response.status_code == 200
+        steps = response.json()["data"]["items"]
+        assert [step["kind"] for step in steps] == ["tool_call", "tool_result"]
+        assert steps[0]["tool_args"] == {"expression": expression}
+        assert steps[1]["content"] == value
+
+    # 旧接口仍可一次读取全部消息。
+    assert len(client.get(path).json()["data"]["messages"]) == 4
+    other_path = f"/api/conversations/{_conversation(client)}"
+    assert client.get(other_path, params={"message_limit": 2}).json()["data"]["runs"] == []
+
+
+@pytest.mark.usefixtures("llm")
+def test_replay_does_not_attach_unlinked_legacy_run_to_a_message(
+    client: TestClient, db_session: Session
+):
+    conversation_id = _conversation(client)
+    path = f"/api/conversations/{conversation_id}"
+    with client.stream("POST", f"{path}/agent/stream", json={"content": "算一下"}) as stream:
+        run_id = _read_events(stream)[0]["run_id"]
+    run = db_session.get(AgentRun, run_id)
+    run.user_message_id = None
+    run.assistant_message_id = None
+    db_session.commit()
+    page = client.get(path, params={"message_limit": 10}).json()["data"]
+    assert page["runs"] == []
+    assert len(page["messages"]) == 2
+    assert [item["id"] for item in page["legacy_runs"]] == [run_id]
+
+
+@pytest.mark.usefixtures("llm")
+def test_foreign_account_cannot_fetch_replay(client: TestClient, anon_client: TestClient):
+    conversation_id = _conversation(client)
+    path = f"/api/conversations/{conversation_id}"
+    with client.stream("POST", f"{path}/agent/stream", json={"content": "算一下"}) as stream:
+        run_id = _read_events(stream)[0]["run_id"]
+    assert anon_client.get(f"/api/agent/runs/{run_id}/steps").status_code == 401
+    anon_client.post(
+        "/api/auth/register",
+        json={"email": "replay-other@example.com", "password": "password123"},
+    )
+    assert anon_client.get(f"/api/agent/runs/{run_id}/steps").status_code == 404
+    assert anon_client.get(path, params={"message_limit": 2}).status_code == 404

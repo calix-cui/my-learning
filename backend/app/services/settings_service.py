@@ -19,6 +19,7 @@ from app.common.exceptions import BusinessError
 from app.config import settings
 from app.llm import ModelConfig, build_llm_for, config_from_env, config_from_row
 from app.llm.base import ChatMessage, LLMError, LLMTimeoutError
+from app.llm.openai_compatible import supports_reasoning
 from app.models import AgentRun, AgentStep, UserSettings
 from app.models.agent_step import STEP_TOOL_CALL
 from app.schemas.settings import (
@@ -66,6 +67,8 @@ def _to_response(row: UserSettings | None) -> ModelSettingsResponse:
         env = config_from_env()
         return ModelSettingsResponse(
             provider=env.provider,  # type: ignore[arg-type]
+            supports_reasoning_effort=env.provider == "openai"
+            and supports_reasoning(env.base_url, env.model),
             base_url=env.base_url or None,
             model=env.model or None,
             timeout_seconds=int(env.timeout_seconds),
@@ -78,6 +81,8 @@ def _to_response(row: UserSettings | None) -> ModelSettingsResponse:
 
     return ModelSettingsResponse(
         provider=row.model_provider,  # type: ignore[arg-type]
+        supports_reasoning_effort=row.model_provider == "openai"
+        and supports_reasoning(row.model_base_url or "", row.model_name or ""),
         base_url=row.model_base_url,
         model=row.model_name,
         timeout_seconds=row.model_timeout_seconds,

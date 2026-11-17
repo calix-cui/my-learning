@@ -65,6 +65,7 @@ temp/
 *.db
 .cache/
 data/generated/
+backend/data/skills/
 
 # --- 端到端验收产物（pnpm acceptance 生成） ---
 .acceptance/

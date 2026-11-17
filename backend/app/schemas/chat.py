@@ -1,6 +1,11 @@
 from datetime import datetime
+from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+from app.llm.base import ReasoningEffort
+from app.schemas.agent import AgentRunSummary
 
 
 class ConversationCreateRequest(BaseModel):
@@ -55,6 +60,13 @@ class ConversationDetailResponse(ConversationResponse):
     messages: list[MessageResponse] = Field(description="该会话的全部消息，按发送顺序")
 
 
+class ConversationHistoryResponse(ConversationDetailResponse):
+    messages: list[MessageResponse] = Field(description="当前页消息，按消息 ID 升序")
+    next_before_message_id: int | None
+    runs: list[AgentRunSummary]
+    legacy_runs: list[AgentRunSummary]
+
+
 class ConversationPageResponse(BaseModel):
     items: list[ConversationListItemResponse] = Field(description="当前页会话")
     total: int = Field(description="会话总数")
@@ -66,6 +78,15 @@ class MessageCreateRequest(BaseModel):
     """发一条用户消息。空串走 422，纯空白由 service 判 400。"""
 
     content: str = Field(min_length=1, max_length=4000, description="消息正文")
+
+
+class MessageStreamRequest(MessageCreateRequest):
+    execution: Literal["text", "auto"] = "text"
+    request_id: UUID | None = None
+    skill_keys: list[str] = Field(default_factory=list, max_length=3)
+    skill_catalog_version: str | None = Field(default=None, max_length=64)
+    reasoning_effort: ReasoningEffort = "none"
+    skill_mode: Literal["off", "manual", "auto"] = "auto"
 
 
 class MessageExchangeResponse(BaseModel):

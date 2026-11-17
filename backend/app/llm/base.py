@@ -3,10 +3,12 @@
 业务代码只依赖这里的 `LLMClient` 协议，不关心背后是假实现还是真实服务。
 """
 
-from collections.abc import Iterator
-from typing import Any, Protocol, TypedDict
+from collections.abc import Generator, Iterator
+from typing import Any, Literal, Protocol, TypedDict
 
 from app.common.exceptions import BusinessError
+
+ReasoningEffort = Literal["none", "high"]
 
 
 class ChatMessage(TypedDict):
@@ -60,9 +62,14 @@ class LLMMessage(TypedDict, total=False):
     content: str
     tool_calls: list[dict[str, Any]]
     tool_call_id: str
+    reasoning_content: str
 
 
-class ToolCallReply(TypedDict):
+class _ProviderReply(TypedDict, total=False):
+    reasoning_content: str
+
+
+class ToolCallReply(_ProviderReply):
     """一次带工具的补全结果。
 
     `tool_calls` 为空表示模型已经给出最终答复；否则要继续执行工具再来一轮。
@@ -90,6 +97,12 @@ class LLMTimeoutError(LLMError):
 
 class LLMClient(Protocol):
     """模型客户端协议：普通补全、流式文本、带工具的一轮补全。"""
+
+    supports_tool_calls: bool
+
+    def stream_with_tools(
+        self, messages: list[LLMMessage], tools: list[ToolSpec], effort: ReasoningEffort
+    ) -> Generator[str, None, ToolCallReply]: ...
 
     def chat(self, messages: list[ChatMessage]) -> LLMReply: ...
 

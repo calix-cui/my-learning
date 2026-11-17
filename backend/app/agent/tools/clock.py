@@ -18,15 +18,13 @@ class NowArgs(BaseModel):
     timezone: str = Field(
         default=DEFAULT_TIMEZONE,
         max_length=64,
-        description="IANA 时区名，例如 Asia/Shanghai、UTC；不确定就省略，默认本地时区",
+        description="IANA 时区名，例如 Asia/Shanghai、UTC；不确定就省略，默认 Asia/Shanghai",
     )
 
 
 class NowTool:
     name = "now"
-    description = (
-        "获取当前日期与时间（含星期）。用户问「现在几点/今天几号」时用它，不要凭记忆回答。"
-    )
+    description = "获取当前日期与时间（含星期）。用户问当前日期、星期或时间时使用；若用户指定了城市或时区，传入对应的 IANA 时区。"
     args_model = NowArgs
     level = ToolLevel.READ
 
@@ -45,4 +43,4 @@ class NowTool:
             raise ToolError(f"未知时区：{args.timezone}") from exc
         moment = datetime.now(zone)
         weekday = "一二三四五六日"[moment.weekday()]
-        return moment.strftime(f"%Y-%m-%d %H:%M:%S %Z（星期{weekday}）")
+        return f"{moment:%Y-%m-%d %H:%M:%S %z} {zone.key}（星期{weekday}）"

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -32,6 +32,9 @@ class UserSettings(Base):
         unique=True,
         index=True,
         comment="所属用户（一对一）",
+    )
+    skill_catalog: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, comment="当前账号已发现的本地 Skill 目录元数据快照"
     )
     # 是否真的保存过模型配置。外观（主题）也会在这一行落库，
     # 不能因为「有行」就认定用户配过模型，否则新账号会丢掉环境变量那套默认值。

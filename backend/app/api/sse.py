@@ -14,6 +14,11 @@ SSE_HEADERS = {
 
 
 def encode_sse(events: Iterator[dict]) -> Iterator[str]:
-    for event in events:
-        # ensure_ascii=False：中文直接输出，不转成 \uXXXX，方便 curl 观察
-        yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+    try:
+        for event in events:
+            # 保留中文，便于调试事件流。
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+    finally:
+        close = getattr(events, "close", None)
+        if close is not None:
+            close()

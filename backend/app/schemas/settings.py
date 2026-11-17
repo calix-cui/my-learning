@@ -18,6 +18,7 @@ class ModelSettingsResponse(BaseModel):
     """当前用户的模型配置（不含明文 Key）。"""
 
     provider: ModelProvider
+    supports_reasoning_effort: bool = False
     base_url: str | None = None
     model: str | None = None
     timeout_seconds: int

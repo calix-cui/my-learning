@@ -1,7 +1,7 @@
 """Agent 运行接口：流式跑一次循环，并回放历史运行。
 
-和对话接口的关系：普通对话走 `/messages/stream`（一问一答）；
-需要查资料/算数时走这里，多一个「工具往返」的过程，逐步可见。
+聊天页使用 `/messages/stream` 的自动执行模式。旧 Agent 入口和审批续跑
+复用同一执行循环，保留各自的 SSE 契约。
 """
 
 from typing import Annotated
@@ -19,17 +19,21 @@ from app.agent.executor import (
     resume_run,
     stream_run,
 )
+from app.agent.tools import ToolRegistry
 from app.api.sse import SSE_HEADERS, encode_sse
 from app.auth.dependencies import CurrentUser
 from app.common.exceptions import BusinessError
 from app.common.response import Response
 from app.dependencies import get_db
 from app.llm import LLMClient, get_user_llm
-from app.models import AgentApproval, AgentRun
+from app.llm.base import ReasoningEffort
+from app.models import AgentApproval, AgentRun, AgentStep
+from app.models.agent_step import REPLAY_STEP_KINDS
 from app.schemas.agent import (
     AgentApprovalListResponse,
     AgentMessageRequest,
     AgentRunListResponse,
+    AgentStepResponse,
     ApprovalDecisionRequest,
 )
 from app.services import chat_service
@@ -57,16 +61,42 @@ def stream_agent_run(
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(get_user_llm)],
 ):
+    return agent_stream_response(
+        db, llm, user.id, conversation_id, content=payload.content, skill_mode=payload.skill_mode
+    )
+
+
+def agent_stream_response(
+    db: Session,
+    llm: LLMClient,
+    user_id: int,
+    conversation_id: int,
+    *,
+    content: str,
+    skill_mode: str,
+    reasoning_effort: ReasoningEffort | None = None,
+    request_id: str | None = None,
+    skill_keys: list[str] | None = None,
+    skill_catalog_version: str | None = None,
+) -> StreamingResponse:
     # 先同步做校验与落库：404/400/409 仍是普通 JSON，只有真正开始循环后才进 SSE
     conversation, run, messages, is_first = prepare_run(
         db,
-        user_id=user.id,
+        user_id=user_id,
         conversation_id=conversation_id,
-        content=payload.content,
-        skill_mode=payload.skill_mode,
+        content=content,
+        skill_mode=skill_mode,
+        reasoning_effort=reasoning_effort,
+        request_id=request_id,
+        skill_keys=skill_keys,
+        skill_catalog_version=skill_catalog_version,
     )
     # 按当前用户和会话装配工具，再将注册表与执行策略交给 Agent 循环。
-    registry = registry_for(db, user.id, conversation.id, skill_mode=payload.skill_mode)
+    registry = (
+        registry_for(db, user_id, conversation.id)
+        if getattr(llm, "supports_tool_calls", True)
+        else ToolRegistry([])
+    )
     events = stream_run(
         db,
         run=run,
@@ -74,9 +104,9 @@ def stream_agent_run(
         messages=messages,
         llm=llm,
         is_first_message=is_first,
-        user_id=user.id,
+        user_id=user_id,
         registry=registry,
-        policy=build_policy(db, user_id=user.id, registry=registry, run=run),
+        policy=build_policy(db, user_id=user_id, registry=registry, run=run),
     )
     return StreamingResponse(
         encode_sse(events), media_type="text/event-stream", headers=SSE_HEADERS
@@ -105,6 +135,29 @@ def list_agent_runs(
         .limit(limit)
     ).all()
     return Response.success(data=AgentRunListResponse.model_validate({"items": list(rows)}))
+
+
+@approvals_router.get(
+    "/runs/{run_id}/steps",
+    response_model=Response,
+    summary="查看某次运行的执行步骤",
+)
+def get_replay_steps(
+    run_id: Annotated[int, Path(gt=0, description="运行ID")],
+    user: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+):
+    run = db.scalar(select(AgentRun.id).where(AgentRun.id == run_id, AgentRun.user_id == user.id))
+    if run is None:
+        raise BusinessError("运行不存在", code=404)
+    steps = db.scalars(
+        select(AgentStep)
+        .where(AgentStep.run_id == run_id, AgentStep.kind.in_(REPLAY_STEP_KINDS))
+        .order_by(AgentStep.seq)
+    )
+    return Response.success(
+        data={"items": [AgentStepResponse.model_validate(step) for step in steps]}
+    )
 
 
 @approvals_router.get(
@@ -154,8 +207,8 @@ def decide(
         approved=payload.decision == "approve",
         note=payload.note,
     )
-    # 恢复执行时先组装基础工具，再按原运行的 Skill 快照恢复工具范围。
-    registry = registry_for(db, user.id, run.conversation_id, skill_mode="off")
+    # 审批续跑按当前账号工具设置重新核对工具和权限。
+    registry = registry_for(db, user.id, run.conversation_id)
     events = resume_run(
         db,
         run=run,

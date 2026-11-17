@@ -92,7 +92,7 @@ def test_skill_registry_discovers_metadata_then_loads_content(tmp_path):
     assert loaded.content_hash
 
 
-def test_filesystem_skill_discovery_refreshes_and_isolates_invalid_files(tmp_path):
+def test_filesystem_skill_discovery_uses_snapshot_and_rescan_isolates_invalid_files(tmp_path):
     root = tmp_path / "skills"
     first = root / "first"
     first.mkdir(parents=True)
@@ -110,7 +110,8 @@ def test_filesystem_skill_discovery_refreshes_and_isolates_invalid_files(tmp_pat
         "---\nname: Second\ndescription: second skill\n---\nbody", encoding="utf-8"
     )
 
-    assert [item.slug for item in provider.discover()] == ["first", "second"]
+    assert [item.slug for item in provider.discover()] == ["first"]
+    assert [item.slug for item in FileSystemSkillProvider(root).discover()] == ["first", "second"]
 
 
 def test_system_prompt_lists_tools_and_rules():
@@ -230,7 +231,7 @@ def test_mount_and_unmount_skill(db_session: Session, user):
         skill_service.mount_skill(db_session, user.id, conversation.id, "no-such-skill")
 
 
-def test_mounted_skill_injects_system_message_and_narrows_tools(db_session: Session, user):
+def test_mounted_skill_injects_system_message_without_narrowing_tools(db_session: Session, user):
     conversation = _conversation(db_session, user)
     skill_service.mount_skill(db_session, user.id, conversation.id, "meeting-notes")
 
@@ -238,8 +239,7 @@ def test_mounted_skill_injects_system_message_and_narrows_tools(db_session: Sess
         db_session, user_id=user.id, conversation_id=conversation.id, content="记一下会"
     )
     registry = registry_for(db_session, user.id, conversation.id)
-    # 白名单只有 now
-    assert registry.enabled_names() == ["now"]
+    assert {"now", "calculator"} <= set(registry.enabled_names())
 
     captured: list = []
 
@@ -266,7 +266,8 @@ def test_mounted_skill_injects_system_message_and_narrows_tools(db_session: Sess
     first = captured[0][0]
     assert first["role"] == "system"
     assert "当前技能：会议纪要" in first["content"]
-    assert "本次对话只开放这些工具：now" in first["content"]
+    assert "本次运行可用的工具：" in first["content"]
+    assert "calculator" in first["content"]
 
 
 def test_deleting_skill_falls_back_to_no_skill(db_session: Session, user):

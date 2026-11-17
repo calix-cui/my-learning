@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.service import register_user
-from app.models import AgentApproval, AgentRun, AgentStep, Conversation, UserSettings
+from app.models import AgentApproval, AgentRun, AgentStep, Conversation, Message, UserSettings
 from app.models.user_settings import DEFAULT_DAILY_TOOL_BUDGET
 
 
@@ -73,6 +73,24 @@ def test_run_id_and_seq_are_unique(db_session: Session):
     db_session.commit()
     db_session.add(AgentStep(run_id=run.id, seq=1, kind="assistant_text"))
 
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_assistant_message_can_only_belong_to_one_run(db_session: Session, user):
+    conversation = _conversation(db_session, user.id)
+    message = Message(conversation_id=conversation.id, role="assistant", content="最终答复")
+    db_session.add(message)
+    db_session.flush()
+    for _ in range(2):
+        db_session.add(
+            AgentRun(
+                user_id=user.id,
+                conversation_id=conversation.id,
+                assistant_message_id=message.id,
+            )
+        )
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()

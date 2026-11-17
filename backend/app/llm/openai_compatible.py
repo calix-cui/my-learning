@@ -5,7 +5,8 @@
 
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -16,6 +17,7 @@ from app.llm.base import (
     LLMMessage,
     LLMReply,
     LLMTimeoutError,
+    ReasoningEffort,
     ToolCall,
     ToolCallReply,
     ToolSpec,
@@ -46,11 +48,15 @@ class OpenAICompatibleClient:
         model: str,
         timeout_seconds: float = 30.0,
         client: httpx.Client | None = None,
+        *,
+        supports_tool_calls: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.supports_tool_calls = supports_tool_calls
+        self.provider_host = _provider_host(self.base_url)
         # 允许注入 client，测试里用 MockTransport 拦截所有请求，不碰真实网络。
         self._client = client or _default_client(timeout_seconds)
 
@@ -75,6 +81,8 @@ class OpenAICompatibleClient:
             item: dict[str, object] = {"role": role, "content": message.get("content", "")}
             if message.get("tool_calls"):
                 item["tool_calls"] = message["tool_calls"]
+            if self.provider_host == "api.deepseek.com" and "reasoning_content" in message:
+                item["reasoning_content"] = message["reasoning_content"]
             if message.get("tool_call_id"):
                 item["tool_call_id"] = message["tool_call_id"]
             converted.append(item)
@@ -180,6 +188,92 @@ class OpenAICompatibleClient:
         model = data.get("model") or self.model
         return LLMReply(content=content, model=str(model))
 
+    def stream_with_tools(
+        self, messages: list[LLMMessage], tools: list[ToolSpec], effort: ReasoningEffort
+    ) -> Generator[str, None, ToolCallReply]:
+        payload = self._tool_payload(messages, tools)
+        payload["stream"] = True
+        if self.provider_host == "api.deepseek.com":
+            payload["thinking"] = {"type": "enabled" if effort == "high" else "disabled"}
+            if effort == "high" and self.model in {"deepseek-flash", "deepseek-v4-pro"}:
+                payload["reasoning_effort"] = "high"
+        elif self.provider_host == "api.openai.com" and supports_reasoning(
+            self.base_url, self.model
+        ):
+            payload["reasoning_effort"] = "high" if effort == "high" else "low"
+
+        with llm_exchange(self.model, "tools_stream", messages, tools) as record:
+            reply = yield from self._stream_tool_round(payload)
+            record(reply)
+            return reply
+
+    def _stream_tool_round(self, payload: dict[str, object]) -> Generator[str, None, ToolCallReply]:
+        pieces: list[str] = []
+        private_pieces: list[str] = []
+        calls: dict[int, ToolCall] = {}
+        finish = ""
+        model = self.model
+        try:
+            with self._client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=self._headers,
+                timeout=self.timeout_seconds,
+            ) as response:
+                self._raise_for_status(response.status_code)
+                for line in response.iter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if raw == "[DONE]":
+                        break
+                    frame = json.loads(raw)
+                    model = frame.get("model") or model
+                    choices = frame["choices"]
+                    if not choices:  # 使用量结算帧没有候选消息。
+                        continue
+                    choice = choices[0]
+                    delta = choice["delta"]
+                    for fragment in delta.get("tool_calls") or ():
+                        _merge_call_fragment(calls, fragment)
+                    if self.provider_host == "api.deepseek.com" and isinstance(
+                        private := delta.get("reasoning_content"), str
+                    ):
+                        private_pieces.append(private)
+                    piece = delta.get("content")
+                    if piece:
+                        if not isinstance(piece, str):
+                            raise TypeError("content")
+                        pieces.append(piece)
+                        yield piece
+                    if choice.get("finish_reason"):
+                        finish = choice["finish_reason"]
+                        break
+        except httpx.TimeoutException as exc:
+            raise LLMTimeoutError() from exc
+        except httpx.HTTPError as exc:
+            raise LLMError() from exc
+        except (KeyError, IndexError, ValueError, TypeError, AttributeError) as exc:
+            raise LLMError("模型返回格式无法解析") from exc
+
+        ordered = [calls[index] for index in sorted(calls)]
+        if finish not in {"stop", "tool_calls"} or bool(ordered) != (finish == "tool_calls"):
+            raise LLMError("模型回复未完整结束，请重试")
+        if any(not call["name"] or not call["id"] for call in ordered) or len(
+            {call["id"] for call in ordered}
+        ) != len(ordered):
+            raise LLMError("模型返回的工具调用不完整")
+        content = "".join(pieces)
+        if not ordered and not content.strip():
+            raise LLMError("模型返回内容为空")
+        reply = ToolCallReply(
+            content=content, tool_calls=ordered, model=str(model), finish_reason=finish
+        )
+        if private_pieces:
+            reply["reasoning_content"] = "".join(private_pieces)
+        return reply
+
     def chat_with_tools(self, messages: list[LLMMessage], tools: list[ToolSpec]) -> ToolCallReply:
         with llm_exchange(self.model, "tools", messages, tools) as record:
             reply = self._chat_with_tools(messages, tools)
@@ -258,6 +352,40 @@ class OpenAICompatibleClient:
             model=str(data.get("model") or self.model),
             finish_reason=str(choice.get("finish_reason") or ("tool_calls" if calls else "stop")),
         )
+
+
+def _provider_host(base_url: str) -> str | None:
+    try:
+        return urlsplit(base_url).hostname
+    except ValueError:
+        return None
+
+
+def supports_reasoning(base_url: str, model: str) -> bool:
+    """只为已经核对过协议的模型显示推理开关。"""
+    host = _provider_host(base_url)
+    if host == "api.deepseek.com":
+        return model in {"deepseek-chat", "deepseek-reasoner", "deepseek-flash", "deepseek-v4-pro"}
+    if host == "api.openai.com":
+        return model in {"gpt-5", "gpt-5-mini", "gpt-5.1", "gpt-5.2", "gpt-5.4", "gpt-5.4-mini"}
+    return False
+
+
+def _merge_call_fragment(calls: dict[int, ToolCall], fragment: dict) -> None:
+    index = fragment["index"]
+    if not isinstance(index, int) or not 0 <= index < 128:
+        raise ValueError("tool index")
+    call = calls.setdefault(index, ToolCall(id="", name="", arguments=""))
+    function = fragment.get("function") or {}
+    for key, value in (
+        ("id", fragment.get("id")),
+        ("name", function.get("name")),
+        ("arguments", function.get("arguments")),
+    ):
+        if value is not None:
+            if not isinstance(value, str):
+                raise TypeError("tool fragment")
+            call[key] += value
 
 
 def _as_json_text(value: object) -> str:

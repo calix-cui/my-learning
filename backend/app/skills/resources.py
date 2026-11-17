@@ -67,7 +67,13 @@ def list_resources(root: Path) -> tuple[str, ...]:
 
 
 def read_resource(root: Path, path: str) -> str:
-    parts = resource_parts(path)
+    return read_package_text(root, resource_parts(path), MAX_RESOURCE_BYTES)
+
+
+def read_package_text(root: Path, parts: tuple[str, ...], max_bytes: int) -> str:
+    """以目录描述符固定路径，拒绝链接、特殊文件和超限 UTF-8 内容。"""
+    if not parts or any(part in {"", ".", ".."} or "/" in part or "\\" in part for part in parts):
+        raise SkillResourceError("文件路径不合法")
     # Fail closed on platforms without safe descriptor-relative file access.
     if os.open not in os.supports_dir_fd or not hasattr(os, "O_NOFOLLOW"):
         raise SkillResourceError("当前平台暂不支持安全资源读取")
@@ -83,15 +89,15 @@ def read_resource(root: Path, path: str) -> str:
         fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
         descriptors.append(fd)
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_RESOURCE_BYTES:
-            raise SkillResourceError("资源必须是大小不超过 16 KiB 的普通文本文件")
+        if not stat.S_ISREG(info.st_mode) or info.st_size > max_bytes:
+            raise SkillResourceError("文件必须是大小受限的普通文本文件")
         raw = bytearray()
-        while len(raw) <= MAX_RESOURCE_BYTES:
-            chunk = os.read(fd, min(4096, MAX_RESOURCE_BYTES + 1 - len(raw)))
+        while len(raw) <= max_bytes:
+            chunk = os.read(fd, min(4096, max_bytes + 1 - len(raw)))
             if not chunk:
                 break
             raw.extend(chunk)
-        if len(raw) > MAX_RESOURCE_BYTES:
+        if len(raw) > max_bytes:
             raise SkillResourceError("资源超过大小限制")
         content = raw.decode("utf-8")
         if any(ord(char) < 32 and char not in "\n\r\t" for char in content):
