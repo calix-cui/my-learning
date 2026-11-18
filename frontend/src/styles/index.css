@@ -16,6 +16,8 @@
   --ma-color-sunken: #f3f0ea;
   --ma-color-ink: #1c1b18;
   --ma-color-muted: #6b675e;
+  --ma-color-text: #a3a3a3;
+  --ma-color-text-hover: #1f1f1f;
   --ma-color-faint: #9a958a;
   --ma-color-line: #e5e0d6;
   --ma-color-line-strong: #d2ccbe;
@@ -120,6 +122,7 @@ time,
   background: var(--ma-color-line-strong);
   border: 2px solid transparent;
   border-radius: 999px;
+  -webkit-background-clip: content-box;
   background-clip: content-box;
 }
 
@@ -334,7 +337,25 @@ time,
   --tint-to: 4%;
 }
 
+/* 可交互文字默认浅灰，悬停或键盘聚焦时使用主题对应的强调色。 */
+.u-text-action {
+  color: var(--ma-color-text);
+  cursor: pointer;
+  transition: color var(--ma-motion-hover) ease;
+}
+
+.u-text-action:where(:hover, :focus-visible):not(:disabled):not([aria-disabled='true']) {
+  color: var(--ma-color-text-hover);
+}
+
+.u-text-action:disabled,
+.u-text-action[aria-disabled='true'] {
+  color: var(--ma-color-faint);
+  cursor: default;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .u-text-action,
   .u-tint::before {
     transition: none;
   }

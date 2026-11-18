@@ -76,7 +76,7 @@ function parameters({ step, result }: TimelineEntry) {
 
 <template>
   <details v-if="entries.length || lazy" class="timeline" @toggle="handleToggle">
-    <summary class="timeline__summary u-tint">
+    <summary class="timeline__summary u-text-action">
       <span>{{ running ? '正在思考...' : '执行过程' }}</span>
       <span class="timeline__chevron" aria-hidden="true">›</span>
     </summary>
@@ -84,7 +84,7 @@ function parameters({ step, result }: TimelineEntry) {
     <button
       v-else-if="loadStatus === 'error'"
       type="button"
-      class="timeline__summary timeline__retry u-tint"
+      class="timeline__summary timeline__retry u-text-action"
       @click="emit('requestSteps')"
     >
       读取失败，重试
@@ -95,12 +95,11 @@ function parameters({ step, result }: TimelineEntry) {
       class="timeline__entry"
       :class="{ 'timeline__item--tool_result': entry.result }"
     >
-      <summary class="timeline__summary u-tint">
+      <summary class="timeline__summary u-text-action">
         <span class="timeline__label">
           {{ label(entry.step) }}
           <span v-if="name(entry.step)" class="timeline__tool">{{ name(entry.step) }}</span>
         </span>
-        <span class="timeline__hint">查看详情</span>
         <span class="timeline__chevron" aria-hidden="true">›</span>
       </summary>
       <div class="timeline__detail">
@@ -122,9 +121,12 @@ function parameters({ step, result }: TimelineEntry) {
 
 <style scoped>
 .timeline {
-  color: var(--ma-color-muted);
-  font-size: small;
+  color: var(--ma-color-text);
+  font-size: 14px;
   line-height: 1.5;
+}
+.timeline:hover {
+  color: var(--ma-color-text-hover);
 }
 
 .timeline__summary {
@@ -134,7 +136,6 @@ function parameters({ step, result }: TimelineEntry) {
   width: fit-content;
   max-width: 100%;
   list-style: none;
-  cursor: pointer;
   border-radius: var(--ma-radius-sm);
 }
 
@@ -147,7 +148,6 @@ function parameters({ step, result }: TimelineEntry) {
 }
 
 .timeline__retry {
-  color: inherit;
   font: inherit;
   background: transparent;
   border: 0;

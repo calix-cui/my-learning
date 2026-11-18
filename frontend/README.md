@@ -15,7 +15,7 @@ My Agent 的聊天界面，基于 Vue 3 + TypeScript + Vite + Element Plus 实�
 | 路由 | vue-router 4（HTML5 history 模式，每个页面路由级懒加载） |
 | 状态 | Pinia 4（setup store 写法：`stores/session.ts`、`stores/theme.ts`、`stores/chat.ts`） |
 | Markdown | markdown-it 15 + DOMPurify 3（只用于助手消息渲染） |
-| 主题 | 自研 `src/theme/`（18 个语义色 × light/dark，4 套主题，运行时可切） |
+| 主题 | 自研 `src/theme/`（20 个语义色 × light/dark，4 套主题，运行时可切） |
 
 ## 会话地址
 
@@ -191,7 +191,7 @@ frontend/
     │   ├── settings.ts        # Pinia：模型标签、主题偏好
     │   └── theme.ts           # Pinia：主题（themeId / mode / 跟随系统 / 落盘）
     ├── theme/
-    │   ├── types.ts           # 18 个语义色 schema + 静态 token 类型
+    │   ├── types.ts           # 20 个语义色 schema + 静态 token 类型
     │   ├── tokens.ts          # 字体/圆角/间距/宽度
     │   ├── apply.ts           # 编译 CSS 变量 + 派生 Element Plus 色阶
     │   └── themes/            # pine / sand / indigo / graphite（各含 light+dark）

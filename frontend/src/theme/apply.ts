@@ -8,6 +8,8 @@ export const COLOR_KEYS: (keyof ThemeColors)[] = [
   'sunken',
   'ink',
   'muted',
+  'text',
+  'textHover',
   'faint',
   'line',
   'lineStrong',

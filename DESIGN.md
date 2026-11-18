@@ -129,6 +129,8 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 | `sunken` | `--ma-color-sunken` | `#f3f0ea` | 代码块、分组背景、次要区域 |
 | `ink` | `--ma-color-ink` | `#1c1b18` | 正文、标题（不用纯黑） |
 | `muted` | `--ma-color-muted` | `#6b675e` | 次要说明、时间戳、占位符 |
+| `text` | `--ma-color-text` | `#a3a3a3` | 可交互文字默认浅灰色 |
+| `text-hover` | `--ma-color-text-hover` | `#1f1f1f` | 可交互文字悬停 / 键盘聚焦色：浅色近黑 `#1f1f1f`，深色近白 `#f5f5f5` |
 | `faint` | `--ma-color-faint` | `#9a958a` | 装饰性文字（分隔符、禁用态），不用于正文 |
 | `line` | `--ma-color-line` | `#e5e0d6` | 极少数需要的 1px 线（见 §8.1） |
 | `line-strong` | `--ma-color-line-strong` | `#d2ccbe` | hover 时的线、滚动条 |
@@ -157,7 +159,7 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 
 1. **一屏最多两处强调色**：一个主按钮 + 一个选中态。第三处开始就变成仪表盘。
 2. **状态不能只靠颜色**：成功/失败/待确认都要有文字，颜色只是加强。
-3. **深浅两套必须同时给**：18 个 token 缺一个就会在深色下出现「透明洞」。
+3. **深浅两套必须同时给**：20 个 token 缺一个就会在深色下出现「透明洞」。
 4. **正文对比度 ≥ 4.5:1**：`faint` 不能用来写正文或按钮文字。
 5. **危险动作**用 `danger` 系，且必须配文案说明后果，禁止只把字变红。
 
@@ -346,7 +348,7 @@ CSS 变量一律是 `--ma-color-<token>`，值来自 `frontend/src/theme/themes/
 ## 6. 交互与动效
 
 1. **过渡时长**：hover 淡入 `0.15s`（`--ma-motion-hover`），浮层出现/关闭 `0.18s`，其余微调 `0.15–0.2s`；只过渡 `background-color` / `color` / `box-shadow` / `opacity`，**不直接过渡 `background-image`**（渐变不可动画，见 §8.2），不做位移放大。
-2. **hover 用横向渐变**，不用整块纯色灰（见 §8.2）。
+2. **容器 hover 用横向渐变，纯文字操作用文字强调色**，不用整块纯色灰（见 §8.2）。
 3. **焦点可见**：键盘焦点用 3px `accent-soft` 外环 + 1px `accent` 描边。
 4. **加载**：聊天等待状态由执行过程显示；发送按钮进 loading 态并禁用重复提交。
 5. **禁止假成功**：不用乐观更新掩盖失败；失败必须回滚并给出可读文案。

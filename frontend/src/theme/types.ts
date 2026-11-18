@@ -20,6 +20,10 @@ export interface ThemeColors {
   ink: string
   /** 次要文字 */
   muted: string
+  /** 可交互文字默认使用的浅灰色 */
+  text: string
+  /** 可交互文字悬停、键盘聚焦色：浅色模式近黑，深色模式近白 */
+  textHover: string
   /** 装饰性文字（禁用态、分隔符） */
   faint: string
   line: string
