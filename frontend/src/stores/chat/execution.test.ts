@@ -286,9 +286,9 @@ it('审批续跑的步骤读取失败时不提交决定，步骤和错误仍可�
   expect(await chat.approveApproval()).toBe(false)
   expect(decideApprovalStream).not.toHaveBeenCalled()
   expect(chat.pendingApproval?.approvalId).toBe(9)
-  expect(chat.replayDetails[7]?.status).toBe('error')
   expect(chat.feedItems.find((item) => item.kind === 'execution')).toMatchObject({
     approvalBlocked: true,
+    loadStatus: 'error',
   })
   expect(chat.canSend).toBe(false)
 })
@@ -449,8 +449,10 @@ it('较旧步骤响应不能覆盖刚完成的实时步骤', async () => {
   await result
   stale.resolve([])
   await loading
-  expect(chat.replayDetails[7]?.steps).toMatchObject([{ seq: 2, kind: 'tool_call' }])
-  expect(chat.replayDetails[7]?.status).toBe('loaded')
+  const finished = chat.feedItems.find((item) => item.kind === 'execution')
+  if (finished?.kind !== 'execution') throw new Error('运行 7 没有进入消息流')
+  expect(finished.steps).toMatchObject([{ seq: 2, kind: 'tool_call' }])
+  expect(finished.loadStatus).toBe('loaded')
 })
 
 it('首发已挂起后审批查询失败，不把空审批当作成功或解锁', async () => {

@@ -10,7 +10,7 @@
 
 ## 决定
 
-每个 Execution 是步骤、预览、审批和运行状态的唯一可写来源，展示项继续由纯投影生成。旧对外字段只派生，不再作为另一份可写缓存。
+每个 Execution 是步骤、预览、审批和运行状态的唯一可写来源，展示项继续由纯投影生成。旧对外字段只派生，不再作为另一份可写缓存；`runsByMessage` / `replayDetails` / `activeUserMessageId` 三个只剩测试引用的派生出口已于 2026-11-18 删除，保留视图实际读取的 `agentSteps` / `agentRunning`。
 
 服务端运行状态与客户端连接状态分离。首发和审批共用 runExecution，事件归并提取到 events.ts，持久步骤以 seq 去重。创建前锁定草稿并复用创建请求；同一次发送持有 request_id。
 

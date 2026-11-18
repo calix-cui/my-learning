@@ -269,8 +269,14 @@ describe('chat store · 工具审批', () => {
     await deciding
 
     expect(chat.pendingApproval).toBeNull()
-    expect(chat.runsByMessage[22]?.[0].id).toBe(7)
-    expect(chat.replayDetails[7]?.steps.at(-1)).toMatchObject({
+    const rendered = chat.feedItems.find(
+      (item) => item.kind === 'execution' && item.runId === 7,
+    )
+    if (rendered?.kind !== 'execution') throw new Error('运行 7 没有进入消息流')
+    // 历史页在这个用例里是空的，运行仍要留在消息流里（挂在用户消息之后）。
+    expect(rendered.message).toBeUndefined()
+    expect(rendered.live).toBe(false)
+    expect(rendered.steps.at(-1)).toMatchObject({
       kind: 'tool_result',
       tool_name: 'rename_conversation',
       ok: true,
@@ -346,10 +352,19 @@ describe('chat store · Skill 时间线', () => {
     setActivePinia(createPinia())
     const refreshed = useChatStore()
     await refreshed.openConversation(1)
-    expect(refreshed.runsByMessage[11]?.[0].id).toBe(7)
-    expect(refreshed.replayDetails[7]).toBeUndefined()
+    const runItem = () => {
+      const found = refreshed.feedItems.find(
+        (item) => item.kind === 'execution' && item.runId === 7,
+      )
+      if (found?.kind !== 'execution') throw new Error('运行 7 没有进入消息流')
+      return found
+    }
+    expect(runItem().message?.id).toBe(11)
+    expect(runItem().steps).toEqual([])
+    expect(runItem().loadStatus).toBeUndefined()
     await refreshed.loadExecutionSteps(7)
-    expect(refreshed.replayDetails[7]?.steps).toEqual(savedSteps)
+    expect(runItem().steps).toEqual(savedSteps)
+    expect(runItem().loadStatus).toBe('loaded')
   })
 })
 
@@ -418,23 +433,34 @@ it('刷新、切换会话和分页后分别从对应运行加载执行过程', a
     setActivePinia(createPinia())
     const chat = useChatStore()
     await chat.openConversation(1)
-    expect(chat.runsByMessage).toEqual({ 10: [first], 20: [second] })
-    expect(chat.replayDetails).toEqual({})
+    const runs = () =>
+      chat.feedItems.flatMap((item) => (item.kind === 'execution' ? [item] : []))
+    const runOf = (runId: number) => {
+      const found = runs().find((item) => item.runId === runId)
+      if (!found) throw new Error(`运行 ${runId} 没有进入消息流`)
+      return found
+    }
+    expect(runs().map((item) => item.runId)).toEqual([101, 102])
+    expect(runOf(101).message?.id).toBe(10)
+    expect(runOf(102).message?.id).toBe(20)
+    expect(runOf(101).steps).toEqual([])
     await chat.loadExecutionSteps(101)
     await chat.loadExecutionSteps(102)
-    expect(chat.replayDetails[101]?.steps[0].content).toBe('结果 101')
-    expect(chat.replayDetails[102]?.steps[0].content).toBe('结果 102')
+    expect(runOf(101).steps[0].content).toBe('结果 101')
+    expect(runOf(102).steps[0].content).toBe('结果 102')
 
     expect(await chat.loadOlderMessages()).toBe(true)
     expect(chat.messages.map(({ id }) => id)).toEqual([2, 10, 20])
-    expect(chat.runsByMessage[2]).toEqual([older])
+    expect(runs().map((item) => item.runId)).toEqual([100, 101, 102])
+    expect(runOf(100).message?.id).toBe(2)
     expect(chat.hasOlderMessages).toBe(false)
     await chat.openConversation(2)
-    expect(chat.runsByMessage).toEqual({ 30: [other] })
-    expect(chat.replayDetails).toEqual({})
+    expect(runs().map((item) => item.runId)).toEqual([103])
+    expect(runOf(103).message?.id).toBe(30)
+    expect(runOf(103).steps).toEqual([])
     await chat.openConversation(1)
     expect(chat.messages.map(({ id }) => id)).toEqual([2, 10, 20])
-    expect(chat.replayDetails[101]?.steps[0].content).toBe('结果 101')
+    expect(runOf(101).steps[0].content).toBe('结果 101')
   } finally {
     vi.mocked(getConversation).mockRestore()
     vi.mocked(getAgentSteps).mockRestore()

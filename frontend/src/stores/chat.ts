@@ -141,44 +141,8 @@ export const useChatStore = defineStore('chat', () => {
   const activeExecution = computed(() => currentExecution(activeThread.value))
   const streamingText = computed(() => activeExecution.value?.preview ?? '')
   const agentSteps = computed(() => activeExecution.value?.steps ?? [])
-  const activeUserMessageId = computed(() => {
-    const execution = activeExecution.value
-    return execution && blocksSending(execution) ? execution.userMessageId : null
-  })
   const hasOlderMessages = computed(() => activeThread.value.nextBeforeMessageId !== null)
   const loadingOlderMessages = computed(() => activeThread.value.loadingOlderMessages)
-  // 保留既有只读接口，底层步骤只有 executions 中的一份。
-  const replayDetails = computed(() =>
-    Object.fromEntries(
-      activeThread.value.executions
-        .filter((execution) => execution.runId !== null && execution.detailStatus)
-        .map((execution) => [
-          execution.runId,
-          { status: execution.detailStatus!, steps: execution.steps },
-        ]),
-    ),
-  )
-  const runsByMessage = computed(() => {
-    const grouped: Record<number, AgentRunSummary[]> = {}
-    for (const execution of activeThread.value.executions) {
-      const messageId = execution.assistantMessageId ?? execution.userMessageId
-      if (
-        messageId === null ||
-        execution.runId === null ||
-        !execution.status ||
-        !execution.visibleStepCount
-      )
-        continue
-      ;(grouped[messageId] ??= []).push({
-        id: execution.runId,
-        status: execution.status,
-        user_message_id: execution.userMessageId,
-        assistant_message_id: execution.assistantMessageId,
-        visible_step_count: execution.visibleStepCount,
-      })
-    }
-    return grouped
-  })
   const sending = computed(() => activeThread.value.executions.some(isTransferring))
   const canSend = computed(
     () => !activeThread.value.historyError && !activeThread.value.executions.some(blocksSending),
@@ -862,9 +826,6 @@ export const useChatStore = defineStore('chat', () => {
     approveApproval,
     rejectApproval,
     decideApproval,
-    activeUserMessageId,
-    runsByMessage,
-    replayDetails,
     loadExecutionSteps,
     hasOlderMessages,
     loadingOlderMessages,

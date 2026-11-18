@@ -3,7 +3,7 @@
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
 > 最近更新：2026-11-18 · 第三步：统一执行状态与断流恢复
 
-- **第三步已完成（统一执行状态与断流恢复）**：每个 Execution 成为步骤、预览、审批与运行状态的唯一可写来源（`stores/chat/execution.ts`），事件归并到 `stores/chat/events.ts`。创建前锁定草稿并复用创建请求；断流后只读历史核对、不自动重发；等待审批时读取当前待决定项；历史/审批/步骤读取失败保留错误与重试入口；迟到结果按账号代次与会话实例失效。本轮补上此前缺的浏览器验收：新增 `frontend/scripts/chat-recovery-acceptance.mjs`（`pnpm acceptance:recovery`，12 项断言，模拟 API/SSE）。验收中发现并修复「核对确认消息已落库后草稿仍留在输入框、同一句话会被再发一遍」，并补单测（去掉修复该用例失败）。前端全量 **126 项（21 文件）**、ESLint、类型检查、生产构建通过。同步 chat.md §9.6、ADR-0016 验证段、DESIGN §5.9、前端 README 与 toolchain 测试清单。未进行真实模型或完整应用 E2E 验收；未修改后端。
+- **第三步已完成（统一执行状态与断流恢复）**：每个 Execution 成为步骤、预览、审批与运行状态的唯一可写来源（`stores/chat/execution.ts`），事件归并到 `stores/chat/events.ts`。创建前锁定草稿并复用创建请求；断流后只读历史核对、不自动重发；等待审批时读取当前待决定项；历史/审批/步骤读取失败保留错误与重试入口；迟到结果按账号代次与会话实例失效。本轮补上此前缺的浏览器验收：新增 `frontend/scripts/chat-recovery-acceptance.mjs`（`pnpm acceptance:recovery`，12 项断言，模拟 API/SSE）。验收中发现并修复「核对确认消息已落库后草稿仍留在输入框、同一句话会被再发一遍」，并补单测（去掉修复该用例失败）。前端全量 **126 项（21 文件）**、ESLint、类型检查、生产构建通过。同步 chat.md §9.6、ADR-0016 验证段、DESIGN §5.9、前端 README 与 toolchain 测试清单。随后清理了三个只剩测试引用的派生出口（`runsByMessage` / `replayDetails` / `activeUserMessageId`，`stores/chat.ts` 874 → 835 行），断言改为读展示项，前端 126 项仍全通过。未进行真实模型或完整应用 E2E 验收；未修改后端。
 
 - **第二步已完成，按要求停止**：新增纯展示投影 `stores/chat/feed.ts`、`ChatMessageList.vue` 和 `ChatExecutionItem.vue`。页面读取统一展示项；Store 仅增加展示标识与运行的映射，不改执行状态机。临时用户消息转正式 ID、运行完成及历史核对时复用执行组件和两层详情节点，正文只渲染一次；支持分页缺少用户消息、普通历史消息、多运行排序及会话隔离。前端全量 **98 项（20 文件）**、ESLint、类型检查、构建和改动 Vue/TS 格式检查通过。独立 Chrome 加载实际页面与 Store，使用模拟 API/SSE 实际点击两层展开，验证完成后节点和展开态不变、只有一份正文、刷新位置正确，无页面运行错误，并检查截图。未进行真实模型或完整应用 E2E 验收。同步 DESIGN、前端 README、chat 方案和 ADR-0015；未修改后端、未开始第三步及后续重构。
 
