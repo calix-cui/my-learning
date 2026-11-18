@@ -13,6 +13,7 @@ import MarkdownContent from '@/components/chat/MarkdownContent.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import { getConversation } from '@/api/chat'
 import { rescanSkills } from '@/api/skills'
+import { runSummary, stepsPage } from '@/test/agent'
 import { useSkillsStore } from '@/stores/skills'
 import {
   getAgentSteps,
@@ -323,31 +324,34 @@ it('直达或刷新后从每条助手回复打开对应详情，切换会话不�
         model: null,
         create_time: '',
       })),
-      runs: messageIds.map((messageId) => ({
-        id: messageId + 100,
-        user_message_id: messageId - 1,
-        assistant_message_id: messageId,
-        status: 'completed',
-        visible_step_count: 1,
-      })),
+      runs: messageIds.map((messageId) =>
+        runSummary({
+          id: messageId + 100,
+          user_message_id: messageId - 1,
+          assistant_message_id: messageId,
+          visible_step_count: 1,
+        }),
+      ),
     }
   })
-  vi.mocked(getAgentSteps).mockImplementation(async (runId) => [
-    {
-      seq: 2,
-      kind: 'tool_result',
-      tool_name: 'calculator',
-      tool_args: { expression: String(runId) },
-      content: `工具结果 ${runId}`,
-      ok: true,
-      duration_ms: 0,
-      create_time: '',
-      skill_key: null,
-      skill_name: null,
-      skill_source: null,
-      skill_version: null,
-    },
-  ])
+  vi.mocked(getAgentSteps).mockImplementation(async (runId) =>
+    stepsPage([
+      {
+        seq: 2,
+        kind: 'tool_result',
+        tool_name: 'calculator',
+        tool_args: { expression: String(runId) },
+        content: `工具结果 ${runId}`,
+        ok: true,
+        duration_ms: 0,
+        create_time: '',
+        skill_key: null,
+        skill_name: null,
+        skill_source: null,
+        skill_version: null,
+      },
+    ]),
+  )
 
   const initial = await setup('/chat/1', false, true)
   await flushPromises()
@@ -420,13 +424,12 @@ it('分页只有助手消息时过程仍在正文前，补入用户消息后不�
     create_time: '',
   }
   const assistant = { ...user, id: 12, role: 'assistant', content: '助手回复' }
-  const run = {
+  const run = runSummary({
     id: 41,
     user_message_id: 11,
     assistant_message_id: 12,
-    status: 'completed' as const,
     visible_step_count: 1,
-  }
+  })
   vi.mocked(getConversation).mockImplementation(async (_id, options) => ({
     id: 1,
     title: '分页',
@@ -478,7 +481,13 @@ it.each(['failed', 'cancelled', 'waiting_approval'] as const)(
         },
       ],
       runs: [
-        { id: 41, user_message_id: 11, assistant_message_id: null, status, visible_step_count: 1 },
+        runSummary({
+          id: 41,
+          user_message_id: 11,
+          assistant_message_id: null,
+          status,
+          visible_step_count: 1,
+        }),
       ],
     })
     vi.mocked(listApprovals).mockResolvedValue([
@@ -556,13 +565,12 @@ it('临时消息转正式 ID、完成及历史核对后保留两层展开，正�
         },
       ],
       runs: [
-        {
+        runSummary({
           id: 41,
           user_message_id: 11,
           assistant_message_id: 2,
-          status: 'completed',
           visible_step_count: 2,
-        },
+        }),
       ],
     })
   await complete('唯一的正文')
@@ -605,13 +613,7 @@ it('断流后显示核对入口并禁止重发，查询完成后恢复正文和�
       },
     ],
     runs: [
-      {
-        id: 41,
-        user_message_id: 11,
-        assistant_message_id: 12,
-        status: 'completed',
-        visible_step_count: 0,
-      },
+      runSummary({ id: 41, user_message_id: 11, assistant_message_id: 12, visible_step_count: 0 }),
     ],
   })
   await wrapper.get('.chat__recovery button').trigger('click')

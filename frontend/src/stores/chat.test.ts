@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import { useChatStore } from '@/stores/chat'
 import type { AgentRunSummary, AgentStep, ChatMessage } from '@/types/api'
+import { runSummary, stepsPage } from '@/test/agent'
 
 const conversations: Record<number, ChatMessage[]> = {}
 
@@ -348,7 +349,7 @@ describe('chat store · Skill 时间线', () => {
       messages: [msg(11, 1, 'assistant', '会议纪要')],
       runs: [completedRun(7, 10, 11, savedSteps.length)],
     })
-    vi.mocked(getAgentSteps).mockResolvedValueOnce(savedSteps)
+    vi.mocked(getAgentSteps).mockResolvedValueOnce(stepsPage(savedSteps))
     setActivePinia(createPinia())
     const refreshed = useChatStore()
     await refreshed.openConversation(1)
@@ -374,13 +375,13 @@ function completedRun(
   assistantMessageId: number,
   visibleStepCount = 2,
 ): AgentRunSummary {
-  return {
+  return runSummary({
     id,
     user_message_id: userMessageId,
     assistant_message_id: assistantMessageId,
     status: 'completed',
     visible_step_count: visibleStepCount,
-  }
+  })
 }
 
 it('刷新、切换会话和分页后分别从对应运行加载执行过程', async () => {
@@ -413,22 +414,24 @@ it('刷新、切换会话和分页后分别从对应运行加载执行过程', a
     }
     return latestPage
   })
-  vi.mocked(getAgentSteps).mockImplementation(async (runId) => [
-    {
-      seq: 2,
-      kind: 'tool_result',
-      content: `结果 ${runId}`,
-      tool_name: 'calculator',
-      tool_args: null,
-      skill_key: null,
-      skill_name: null,
-      skill_source: null,
-      skill_version: null,
-      ok: true,
-      duration_ms: 0,
-      create_time: '',
-    },
-  ])
+  vi.mocked(getAgentSteps).mockImplementation(async (runId) =>
+    stepsPage([
+      {
+        seq: 2,
+        kind: 'tool_result',
+        content: `结果 ${runId}`,
+        tool_name: 'calculator',
+        tool_args: null,
+        skill_key: null,
+        skill_name: null,
+        skill_source: null,
+        skill_version: null,
+        ok: true,
+        duration_ms: 0,
+        create_time: '',
+      },
+    ]),
+  )
   try {
     setActivePinia(createPinia())
     const chat = useChatStore()

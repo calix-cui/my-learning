@@ -21,6 +21,8 @@ export type { ChatThread } from './chat/threads'
 import {
   AgentHttpError,
   decideApprovalStream,
+  findRunByRequestId,
+  getAgentSteps,
   sendAgentStream,
   type AgentSkillMode,
   type AgentStreamEvent,
@@ -28,6 +30,13 @@ import {
 } from '@/api/agent'
 
 const AGENT_MODE_KEY = 'my-agent.agent-mode'
+/** 断线后核对的轮询间隔与上限：30 秒内没收敛就交还给用户手动再点 */
+const POLL_INTERVAL_MS = 1500
+const POLL_MAX_ATTEMPTS = 20
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 /** 读回上次的「深度回答」开关；读不到就当关（省 token 是默认值） */
 function readAgentMode(): boolean {
@@ -159,6 +168,19 @@ export const useChatStore = defineStore('chat', () => {
     const execution = currentExecution(thread)
     if (execution) execution.transport = 'reconciling'
     try {
+      // 还不知道 runId 时先用 request_id 认领自己那次提交：
+      // 查不到就是没落库（可以安全重发），查得到就把它当成这次执行去核对。
+      if (execution && execution.runId === null && execution.requestId) {
+        const found = await findRunByRequestId(id, execution.requestId)
+        if (threadState.threads.get(id) !== thread) return false
+        if (!found) {
+          execution.status = 'failed'
+          execution.transport = 'idle'
+          execution.error = '这次提交没有落库，可以重新发送'
+          return false
+        }
+        execution.runId = found.id
+      }
       await history.refreshThread(id, thread)
       // 核对确认这条消息已经落进历史，草稿就已经发出去了：再留着会被当成新消息发第二遍。
       const sent =
@@ -168,6 +190,9 @@ export const useChatStore = defineStore('chat', () => {
             )
           : undefined
       if (sent && sent.content.trim() === thread.draftText.trim()) thread.draftText = ''
+      // 服务端还在跑：后台只读轮询增量步骤，跑到终态再刷新一次正文。
+      // 不 await：核对按钮不该替用户等满 30 秒，轮询失败也只是停在断开态。
+      if (execution && execution.status === 'running') void pollExecution(id, thread, execution)
       return (
         threadState.threads.get(id) === thread &&
         !thread.executions.some((item) => item.transport === 'disconnected')
@@ -178,6 +203,46 @@ export const useChatStore = defineStore('chat', () => {
       if (execution) execution.transport = 'disconnected'
       return false
     }
+  }
+
+  /**
+   * 服务端仍在执行时的只读增量轮询。
+   *
+   * 只读：不发消息、不重跑、不改草稿。只在当前会话实例上继续，
+   * 切会话或卸载后立即放弃；跑够上限就停，交给用户再点「重新核对状态」。
+   */
+  async function pollExecution(id: number, thread: ChatThread, execution: Execution) {
+    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+      if (execution.status !== 'running' || execution.runId === null) return
+      await sleep(POLL_INTERVAL_MS)
+      if (threadState.threads.get(id) !== thread) return
+      if (execution.status !== 'running' || execution.runId === null) return
+      let page
+      try {
+        page = await getAgentSteps(execution.runId, lastStepSeq(execution))
+      } catch {
+        return
+      }
+      if (threadState.threads.get(id) !== thread) return
+      const merged = new Map(execution.steps.map((step) => [step.seq, step]))
+      for (const step of page.items) merged.set(step.seq, step)
+      execution.steps = [...merged.values()].sort((a, b) => a.seq - b.seq)
+      history.applyServerStatus(
+        execution,
+        page.status,
+        page.visible_step_count,
+        page.error_message,
+      )
+      if (page.status !== 'running') {
+        // 终态后读回正文与审批，轮询本身不改展示顺序
+        await history.refreshThread(id, thread)
+        return
+      }
+    }
+  }
+
+  function lastStepSeq(execution: Execution) {
+    return execution.steps.reduce((max, step) => Math.max(max, step.seq), 0)
   }
 
   async function loadOlderMessages() {

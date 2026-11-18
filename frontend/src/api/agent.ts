@@ -1,4 +1,4 @@
-import type { AgentStep, ChatMessage } from '@/types/api'
+import type { AgentRunDetail, AgentStepsPage, ChatMessage } from '@/types/api'
 
 export type ReasoningEffort = 'none' | 'high'
 export type AgentSkillMode = 'off' | 'manual' | 'auto'
@@ -232,17 +232,58 @@ export async function listApprovals(runId: number, signal?: AbortSignal): Promis
   return body.data.items
 }
 
-/** 按运行标识读取对应的执行步骤。 */
-export async function getAgentSteps(runId: number): Promise<AgentStep[]> {
-  const response = await fetch(`/api/agent/runs/${runId}/steps`, {
+/**
+ * 按运行标识读取执行步骤。
+ *
+ * 返回的不只是步骤：同一份响应里带运行状态，轮询时一个请求就能同时判断
+ * 「有新步骤吗」和「跑完了吗」。`sinceSeq` 只取该步之后的增量，空轮询的响应体很小。
+ */
+export async function getAgentSteps(runId: number, sinceSeq?: number): Promise<AgentStepsPage> {
+  const query = sinceSeq === undefined ? '' : `?since_seq=${sinceSeq}`
+  const response = await fetch(`/api/agent/runs/${runId}/steps${query}`, {
     headers: { Accept: 'application/json' },
     credentials: 'same-origin',
   })
   if (!response.ok) throw new Error('读取执行过程失败')
-  const body = (await response.json()) as { code?: number; data: { items: AgentStep[] } }
+  const body = (await response.json()) as { code?: number; data: AgentStepsPage }
   if (body.code !== undefined && body.code !== 200) throw new Error('读取执行数据失败')
   if (!Array.isArray(body.data?.items)) throw new Error('读取执行数据失败：响应格式无效')
-  return body.data.items
+  return body.data
+}
+
+/** 读单次运行的完整状态，断线后定点核对用。 */
+export async function getAgentRun(runId: number): Promise<AgentRunDetail> {
+  const response = await fetch(`/api/agent/runs/${runId}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'same-origin',
+  })
+  if (!response.ok) throw new AgentHttpError(response.status, '读取运行状态失败，请重试')
+  const body = (await response.json()) as { code?: number; data: AgentRunDetail }
+  if (body.code !== undefined && body.code !== 200) throw new Error('读取执行数据失败')
+  if (!body.data || typeof body.data.id !== 'number')
+    throw new Error('读取执行数据失败：响应格式无效')
+  return body.data
+}
+
+/**
+ * 用客户端手里的 request_id 找回自己那次提交。
+ *
+ * 返回 `null` 表示服务端没有这条记录（404）——这次提交没落库，可以安全重发。
+ * 其它错误照常抛出，不能把「查不到」和「查不了」混为一谈。
+ */
+export async function findRunByRequestId(
+  conversationId: number,
+  requestId: string,
+): Promise<AgentRunDetail | null> {
+  const response = await fetch(
+    `/api/conversations/${conversationId}/agent/runs?request_id=${encodeURIComponent(requestId)}`,
+    { headers: { Accept: 'application/json' }, credentials: 'same-origin' },
+  )
+  if (response.status === 404) return null
+  if (!response.ok) throw new AgentHttpError(response.status, '核对提交结果失败，请重试')
+  const body = (await response.json()) as { code?: number; data: { items?: AgentRunDetail[] } }
+  if (body.code !== undefined && body.code !== 200) throw new Error('读取执行数据失败')
+  return body.data?.items?.[0] ?? null
 }
 
 export type { ChatMessage }

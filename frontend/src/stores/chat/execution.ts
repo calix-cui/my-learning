@@ -89,6 +89,9 @@ export function applySummary(execution: Execution, summary: AgentRunSummary) {
   execution.status = summary.status
   execution.visibleStepCount = summary.visible_step_count
   if (summary.status !== 'waiting_approval') execution.approval = null
+  // 失败原因以服务端为准：前端编不出「是模型出错还是网络断了」
+  if (summary.status === 'failed')
+    execution.error = summary.error_message ?? execution.error ?? '执行失败，可重新发送'
 }
 
 interface StreamOperation {

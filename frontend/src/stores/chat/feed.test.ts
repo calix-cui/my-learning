@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildChatFeed } from './feed'
 import { applySummary, createExecution } from './execution'
 import type { AgentRunSummary, ChatMessage } from '@/types/api'
+import { runSummary } from '@/test/agent'
 
 const message = (id: number, role: string): ChatMessage => ({
   id,
@@ -11,13 +12,14 @@ const message = (id: number, role: string): ChatMessage => ({
   model: null,
   create_time: '',
 })
-const run = (id: number, user: number, assistant: number | null): AgentRunSummary => ({
-  id,
-  user_message_id: user,
-  assistant_message_id: assistant,
-  status: assistant ? 'completed' : 'failed',
-  visible_step_count: 1,
-})
+const run = (id: number, user: number, assistant: number | null): AgentRunSummary =>
+  runSummary({
+    id,
+    user_message_id: user,
+    assistant_message_id: assistant,
+    status: assistant ? 'completed' : 'failed',
+    visible_step_count: 1,
+  })
 const execution = (summary: AgentRunSummary) => {
   const value = createExecution(`run:${summary.id}`)
   applySummary(value, summary)

@@ -144,13 +144,45 @@ export interface AgentStep {
   create_time: string
 }
 
+export type AgentRunStatus = 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled'
+
 /** 供消息历史定位执行记录，步骤明细在展开时读取。 */
 export interface AgentRunSummary {
   id: number
   user_message_id: number | null
   assistant_message_id: number | null
-  status: 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled'
+  status: AgentRunStatus
   visible_step_count: number
+  /** 提交时的客户端请求 ID：断线后用它把核对对齐到具体一次运行 */
+  request_id: string | null
+  /** 服务端记下的失败原因 */
+  error_message: string | null
+  finished_time: string | null
+}
+
+/** 单次运行的完整状态：一个请求同时回答「跑到哪了」和「跑了什么」 */
+export interface AgentRunDetail {
+  id: number
+  conversation_id: number
+  user_message_id: number | null
+  assistant_message_id: number | null
+  status: AgentRunStatus
+  step_count: number
+  model: string | null
+  request_id: string | null
+  started_time: string
+  finished_time: string | null
+  error_message: string | null
+  steps: AgentStep[]
+}
+
+/** 步骤增量 + 运行状态：轮询一次同时判断「有新步骤吗」「跑完了吗」 */
+export interface AgentStepsPage {
+  items: AgentStep[]
+  status: AgentRunStatus
+  visible_step_count: number
+  error_message: string | null
+  finished_time: string | null
 }
 
 /** 工具市场里的一张卡片 */

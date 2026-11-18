@@ -71,12 +71,23 @@ it('流在结束事件之前关闭时报告中断', async () => {
   await expect(sendAgentStream(1, '测试', { onFinished: vi.fn() })).rejects.toThrow('连接已中断')
 })
 
-it.each([listApprovals, getAgentSteps])('历史读取失败必须报错，不能返回空数组', async (load) => {
+const emptySteps = {
+  items: [],
+  status: 'completed' as const,
+  visible_step_count: 0,
+  error_message: null,
+  finished_time: null,
+}
+
+it.each([
+  [listApprovals, [], { items: [] }],
+  [getAgentSteps, emptySteps, emptySteps],
+])('历史读取失败必须报错，不能返回空数组', async (load, empty, body) => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 503 })))
   await expect(load(7)).rejects.toThrow()
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 500, data: { items: [] } }))),
+    vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 500, data: {} }))),
   )
   await expect(load(7)).rejects.toThrow()
   vi.stubGlobal(
@@ -86,9 +97,9 @@ it.each([listApprovals, getAgentSteps])('历史读取失败必须报错，不能
   await expect(load(7)).rejects.toThrow('响应格式无效')
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 200, data: { items: [] } }))),
+    vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 200, data: body }))),
   )
-  await expect(load(7)).resolves.toEqual([])
+  await expect(load(7)).resolves.toEqual(empty)
 })
 
 it('传输层使用调用方持有的请求标识和取消信号', async () => {

@@ -8,9 +8,11 @@ import {
   decideApprovalStream,
   listApprovals,
   getAgentSteps,
+  findRunByRequestId,
   type AgentStreamHandlers,
 } from '@/api/agent'
-import type { AgentRunSummary, ChatConversationDetail } from '@/types/api'
+import type { AgentRunSummary, AgentStep, ChatConversationDetail } from '@/types/api'
+import { runSummary, stepsPage } from '@/test/agent'
 
 vi.mock('@/api/chat', () => ({
   createConversation: vi.fn(),
@@ -25,6 +27,8 @@ vi.mock('@/api/agent', async (original) => ({
   decideApprovalStream: vi.fn(),
   listApprovals: vi.fn(),
   getAgentSteps: vi.fn(),
+  findRunByRequestId: vi.fn(),
+  getAgentRun: vi.fn(),
 }))
 vi.mock('element-plus', () => ({ ElMessage: { success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/components/ui/messageBox', () => ({
@@ -41,13 +45,46 @@ function deferred<T>() {
   })
   return { promise, resolve, reject }
 }
-const run = (status: AgentRunSummary['status']): AgentRunSummary => ({
+/** 按 request_id 查到的那次运行：比摘要多带会话、步骤等字段 */
+const runDetail = (status: AgentRunSummary['status'], requestId = 'req-1') => ({
   id: 7,
+  conversation_id: 1,
   user_message_id: 11,
   assistant_message_id: status === 'completed' ? 12 : null,
   status,
-  visible_step_count: 1,
+  step_count: 0,
+  model: null,
+  request_id: requestId,
+  started_time: '',
+  finished_time: null,
+  error_message: null,
+  steps: [] as AgentStep[],
 })
+
+/** 回放步骤：只写用例关心的字段，其余按后端的形状补空 */
+const step = (seq: number, kind: string): AgentStep => ({
+  seq,
+  kind,
+  content: null,
+  tool_name: null,
+  tool_args: null,
+  skill_key: null,
+  skill_name: null,
+  skill_source: null,
+  skill_version: null,
+  ok: null,
+  duration_ms: null,
+  create_time: '',
+})
+
+const run = (status: AgentRunSummary['status']): AgentRunSummary =>
+  runSummary({
+    id: 7,
+    user_message_id: 11,
+    assistant_message_id: status === 'completed' ? 12 : null,
+    status,
+    visible_step_count: 1,
+  })
 const history = (status?: AgentRunSummary['status']): ChatConversationDetail => ({
   id: 1,
   title: '会话',
@@ -101,7 +138,7 @@ beforeEach(() => {
     update_time: '',
   })
   vi.mocked(getConversation).mockResolvedValue(history())
-  vi.mocked(getAgentSteps).mockResolvedValue([])
+  vi.mocked(getAgentSteps).mockResolvedValue(stepsPage([]))
   vi.mocked(listApprovals).mockResolvedValue([approval()])
   vi.mocked(sendAgentStream).mockImplementation((_id, _text, callbacks) => {
     handlers = callbacks
@@ -211,6 +248,7 @@ it('断流时后端已完成，只查询恢复最终回复而不重新发送', a
 
 it('断流后仍在运行或查询失败时锁住发送，重查终态后恢复', async () => {
   const { chat, result } = start()
+  vi.mocked(findRunByRequestId).mockResolvedValue(runDetail('running'))
   vi.mocked(getConversation).mockRejectedValueOnce(new Error('查询失败'))
   stream.reject(new Error('断流'))
   expect(await result).toBe(false)
@@ -227,21 +265,40 @@ it('断流后仍在运行或查询失败时锁住发送，重查终态后恢复'
   expect(sendAgentStream).toHaveBeenCalledTimes(1)
 })
 
-it('开始事件丢失时不猜测运行关联、不自动重发', async () => {
+it('开始事件丢失时用 request_id 认领这次提交，不重发', async () => {
   const chat = useChatStore()
   chat.activeId = 1
   const pending = chat.send('问题')
   stream.reject(new Error('断流'))
   expect(await pending).toBe(false)
+  // 还没认领到运行之前，只能说「结果不确定」，不能猜
   expect(chat.canSend).toBe(false)
   expect(chat.recoveryMessage).toContain('提交结果尚未确认')
+
+  vi.mocked(findRunByRequestId).mockResolvedValue(runDetail('completed'))
+  vi.mocked(getConversation).mockResolvedValue(history('completed'))
+  expect(await chat.recoverExecution()).toBe(true)
+  expect(chat.canSend).toBe(true)
+  expect(chat.messages.at(-1)?.content).toBe('完成正文')
+  // 认领靠 request_id 查询，没有第二次提交
+  expect(sendAgentStream).toHaveBeenCalledTimes(1)
+  expect(findRunByRequestId).toHaveBeenCalledWith(1, expect.any(String))
+})
+
+it('request_id 查不到时告诉用户没落库、可以重发', async () => {
+  const chat = useChatStore()
+  chat.activeId = 1
+  chat.composerText = '问题'
+  const pending = chat.send('问题')
+  stream.reject(new Error('断流'))
+  expect(await pending).toBe(false)
+
+  vi.mocked(findRunByRequestId).mockResolvedValue(null)
   expect(await chat.recoverExecution()).toBe(false)
-  vi.mocked(getConversation).mockResolvedValueOnce(history('running'))
-  await chat.recoverExecution()
-  vi.mocked(getConversation).mockResolvedValueOnce(history('completed'))
-  await chat.recoverExecution()
-  expect(chat.canSend).toBe(false)
-  expect(chat.recoveryMessage).toContain('提交结果尚未确认')
+  // 没落库就是可以安全重发：解锁并把草稿留着
+  expect(chat.canSend).toBe(true)
+  expect(chat.composerText).toBe('问题')
+  expect(chat.recoveryMessage).toContain('没有落库，可以重新发送')
   expect(sendAgentStream).toHaveBeenCalledTimes(1)
 })
 
@@ -447,7 +504,7 @@ it('较旧步骤响应不能覆盖刚完成的实时步骤', async () => {
   vi.mocked(getConversation).mockResolvedValue(history('completed'))
   finish()
   await result
-  stale.resolve([])
+  stale.resolve(stepsPage([]))
   await loading
   const finished = chat.feedItems.find((item) => item.kind === 'execution')
   if (finished?.kind !== 'execution') throw new Error('运行 7 没有进入消息流')
@@ -495,10 +552,49 @@ it('详情读取与审批预加载同时发生时只读一次步骤', async () =
   const loading = chat.loadExecutionSteps(7)
   const deciding = chat.approveApproval()
   expect(getAgentSteps).toHaveBeenCalledTimes(1)
-  steps.resolve([])
+  steps.resolve(stepsPage([]))
   await loading
   await vi.waitFor(() => expect(decideApprovalStream).toHaveBeenCalledTimes(1))
   vi.mocked(getConversation).mockResolvedValue(history('completed'))
   finish()
   expect(await deciding).toBe(true)
+})
+
+it('核对时服务端还在跑：只读轮询增量步骤，跑到终态才恢复正文', async () => {
+  vi.useFakeTimers()
+  try {
+    const chat = useChatStore()
+    chat.activeId = 1
+    const pending = chat.send('问题')
+    stream.reject(new Error('断流'))
+    expect(await pending).toBe(false)
+    expect(chat.canSend).toBe(false)
+
+    // 认领到的那次运行还在跑：核对本身不重发，只是接着看
+    vi.mocked(findRunByRequestId).mockResolvedValue(runDetail('running'))
+    vi.mocked(getConversation).mockResolvedValue(history('running'))
+    vi.mocked(getAgentSteps).mockResolvedValue(
+      stepsPage([step(2, 'tool_call')], { status: 'running' }),
+    )
+    await chat.recoverExecution()
+    expect(chat.canSend).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1600)
+    expect(chat.canSend).toBe(false)
+    // 首次轮询从 0 开始要增量
+    expect(getAgentSteps).toHaveBeenLastCalledWith(7, 0)
+
+    // 第二次轮询拿到终态：读回正文并解锁
+    vi.mocked(getAgentSteps).mockResolvedValue(stepsPage([], { status: 'completed' }))
+    vi.mocked(getConversation).mockResolvedValue(history('completed'))
+    await vi.advanceTimersByTimeAsync(1600)
+    await vi.waitFor(() => expect(chat.canSend).toBe(true))
+    expect(chat.messages.at(-1)?.content).toBe('完成正文')
+    // 第二次轮询只要 seq 之后的增量，不重复拉全量（终态后刷新正文才又读一次全量）
+    expect(getAgentSteps).toHaveBeenCalledWith(7, 2)
+    // 全程只有最初那一次提交
+    expect(sendAgentStream).toHaveBeenCalledTimes(1)
+  } finally {
+    vi.useRealTimers()
+  }
 })

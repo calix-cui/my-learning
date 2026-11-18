@@ -25,7 +25,15 @@ export function createHistory(deps: HistoryDeps) {
 
   function applyRunSummaries(thread: ChatThread, runs: AgentRunSummary[]) {
     for (const run of runs) {
-      let execution = thread.executions.find((item) => item.runId === run.id)
+      // 先按运行标识对齐；本地新建的执行还没 runId 时，用 request_id 认领自己那次提交，
+      // 避免「按 user_message_id 猜」在分页或并发下认错运行。
+      let execution =
+        thread.executions.find((item) => item.runId === run.id) ??
+        (run.request_id
+          ? thread.executions.find(
+              (item) => item.runId === null && item.requestId === run.request_id,
+            )
+          : undefined)
       if (!execution) {
         execution = reactive(createExecution(`run:${run.id}`))
         thread.executions.push(execution)
@@ -163,11 +171,13 @@ export function createHistory(deps: HistoryDeps) {
     const runId = execution.runId
     const promise = (async () => {
       try {
-        const steps = await getAgentSteps(runId)
+        const page = await getAgentSteps(runId)
         if (threads.threads.get(id) !== thread || execution.revision !== revision) return
         execution.steps = [
-          ...new Map([...execution.steps, ...steps].map((step) => [step.seq, step])).values(),
+          ...new Map([...execution.steps, ...page.items].map((step) => [step.seq, step])).values(),
         ].sort((a, b) => a.seq - b.seq)
+        // 同一份响应顺带把服务端状态对齐，省掉一次单独查询
+        applyServerStatus(execution, page.status, page.visible_step_count, page.error_message)
         execution.detailStatus = 'loaded'
       } catch (error) {
         if (threads.threads.get(id) === thread && execution.revision === revision)
@@ -184,6 +194,22 @@ export function createHistory(deps: HistoryDeps) {
     }
   }
 
+  /** 读步骤时顺带对齐状态：只改服务端说了算的三项，不动连接状态 */
+  function applyServerStatus(
+    execution: Execution,
+    status: AgentRunSummary['status'],
+    visibleStepCount: number,
+    errorMessage: string | null,
+  ) {
+    const changed = execution.status !== status || execution.visibleStepCount !== visibleStepCount
+    execution.status = status
+    execution.visibleStepCount = visibleStepCount
+    if (changed && status !== 'waiting_approval') execution.approval = null
+    if (status === 'failed')
+      execution.error = errorMessage ?? execution.error ?? '执行失败，可重新发送'
+    else if (status !== 'cancelled' && !execution.error) execution.error = null
+  }
+
   /** 时间线展开时的入口：失败由组件显示重试，这里只吞掉异常 */
   async function loadExecutionSteps(id: number, thread: ChatThread, runId: number) {
     const execution = thread.executions.find((item) => item.runId === runId)
@@ -195,5 +221,5 @@ export function createHistory(deps: HistoryDeps) {
     }
   }
 
-  return { refreshThread, loadOlderMessages, readSteps, loadExecutionSteps }
+  return { refreshThread, loadOlderMessages, readSteps, loadExecutionSteps, applyServerStatus }
 }
