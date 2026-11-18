@@ -1,5 +1,7 @@
 # 对话功能设计（阶段 4 · LLM 接入与基础对话）
 
+> 当前聊天整理方案见第 9 节（2026-11-18，已确认，前三步已完成）；此前各节保留阶段实施背景。
+
 > 阶段 4 的实施方案。**先设计、后实施**（AGENTS.md §2.3）；确认后按第 8 节的任务顺序逐个交付。
 > 阶段依据：[`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 阶段 4。
 > 相关决策：[ADR-0006](adr/0006-llm-client-and-chat-storage.md)（落库 + 模型抽象）。
@@ -263,3 +265,108 @@ const activeKey = computed(() => activeId.value ?? 0)
 - 两个会话的 `sending` 互相独立（切到空闲会话按钮可用，`isBusy(旧会话)` 为真）；
 - 输入框草稿按会话隔离（写一半切走再切回，文字还在；另一个会话仍是空的）；
 - 删掉当前会话回到草稿态并清掉缓存。
+
+## 9. 聊天状态与展示整理方案（已确认，2026-11-18）
+
+本节基于当前工作区源码评估，包括已有未提交改动；方案已确认，第 1–3 步已完成；第 4–5 步尚未开始。使用 CodeGraph `codegraph_explore` 查询 ChatView、chat Store、AgentTimeline、发送/审批函数、后端历史查询及事件构造，再补读索引省略的计算属性、接口与测试。
+
+### 9.1 整理前的问题与证据
+
+| 问题 | 当前实现 | 影响 |
+| --- | --- | --- |
+| 时间线完成后跳到正文下方 | `ChatView.vue` 先输出 ChatMessage 再输出时间线；`chat.ts` 的 runsByMessage 优先 assistant_message_id，实时则用 activeUserMessageId | 运行时位于用户消息后，完成后位于助手消息后；这是展示锚点变化，不是 CSS 问题 |
+| 同一次执行有两套过程状态 | ChatThread 同时维护 steps、runs、replayDetails；appendAssistantMessage 把实时步骤复制到回放缓存并清空活动锚点 | 页面需要自己判断实时/历史分支，组件可能重建、丢失展开状态 |
+| Store 职责集中 | chat.ts 包含会话列表、分页合并、发送、事件转换、审批恢复、弹窗、提示和草稿 | 一个异常路径需要同时理解多个业务域；仅缩短 return 列表不能解决 |
+| 页面承担底层协调 | ChatView 处理路由、动画帧、滚动、分页锚点、Skill 参数、运行归属与懒加载 | 页面模板直接依赖内部缓存结构 |
+| 状态语义混杂 | sending/runningAgent/approval 加上后端 run.status | 请求结束与运行结束不同，等待审批与断线容易被当作空闲 |
+| 新会话发送存在竞态窗口 | send 在 await ensureConversation 后才设置 sending | 创建会话期间再次发送可能重复建会话；需受控延迟测试验证 |
+| 错误被当作空数据 | listApprovals 对非成功响应返回 []；审批续跑加载步骤失败回退 [] | 无法区分没有审批/步骤与读取失败 |
+
+原 ChatView.test.ts 曾断言历史时间线前一个元素是助手回复。第一步已更新该断言；第二步补充临时 ID 到正式 ID、完成及历史核对期间保持组件、两层详情节点身份和正文唯一性的回归测试。
+
+### 9.2 统一展示规则
+
+固定顺序为：用户消息 → 执行过程 → 审批卡片（如有）→ 助手正文。零工具/Skill 的已完成回复不显示空过程入口；失败、取消和待审批仍保留所属运行及其可见过程。
+
+第一步最小修复：已完成运行仍按 assistant_message_id 查找，但将过程渲染在该助手正文之前；无助手消息的运行仍置于用户消息之后。不要简单把所有历史运行改挂用户消息，因为当前后端按助手消息所在页返回已完成摘要，分页可能只包含助手消息。
+
+第二步已统一为消息流投影：原始消息、运行及临时正文转换成有序的 MessageItem / ExecutionItem。ExecutionItem 包含过程、审批与正式或流式正文。已被该项消费的助手消息不再单独输出，普通历史消息照常保留。此投影是纯计算结果，不再保存一份可写消息副本。
+
+ExecutionItem 的 key 在一次运行生命周期内保持稳定。当前发送前建立本地展示 key 和独立 request_id，run_started 后在同一个 Execution 上补充 runId，收到助手消息 ID 时仅填充正文，不替换本地 key。刷新后可用 runId 构造 key。只加载到助手消息的一页也能生成执行项；翻出用户消息后不重复输出运行。同一输入存在多个运行时按运行 ID 升序分别展示。展示 key 与网络请求的 request_id 独立，均由一次发送持有；审批继续使用已有运行，不重新创建请求或运行。刷新会重新创建组件，不承诺跨页面刷新保存展开状态。决策见 [ADR-0015](adr/0015-chat-feed-projection.md)。
+
+### 9.3 职责与状态归属
+
+```mermaid
+flowchart TD
+    API[后端消息历史 / 执行事件 / 审批] --> Transport[前端 API：请求与 SSE 解析]
+    Transport --> Execution[执行模块：发送、审批、事件归并]
+    Transport --> History[历史模块：分页、缓存核对、步骤加载]
+    Execution --> State[会话内 messages 与 executions]
+    History --> State
+    State --> Projection[纯函数：生成消息流展示项]
+    Projection --> Feed[ChatMessageList / ChatExecutionItem]
+    Feed --> Parts[AgentTimeline / ApprovalCard / ChatMessage]
+    Page[ChatView：页面组合] --> Feed
+    Page --> Composer[输入框与 Skill 选择]
+```
+
+继续复用 Vue、Pinia、现有 Markdown、时间线、审批组件和后端 Runtime，不引入新状态机框架、聊天 SDK 或表结构。
+
+| 边界 | 所有权与建议文件 |
+| --- | --- |
+| chat Store | 保留一个 Pinia 协调入口；拥有按会话隔离的状态和模块实例生命周期。不要每次调用 composable 创建独立聊天状态 |
+| 会话目录 | `stores/chat/conversations.ts`：列表、创建、改名、删除；弹窗留在调用方，模块接受明确参数 |
+| 消息历史 | `stores/chat/history.ts`：分页游标、请求版本、摘要合并、步骤懒加载与错误状态 |
+| 执行流程 | `stores/chat/execution.ts`：发送、审批续跑、恢复核对；`events.ts`：事件到运行状态的转换 |
+| 展示投影 | `stores/chat/feed.ts`：关联消息与运行、排序、临时正文交接；不发请求 |
+| 消息区域 | `ChatMessageList.vue` 与 `ChatExecutionItem.vue`：空态、加载更多、运行展示与详情请求事件 |
+| DOM 与路由 | `useChatScroll.ts` 管理帧合并、滚动和卸载清理；`useChatRoute.ts` 管理 URL 与会话同步 |
+
+这些模块按阶段提取，不一次建立全部空壳。ChatView 只读取展示项和必要的输入状态，不直接读取 replayDetails/runsByMessage；侧栏保留列表及 isBusy 等明确接口。不要只把几十个字段塞进一个大对象来隐藏复杂度。
+
+每个 Execution 独立持有 runId、消息关联、服务端状态、步骤、详情加载状态、临时正文及待审批信息；实时步骤与回放使用同一份步骤集合，持久步骤按运行与 seq 去重。详情请求捕获版本，避免较旧历史响应覆盖新到达事件。
+
+服务端状态保留 running / waiting_approval / completed / failed / cancelled；客户端另记 preparing / streaming / reconciling / disconnected 等传输状态。二者不可混为一个布尔值。canSend、isBusy 等由两者派生：等待审批或服务端仍运行时禁止另发；断线表示结果未知，先查询持久化状态，不自动重新执行工具。
+
+创建会话前锁定本次发送，并为创建请求去重；请求上下文捕获账号代次、会话实例、requestId 和 runId。切换会话继续更新原会话；删除会话或退出账号使旧回调失效并释放本地读取资源。取消浏览器读取不等于取消后端运行，不能据此把服务端标成 cancelled。
+
+### 9.4 后端配合边界
+
+**修跳位及前端职责拆分不依赖后端改动。** 当前 user_message_id、assistant_message_id、run.id、分页摘要和步骤接口已经可用。保留按消息游标分页，不为了组件布局增加 turn 表或强制整轮分页。
+
+后续若要减少恢复分支和完成后的整页重拉，建议后端增量配合：
+
+1. 扩展 run_finished：返回标准助手 MessageResponse、运行摘要及会话更新信息，前端不再拼本地时间、猜 message_count + 2。完整契约实现时写入 api.md；字段应在事务提交后发出。
+2. 在恢复查询中提供当前运行及待审批摘要，或复用现有接口组合为一个前端恢复入口。先保证错误与空结果可区分，再按实际请求成本决定是否聚合后端接口。
+3. 工具步骤提供稳定调用关联（例如 tool_call_id），同时覆盖 SSE 和历史响应。当前 AgentTimeline 按工具名配对，顺序调用可工作，但不足以可靠表达同名多调用交错；历史缺失关联的记录保留顺序兼容规则。是否需要迁移取决于现有持久字段能否提供关联。
+4. request_id 由前端一次发送流程创建并持有，当前 API 每次调用临时生成 UUID。后端已检查重复请求；如要支持不确定结果后的恢复，再补“重复请求如何返回原运行”的契约，不能把去重误当成 SSE 断点续传。
+
+本轮不做自动断点续传、并行工具执行或模型适配器重写。失败与恢复先复用持久化查询，避免扩大范围。
+
+### 9.5 分步交付与验收
+
+| 顺序 | 前置条件与实施范围 | 独立验收 |
+| --- | --- | --- |
+| 1. 修复时间线跳位（已完成） | 确认固定展示顺序；修改 ChatView.vue 及视图测试，同步 DESIGN.md 展示规则 | 运行、完成、刷新后过程均在正文前；仅助手消息的一页、无助手的失败/审批记录位置正确；零调用无空入口 |
+| 2. 统一消息流投影（已完成） | 第一步通过；增加 feed.ts、ChatMessageList、ChatExecutionItem，页面改为消费展示项 | 完成时不重复正文、不重置已展开过程；临时 ID 转正式 ID、分页、切会话与刷新位置一致 |
+| 3. 统一执行状态（已完成） | 第二步通过；按运行合并实时与历史步骤，提取 execution/events；先锁发送再创建会话，保留 requestId，错误不降级为空数据 | 双击首发只建一会话一运行；审批批准/拒绝/再审批、断流恢复、重复事件、旧历史响应、删除及退出后的回调均有验证 |
+| 4. 收拢历史和页面职责 | 第三步通过；提取 history/conversations 及路由、滚动逻辑，收窄 Store 对外接口 | 草稿隔离、深链、返回、改名/删除、分页滚动锚点和用户主动上滚阅读不退化；不重复请求详情 |
+| 5. 增量后端契约 | 仅在前四步稳定且确认具体字段后实施 events/schemas/service 与前端类型同步变更 | 终态事件与刷新结果一致；完整提交信息可替代成功后的整页刷新；审批/错误恢复仍保留查询；调用配对覆盖同名工具 |
+
+每步先补对应的行为测试，再改实现，运行相关 Vitest、类型检查、ESLint 和构建；修改后端时增加接口/事务与授权测试。涉及布局的步骤用可控工具流在浏览器验证运行→完成→刷新，并检查展开态和分页。模拟验收与真实模型联调分别报告，不将静态推断写成已验证行为。
+
+实施时同步当前架构说明、API（如变）、DESIGN（如变）和项目状态；架构方案获确认落地时记录 ADR。前三步已完成。当前每个 Execution 持有唯一的步骤、审批、预览、服务端状态和连接状态；旧 agentSteps/replayDetails 等只读接口由它派生。发送与审批共用 runExecution，读取历史和步骤有版本及会话实例校验。第四步会话/历史模块、路由/滚动拆分和第五步后端契约尚未开始。实际验证结果见 PROJECT_STATUS.md。
+
+
+### 9.6 第三步的恢复与错误边界
+
+- 创建前将本次发送标为 preparing，同一草稿的创建请求复用；创建失败保留输入并解锁。创建期间退出账号或新建草稿，迟到的创建响应不得启动原发送或跳转页面。
+- 连接用 preparing / streaming / reconciling / disconnected / idle 表达，服务端状态单独使用 running / waiting_approval / completed / failed / cancelled。等待审批或结果未知不能因 HTTP 结束而解锁发送。
+- 已知运行断流时先查历史。已完成则恢复正式消息；等待审批则读取当前审批；仍运行则保持提示与锁定，用户可再次核对。不会自动重新 POST 消息或审批。
+- 已收到 run_finished 时，随后的历史查询失败不抹掉已提交的最终回复。审批操作返回不确定结果时，若查询仍是原审批，不能声称决定成功，也不能恢复成空闲；提示核对后再操作。
+- 步骤与审批的 HTTP 失败、业务错误或响应结构异常均报错。历史明确报告 waiting_approval 却没有 pending 审批时也视为未恢复。步骤失败保留已有步骤与重试入口；审批预加载步骤失败不提交决定。
+- 步骤按运行内 seq 去重；异步详情请求复用，版本落后的结果不覆盖新事件。实时完成、历史核对仍沿用第二步的稳定 key 和两层展开节点。
+- 删除会话、退出账号时取消本地流读取，并使旧事件和查询结果失效；仅切换会话时原运行继续写回自己的会话。
+- 当前历史契约不返回 request_id。若 run_started 未收到，不能把后来发现的某个运行猜作本次提交：保留结果未知，提示刷新页面核对。支持按 request_id 精确找回或续接 SSE 需要后续后端契约配合，本步未实施。
+
+详见 [ADR-0016](adr/0016-chat-execution-state-and-recovery.md)。浏览器验收使用模拟 API/SSE；不将其视为真实模型验收。

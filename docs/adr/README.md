@@ -37,3 +37,5 @@
 - 决策变更不删旧文件，新增一条 ADR 并在旧文件头部标注 `被 ADR-XXXX 取代`。
 
 - [ADR-0014 账号级本地 Skill 目录与单条消息选择](0014-local-skill-catalog-and-message-selection.md)
+- [ADR-0015 聊天消息流投影与稳定执行项](0015-chat-feed-projection.md)
+- [ADR-0016 聊天执行状态与断流恢复](0016-chat-execution-state-and-recovery.md)

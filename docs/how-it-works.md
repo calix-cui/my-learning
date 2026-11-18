@@ -9,6 +9,8 @@
 
 > 商品 / 分类 / 概览页与它们的后端接口已于 2026-11-08 归档（`archive/product-admin/`），本页只描述当前在跑的部分。
 
+聊天前端由 `stores/chat.ts` 维持会话隔离，`stores/chat/execution.ts` 统一发送与审批的连接生命周期，`events.ts` 将执行事件归并到每次运行唯一的状态。`feed.ts` 投影为消息/执行展示项，交给 `ChatMessageList` 和 `ChatExecutionItem` 渲染。断流恢复查询持久化状态，不自动重发；具体边界见 [聊天整理方案](chat.md#96-第三步的恢复与错误边界)。
+
 ## 1. 全景：谁在跟谁说话
 
 ```mermaid
