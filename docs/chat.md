@@ -367,6 +367,7 @@ flowchart TD
 - 步骤与审批的 HTTP 失败、业务错误或响应结构异常均报错。历史明确报告 waiting_approval 却没有 pending 审批时也视为未恢复。步骤失败保留已有步骤与重试入口；审批预加载步骤失败不提交决定。
 - 步骤按运行内 seq 去重；异步详情请求复用，版本落后的结果不覆盖新事件。实时完成、历史核对仍沿用第二步的稳定 key 和两层展开节点。
 - 删除会话、退出账号时取消本地流读取，并使旧事件和查询结果失效；仅切换会话时原运行继续写回自己的会话。
+- 核对到这条消息已经落进历史时清空已发出的草稿，否则同一句话会被当成新消息再发一遍；结果未知时草稿仍然保留。
 - 当前历史契约不返回 request_id。若 run_started 未收到，不能把后来发现的某个运行猜作本次提交：保留结果未知，提示刷新页面核对。支持按 request_id 精确找回或续接 SSE 需要后续后端契约配合，本步未实施。
 
-详见 [ADR-0016](adr/0016-chat-execution-state-and-recovery.md)。浏览器验收使用模拟 API/SSE；不将其视为真实模型验收。
+详见 [ADR-0016](adr/0016-chat-execution-state-and-recovery.md)。浏览器验收用 `pnpm acceptance:recovery`（`frontend/scripts/chat-recovery-acceptance.mjs`）跑模拟 API/SSE；不将其视为真实模型验收。

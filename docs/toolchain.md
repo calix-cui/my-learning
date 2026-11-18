@@ -137,6 +137,7 @@ flowchart LR
 | 端到端 | `frontend/scripts/chat-acceptance.mjs` | 10 项 | `pnpm acceptance:chat` | **是**（真实后端 + 真实库） | 对话页：空态、新建、流式逐字、自动命名、刷新保留、排序、删除；跑前跑后清空会话 |
 | 端到端 | `frontend/scripts/auth-acceptance.mjs` | 13 项 | `pnpm acceptance:auth` | **是** | 未登录拦截与 redirect、注册即登录、刷新保持、发消息、退出后再也进不去、重新登录数据仍在、Cookie 不可被 JS 读到 |
 | 端到端 | `frontend/scripts/settings-acceptance.mjs` | 15 项 | `pnpm acceptance:settings` | **是** | 模型接入（继承提示→存 fake→测试连接→顶栏标签→fake 回复）、改显示名、设备列表、导出 JSON/Markdown 可解析、注销后无法登录、主题写回账号与换设备恢复 |
+| 端到端 | `frontend/scripts/chat-recovery-acceptance.mjs` | 12 项 | `pnpm acceptance:recovery` | 否（拦截 `/api`，模拟断开的 SSE） | 断流后出现恢复提示且锁住发送、不凭空出现正文、只发过 1 次 POST；点「重新核对状态」后只多一次历史查询、恢复正式正文、清空已发出的草稿、输入框恢复可用、无页面运行错误 |
 
 门禁口径：后端 `--cov-fail-under=80`（当前 204 passed / 93.22%）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`。
 

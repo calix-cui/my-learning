@@ -112,6 +112,7 @@ pnpm test:watch    # 监听模式，开发时用
 单测边界：组件测**行为**（渲染出什么、点击后 emit / store 怎么变），不写快照、不断言 class 名与 DOM 结构；页面级完整流程（登录拦截、流式对话）交给 E2E 与人工验收。
 
 > 端到端脚本（都要前后端在跑）：`pnpm acceptance:chat`（对话流 10 项）、`pnpm acceptance:agent`（深度回答与工具时间线，10 项）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录，13 项）、`pnpm acceptance:settings`（模型接入→测试连接→改显示名→设备→导出→注销→主题同步，15 项）、`pnpm acceptance:tools`（设置窗口可点→工具启停→每日上限→审批拒绝→审批批准→刷新无残留，9 项）。
+> `pnpm acceptance:recovery`（断流后提示与锁定→只读核对→恢复正文，12 项）不需要后端：它自己拦截 `/api` 返回模拟数据与断开的 SSE，只要一个 dev server 在跑（`pnpm dev --port 5199`）。
 > 对话 E2E 跑前跑后都会清空会话。它默认打 5173 的 dev server；如果你刚改过前端代码（HMR 可能中途整页重载），改用 `pnpm build && pnpm preview` 后 `BASE=http://127.0.0.1:4173 pnpm acceptance:chat`，结果更稳定。
 
 ## 与后端联调
@@ -168,7 +169,8 @@ frontend/
 ├── README.md
 ├── scripts/
 │   ├── chat-acceptance.mjs    # 对话端到端验收（10 项，CDP 驱动真实浏览器）
-│   └── auth-acceptance.mjs    # 账号端到端验收（13 项：注册→刷新→退出→再登录）
+│   ├── auth-acceptance.mjs    # 账号端到端验收（13 项：注册→刷新→退出→再登录）
+│   └── chat-recovery-acceptance.mjs # 断流恢复验收（12 项：模拟 API/SSE，不依赖后端）
 └── src/
     ├── main.ts                # 挂载 Element Plus（zh-cn）+ router
     ├── App.vue                # 外壳：左栏 + 对话区 + 设置悬浮窗（登录页不套外壳）
