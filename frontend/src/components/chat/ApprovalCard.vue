@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import type { PendingApproval } from '@/stores/chat'
 
-const props = defineProps<{ approval: PendingApproval; busy?: boolean }>()
+const props = defineProps<{ approval: PendingApproval; busy?: boolean; disabled?: boolean }>()
 const emit = defineEmits<{ decide: [decision: 'approve' | 'reject', note?: string] }>()
 
 const note = ref('')
@@ -16,7 +16,7 @@ const argsText = computed(() => {
 })
 
 function decide(decision: 'approve' | 'reject') {
-  if (props.busy) return
+  if (props.busy || props.disabled) return
   emit('decide', decision, note.value.trim() || undefined)
   note.value = ''
 }
@@ -42,19 +42,19 @@ function decide(decision: 'approve' | 'reject') {
         maxlength="80"
         placeholder="拒绝理由（可留空）"
         aria-label="拒绝理由"
-        :disabled="busy"
+        :disabled="busy || disabled"
       />
       <div class="approval__actions">
         <button
           class="approval__btn approval__btn--ghost u-tint"
-          :disabled="busy"
+          :disabled="busy || disabled"
           @click="decide('reject')"
         >
           拒绝
         </button>
         <button
           class="approval__btn approval__btn--primary"
-          :disabled="busy"
+          :disabled="busy || disabled"
           @click="decide('approve')"
         >
           {{ busy ? '执行中…' : '批准执行' }}

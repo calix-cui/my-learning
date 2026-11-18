@@ -14,12 +14,22 @@ import ChatMessage from '@/components/chat/ChatMessage.vue'
 import { getConversation } from '@/api/chat'
 import { rescanSkills } from '@/api/skills'
 import { useSkillsStore } from '@/stores/skills'
-import { getAgentSteps, sendAgentStream, type AgentStreamHandlers } from '@/api/agent'
+import {
+  getAgentSteps,
+  listApprovals,
+  sendAgentStream,
+  type AgentStreamHandlers,
+} from '@/api/agent'
 import { useSettingsStore } from '@/stores/settings'
 import type { ChatConversationDetail } from '@/types/api'
 
 vi.mock('@/api/chat', () => ({ getConversation: vi.fn() }))
-vi.mock('@/api/agent', () => ({ getAgentSteps: vi.fn(), sendAgentStream: vi.fn() }))
+vi.mock('@/api/agent', async (importOriginal) => ({
+  AgentHttpError: (await importOriginal<typeof import('@/api/agent')>()).AgentHttpError,
+  getAgentSteps: vi.fn(),
+  listApprovals: vi.fn(),
+  sendAgentStream: vi.fn(),
+}))
 vi.mock('@/api/skills', () => ({ rescanSkills: vi.fn() }))
 vi.mock('element-plus', () => ({ ElMessage: { success: vi.fn(), error: vi.fn() } }))
 afterEach(() => {
@@ -31,8 +41,8 @@ async function setup(path = '/chat/1', stream = false, replay = false) {
   const pinia = createTestingPinia({
     createSpy: vi.fn,
     stubActions: (name) =>
-      !(stream && name === 'send') &&
-      !(replay && ['openConversation', 'loadExecutionSteps'].includes(name)),
+      !(stream && ['send', 'recoverExecution'].includes(name)) &&
+      !(replay && ['openConversation', 'loadExecutionSteps', 'loadOlderMessages'].includes(name)),
   })
   const chat = useChatStore(pinia)
   const settings = useSettingsStore(pinia)
@@ -61,7 +71,13 @@ async function setup(path = '/chat/1', stream = false, replay = false) {
       directives: { loading: () => {} },
       stubs:
         stream || replay
-          ? { MarkdownContent: false, ChatMessage: false, AgentTimeline: false }
+          ? {
+              ChatMessageList: false,
+              ChatExecutionItem: false,
+              MarkdownContent: false,
+              ChatMessage: false,
+              AgentTimeline: false,
+            }
           : {},
     },
   })
@@ -187,9 +203,11 @@ async function setupStream() {
   vi.stubGlobal('cancelAnimationFrame', cancelFrame)
   let handlers!: AgentStreamHandlers
   let finish!: () => void
+  let fail!: (error: Error) => void
   vi.mocked(sendAgentStream).mockImplementation((_id, _text, callbacks) => {
     handlers = callbacks
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
+      fail = reject
       finish = resolve
     })
   })
@@ -220,7 +238,12 @@ async function setupStream() {
   }
 
   const delta = (content: string) => handlers.onEvent?.({ type: 'assistant_delta', content })
-  return { ...view, frames, paint, complete, handlers, delta, cancelFrame }
+  const disconnect = async () => {
+    fail(new Error('连接断开'))
+    await sending
+    await flushPromises()
+  }
+  return { ...view, frames, paint, complete, handlers, delta, cancelFrame, disconnect }
 }
 
 it('密集分片按帧渲染，滚动读取更新后的 DOM，完成时显示正式消息', async () => {
@@ -252,6 +275,7 @@ it('密集分片按帧渲染，滚动读取更新后的 DOM，完成时显示正
   expect(wrapper.findComponent(ChatMessage).exists()).toBe(true)
   expect(wrapper.get('pre code').text()).toBe('尾部')
   expect(wrapper.text()).not.toContain('正在输入')
+  expect(wrapper.find('details.timeline').exists()).toBe(false)
   wrapper.unmount()
   expect(frames.size).toBe(0)
 })
@@ -337,7 +361,7 @@ it('直达或刷新后从每条助手回复打开对应详情，切换会话不�
   const timelines = wrapper.findAll<HTMLDetailsElement>('details.timeline')
   for (const [index, id] of [12, 14].entries()) {
     const timeline = timelines[index]
-    expect(timeline.element.previousElementSibling?.textContent).toContain(`助手回复 ${id}`)
+    expect(timeline.element.nextElementSibling?.textContent).toContain(`助手回复 ${id}`)
     timeline.element.open = true
     await timeline.trigger('toggle')
     await flushPromises()
@@ -370,8 +394,231 @@ it('模型开始调用工具时清除该轮临时文本，随后流式展示正�
   delta('**当前时间**')
   await paint()
   expect(wrapper.get('.markdown-content strong').text()).toBe('当前时间')
+  expect(wrapper.get('details.timeline').element.previousElementSibling?.textContent).toContain(
+    '测试 Markdown',
+  )
+  expect(wrapper.get('details.timeline').element.nextElementSibling?.textContent).toContain(
+    '当前时间',
+  )
   await complete('**当前时间**')
   expect(wrapper.get('.chat__row--assistant strong').text()).toBe('当前时间')
+  expect(wrapper.findAll('details.timeline')).toHaveLength(1)
+  expect(wrapper.get('details.timeline').element.nextElementSibling).toBe(
+    wrapper.get('.chat__row--assistant').element,
+  )
   expect(wrapper.text()).not.toContain('中间说明')
+  wrapper.unmount()
+})
+
+it('分页只有助手消息时过程仍在正文前，补入用户消息后不重复', async () => {
+  const user = {
+    id: 11,
+    conversation_id: 1,
+    role: 'user',
+    content: '用户问题',
+    model: null,
+    create_time: '',
+  }
+  const assistant = { ...user, id: 12, role: 'assistant', content: '助手回复' }
+  const run = {
+    id: 41,
+    user_message_id: 11,
+    assistant_message_id: 12,
+    status: 'completed' as const,
+    visible_step_count: 1,
+  }
+  vi.mocked(getConversation).mockImplementation(async (_id, options) => ({
+    id: 1,
+    title: '分页',
+    agent_key: 'default',
+    skill_slug: null,
+    create_time: '',
+    update_time: '',
+    messages: options?.before_message_id ? [user] : [assistant],
+    runs: options?.before_message_id ? [] : [run],
+    next_before_message_id: options?.before_message_id ? null : 12,
+  }))
+  const { wrapper } = await setup('/chat/1', false, true)
+  await flushPromises()
+  expect(wrapper.get('details.timeline').element.nextElementSibling?.textContent).toContain(
+    '助手回复',
+  )
+  const loadMore = wrapper.findAll('button').find((button) => button.text() === '加载更早消息')!
+  await loadMore.trigger('click')
+  await flushPromises()
+  expect(getConversation).toHaveBeenLastCalledWith(1, { message_limit: 50, before_message_id: 12 })
+  expect(wrapper.findAll('details.timeline')).toHaveLength(1)
+  expect(wrapper.get('details.timeline').element.previousElementSibling?.textContent).toContain(
+    '用户问题',
+  )
+  expect(wrapper.get('details.timeline').element.nextElementSibling?.textContent).toContain(
+    '助手回复',
+  )
+  wrapper.unmount()
+})
+
+it.each(['failed', 'cancelled', 'waiting_approval'] as const)(
+  '没有助手消息的 %s 运行保持在用户消息之后',
+  async (status) => {
+    vi.mocked(getConversation).mockResolvedValue({
+      id: 1,
+      title: '未完成',
+      agent_key: 'default',
+      skill_slug: null,
+      create_time: '',
+      update_time: '',
+      messages: [
+        {
+          id: 11,
+          conversation_id: 1,
+          role: 'user',
+          content: '用户问题',
+          model: null,
+          create_time: '',
+        },
+      ],
+      runs: [
+        { id: 41, user_message_id: 11, assistant_message_id: null, status, visible_step_count: 1 },
+      ],
+    })
+    vi.mocked(listApprovals).mockResolvedValue([
+      {
+        id: 9,
+        run_id: 41,
+        seq: 2,
+        tool_name: 'rename_conversation',
+        tool_args: {},
+        status: 'pending',
+        note: '需要确认',
+        decided_time: null,
+        create_time: '',
+      },
+    ])
+    const { wrapper } = await setup('/chat/1', false, true)
+    await flushPromises()
+    expect(wrapper.findAll('details.timeline')).toHaveLength(1)
+    expect(wrapper.get('details.timeline').element.previousElementSibling?.textContent).toContain(
+      '用户问题',
+    )
+    expect(wrapper.find('.chat__row--assistant').exists()).toBe(false)
+    if (status === 'waiting_approval') {
+      expect(wrapper.get('details.timeline').element.nextElementSibling?.tagName).toBe(
+        'APPROVAL-CARD-STUB',
+      )
+    }
+    wrapper.unmount()
+  },
+)
+
+it('临时消息转正式 ID、完成及历史核对后保留两层展开，正文只显示一次', async () => {
+  const { wrapper, handlers, delta, paint, complete, chat } = await setupStream()
+  const execution = wrapper.findComponent({ name: 'ChatExecutionItem' }).vm.$
+  handlers.onEvent?.({ type: 'run_started', run_id: 41, conversation_id: 1, user_message_id: 11 })
+  handlers.onEvent?.({ type: 'tool_call', seq: 2, tool: 'now', args: { timezone: 'UTC' } })
+  await paint()
+  expect(wrapper.findComponent({ name: 'ChatExecutionItem' }).vm.$).toBe(execution)
+  const timeline = wrapper.get<HTMLDetailsElement>('details.timeline')
+  const entry = wrapper.get<HTMLDetailsElement>('details.timeline__entry')
+  timeline.element.open = true
+  entry.element.open = true
+  await timeline.trigger('toggle')
+  await entry.trigger('toggle')
+  handlers.onEvent?.({
+    type: 'tool_result',
+    seq: 3,
+    tool: 'now',
+    ok: true,
+    content: '结果',
+    duration_ms: 1,
+  })
+  delta('唯一的正文')
+  await paint()
+  expect(wrapper.findAll('.chat__bubble--streaming')).toHaveLength(1)
+
+  // 完成后的真实历史查询使用相同运行；较旧分页可能只包含助手消息。
+  vi.mocked(getConversation)
+    .mockReset()
+    .mockResolvedValue({
+      id: 1,
+      title: '对话',
+      agent_key: 'default',
+      skill_slug: null,
+      create_time: '',
+      update_time: '',
+      messages: [
+        {
+          id: 2,
+          conversation_id: 1,
+          role: 'assistant',
+          content: '唯一的正文',
+          model: null,
+          create_time: '',
+        },
+      ],
+      runs: [
+        {
+          id: 41,
+          user_message_id: 11,
+          assistant_message_id: 2,
+          status: 'completed',
+          visible_step_count: 2,
+        },
+      ],
+    })
+  await complete('唯一的正文')
+  await paint()
+  expect(chat.activeUserMessageId).toBeNull()
+  expect(wrapper.findComponent({ name: 'ChatExecutionItem' }).vm.$).toBe(execution)
+  expect(wrapper.get('details.timeline').element).toBe(timeline.element)
+  expect(wrapper.get('details.timeline__entry').element).toBe(entry.element)
+  expect(timeline.element.open).toBe(true)
+  expect(entry.element.open).toBe(true)
+  expect(wrapper.findAll('.chat__row--assistant')).toHaveLength(1)
+  expect(wrapper.find('.chat__bubble--streaming').exists()).toBe(false)
+  expect(wrapper.text().match(/唯一的正文/g)).toHaveLength(1)
+  expect(getAgentSteps).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
+it('断流后显示核对入口并禁止重发，查询完成后恢复正文和发送', async () => {
+  const { wrapper, handlers, disconnect, chat } = await setupStream()
+  handlers.onEvent?.({ type: 'run_started', run_id: 41, conversation_id: 1, user_message_id: 11 })
+  await disconnect()
+  expect(wrapper.get('.chat__recovery').text()).toContain('详情暂不可用')
+  expect(wrapper.findComponent(ChatComposer).props('disabled')).toBe(true)
+  vi.mocked(getConversation).mockResolvedValueOnce({
+    id: 1,
+    title: '对话',
+    agent_key: 'default',
+    skill_slug: null,
+    create_time: '',
+    update_time: '',
+    messages: [
+      {
+        id: 12,
+        conversation_id: 1,
+        role: 'assistant',
+        content: '恢复的正文',
+        model: null,
+        create_time: '',
+      },
+    ],
+    runs: [
+      {
+        id: 41,
+        user_message_id: 11,
+        assistant_message_id: 12,
+        status: 'completed',
+        visible_step_count: 0,
+      },
+    ],
+  })
+  await wrapper.get('.chat__recovery button').trigger('click')
+  await flushPromises()
+  expect(wrapper.find('.chat__recovery').exists()).toBe(false)
+  expect(wrapper.get('.chat__row--assistant').text()).toContain('恢复的正文')
+  expect(chat.canSend).toBe(true)
+  expect(wrapper.findComponent(ChatComposer).props('disabled')).toBe(false)
+  expect(sendAgentStream).toHaveBeenCalledTimes(1)
   wrapper.unmount()
 })

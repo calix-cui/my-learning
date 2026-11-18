@@ -44,7 +44,8 @@ let agentHandlers: {
 
 let finishAgent: (() => void) | null = null
 
-vi.mock('@/api/agent', () => ({
+vi.mock('@/api/agent', async (importOriginal) => ({
+  AgentHttpError: (await importOriginal<typeof import('@/api/agent')>()).AgentHttpError,
   getAgentSteps: vi.fn(async () => [] as AgentStep[]),
   listApprovals: vi.fn(async () => []),
   // 写操作会挂起：先吐 approval_required，再由测试决定批准后怎么走
@@ -137,7 +138,8 @@ describe('chat store：会话状态按会话隔离', () => {
     expect(chat.isBusy(1)).toBe(true)
     finishAgent?.()
     await pending
-    expect(chat.isBusy(1)).toBe(false)
+    // 未收到终态的断流仍需核对，不能把原会话当作空闲。
+    expect(chat.isBusy(1)).toBe(true)
   })
 
   it('输入框草稿也按会话隔离：切走再切回来文字还在', async () => {
@@ -191,6 +193,20 @@ describe('chat store · 工具审批', () => {
     await chat.loadConversations()
     chat.agentMode = true
 
+    const { listApprovals, decideApprovalStream } = await import('@/api/agent')
+    vi.mocked(listApprovals).mockResolvedValueOnce([
+      {
+        id: 9,
+        run_id: 7,
+        seq: 2,
+        tool_name: 'rename_conversation',
+        tool_args: { title: '周报' },
+        status: 'pending',
+        note: '写操作需要确认',
+        create_time: '',
+        decided_time: null,
+      },
+    ])
     const sending = chat.send('把会话改名为周报')
     await vi.waitFor(() => expect(agentHandlers.onEvent).toBeTruthy())
 
@@ -232,7 +248,7 @@ describe('chat store · 工具审批', () => {
 
     // 批准：服务端接着跑完这次运行
     const deciding = chat.approveApproval()
-    await vi.waitFor(() => expect(agentHandlers.onEvent).toBeTruthy())
+    await vi.waitFor(() => expect(decideApprovalStream).toHaveBeenCalled())
     agentHandlers.onEvent?.({
       type: 'tool_result',
       seq: 3,
@@ -274,11 +290,12 @@ describe('chat store · Skill 时间线', () => {
       1,
       '整理会议',
       expect.any(Object),
-      undefined,
+      expect.any(AbortSignal),
       'auto',
       'none',
       [],
       undefined,
+      expect.any(String),
     )
     await chat.openConversation(2)
     agentHandlers.onEvent?.({
@@ -297,13 +314,6 @@ describe('chat store · Skill 时间线', () => {
       message: '技能不可用',
     })
     expect(chat.agentSteps).toEqual([])
-    finishAgent?.()
-    await sending
-    await chat.openConversation(1)
-    expect(chat.agentSteps).toMatchObject([
-      { kind: 'skill_loaded', skill_name: '会议纪要', skill_version: 'v1' },
-      { kind: 'skill_load_failed', content: '技能不可用' },
-    ])
     agentHandlers.onEvent?.({
       type: 'skill_resource',
       seq: 4,
@@ -313,12 +323,14 @@ describe('chat store · Skill 时间线', () => {
       ok: true,
       message: '已读取参考资料',
     })
-    expect(chat.agentSteps.at(-1)).toMatchObject({
-      kind: 'skill_resource',
-      skill_name: '会议纪要',
-      ok: true,
-      tool_args: { path: 'references/checklist.md' },
-    })
+    finishAgent?.()
+    await sending
+    await chat.openConversation(1)
+    expect(chat.agentSteps).toMatchObject([
+      { kind: 'skill_loaded', skill_name: '会议纪要', skill_version: 'v1' },
+      { kind: 'skill_load_failed', content: '技能不可用' },
+      { kind: 'skill_resource', skill_name: '会议纪要', ok: true },
+    ])
     const savedSteps = JSON.parse(JSON.stringify(chat.agentSteps))
     vi.mocked(getConversation).mockResolvedValueOnce({
       id: 1,
@@ -440,11 +452,12 @@ it('本条 Skill 选择随草稿发送，成功后清除，下一次提问不自
     1,
     '第一条',
     expect.any(Object),
-    undefined,
+    expect.any(AbortSignal),
     'manual',
     'none',
     ['user:guide'],
     'catalog1',
+    expect.any(String),
   )
   agentHandlers.onEvent?.({
     type: 'run_started',
@@ -468,11 +481,12 @@ it('本条 Skill 选择随草稿发送，成功后清除，下一次提问不自
     1,
     '第二条',
     expect.any(Object),
-    undefined,
+    expect.any(AbortSignal),
     'auto',
     'none',
     [],
     undefined,
+    expect.any(String),
   )
   finishAgent?.()
   await next

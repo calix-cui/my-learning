@@ -81,6 +81,15 @@ export interface AgentStreamHandlers {
   onError?: (message: string) => void
 }
 
+export class AgentHttpError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
 /** 一个 SSE 响应读到结尾：按 `data:` 帧解析，事件交给 handlers 分发 */
 async function consume(
   response: Response,
@@ -88,13 +97,8 @@ async function consume(
   runId?: number,
 ): Promise<void> {
   if (!response.ok || !response.body) {
-    const text = await response.text().catch(() => '')
-    try {
-      const body = JSON.parse(text) as { message?: string }
-      throw new Error(body.message ?? `请求失败（${response.status}）`)
-    } catch (error) {
-      throw error instanceof Error ? error : new Error(`请求失败（${response.status}）`)
-    }
+    const body = (await response.json().catch(() => null)) as { message?: string } | null
+    throw new AgentHttpError(response.status, body?.message ?? `请求失败（${response.status}）`)
   }
 
   const reader = response.body.getReader()
@@ -166,6 +170,7 @@ export async function sendAgentStream(
   reasoningEffort: ReasoningEffort = 'none',
   skillKeys: string[] = [],
   catalogVersion?: string,
+  requestId?: string,
 ): Promise<void> {
   if (import.meta.env.DEV) {
     console.debug('[my-agent] agent.send', {
@@ -181,7 +186,7 @@ export async function sendAgentStream(
     body: JSON.stringify({
       content,
       execution: 'auto',
-      request_id: globalThis.crypto?.randomUUID?.(),
+      request_id: requestId ?? globalThis.crypto?.randomUUID?.(),
       skill_mode: skillMode,
       skill_keys: skillKeys,
       skill_catalog_version: catalogVersion,
@@ -220,8 +225,10 @@ export async function listApprovals(runId: number, signal?: AbortSignal): Promis
     credentials: 'same-origin',
     signal,
   })
-  if (!response.ok) return []
-  const body = (await response.json()) as { data: { items: AgentApproval[] } }
+  if (!response.ok) throw new AgentHttpError(response.status, '读取审批失败，请重试')
+  const body = (await response.json()) as { code?: number; data: { items: AgentApproval[] } }
+  if (body.code !== undefined && body.code !== 200) throw new Error('读取执行数据失败')
+  if (!Array.isArray(body.data?.items)) throw new Error('读取执行数据失败：响应格式无效')
   return body.data.items
 }
 
@@ -232,7 +239,9 @@ export async function getAgentSteps(runId: number): Promise<AgentStep[]> {
     credentials: 'same-origin',
   })
   if (!response.ok) throw new Error('读取执行过程失败')
-  const body = (await response.json()) as { data: { items: AgentStep[] } }
+  const body = (await response.json()) as { code?: number; data: { items: AgentStep[] } }
+  if (body.code !== undefined && body.code !== 200) throw new Error('读取执行数据失败')
+  if (!Array.isArray(body.data?.items)) throw new Error('读取执行数据失败：响应格式无效')
   return body.data.items
 }
 

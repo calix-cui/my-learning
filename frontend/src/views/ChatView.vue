@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import AgentTimeline from '@/components/chat/AgentTimeline.vue'
-import ApprovalCard from '@/components/chat/ApprovalCard.vue'
+import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmpty from '@/components/chat/ChatEmpty.vue'
-import ChatMessage from '@/components/chat/ChatMessage.vue'
-import MarkdownContent from '@/components/chat/MarkdownContent.vue'
 import ChatToolbar from '@/components/chat/ChatToolbar.vue'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
@@ -98,7 +95,7 @@ async function handleApproval(decision: 'approve' | 'reject', note?: string) {
 
 async function handleSend() {
   const content = chat.composerText
-  if (!content.trim() || chat.sending || chat.loadingMessages || chat.pendingApproval) return
+  if (!content.trim() || !chat.canSend || chat.loadingMessages) return
   // 失败时保留草稿，用户不用重打；成功由 store 清掉自己会话的草稿
   const skillMode = autoSkills.value ? 'auto' : 'manual'
   const effort = chat.agentMode && settings.model?.supports_reasoning_effort ? 'high' : 'none'
@@ -208,6 +205,19 @@ watch(
       Skill 目录读取失败，可在设置中重新扫描。
     </p>
 
+    <p v-if="chat.recoveryMessage" class="chat__recovery" role="status">
+      {{ chat.recoveryMessage }}
+      <button
+        v-if="hasConversation"
+        type="button"
+        class="u-text-action"
+        :disabled="chat.sending"
+        @click="chat.recoverExecution"
+      >
+        重新核对状态
+      </button>
+    </p>
+
     <div ref="scroller" v-loading="chat.loadingMessages" class="chat__scroll">
       <ChatEmpty v-if="showEmptyState" />
 
@@ -215,57 +225,18 @@ watch(
         <button
           v-if="chat.hasOlderMessages"
           type="button"
-          class="chat__older u-tint"
+          class="chat__older u-text-action"
           :disabled="chat.loadingOlderMessages || chat.sending"
           @click="loadOlderMessages"
         >
           {{ chat.loadingOlderMessages ? '正在加载…' : '加载更早消息' }}
         </button>
 
-        <details v-if="chat.legacyRuns.length" class="chat__legacy">
-          <summary>旧执行记录</summary>
-          <AgentTimeline
-            v-for="run in chat.legacyRuns"
-            :key="run.id"
-            :steps="chat.replayDetails[run.id]?.steps ?? []"
-            :running="false"
-            lazy
-            :load-status="chat.replayDetails[run.id]?.status"
-            @request-steps="chat.loadExecutionSteps(run.id)"
-          />
-        </details>
-
-        <template v-for="message in chat.messages" :key="message.id">
-          <ChatMessage :message="message" />
-          <AgentTimeline
-            v-if="message.id === chat.activeUserMessageId"
-            :steps="chat.agentSteps"
-            :running="chat.agentRunning"
-          />
-          <template v-else>
-            <AgentTimeline
-              v-for="run in chat.runsByMessage[message.id]"
-              :key="run.id"
-              :steps="chat.replayDetails[run.id]?.steps ?? []"
-              :running="false"
-              lazy
-              :load-status="chat.replayDetails[run.id]?.status"
-              @request-steps="chat.loadExecutionSteps(run.id)"
-            />
-          </template>
-        </template>
-
-        <MarkdownContent
-          v-if="streamingPreview"
-          class="chat__bubble--streaming"
-          :content="streamingPreview"
-        />
-
-        <!-- 写操作挂起时服务端已暂停，卡片插在消息列末尾等用户决定 -->
-        <ApprovalCard
-          v-if="chat.pendingApproval"
-          :approval="chat.pendingApproval"
+        <ChatMessageList
+          :items="chat.feedItems"
+          :preview="streamingPreview"
           :busy="chat.sending"
+          @request-steps="chat.loadExecutionSteps"
           @decide="handleApproval"
         />
       </div>
@@ -277,7 +248,7 @@ watch(
       :sending="chat.sending"
       :disabled="
         chat.loadingMessages ||
-        !!chat.pendingApproval ||
+        !chat.canSend ||
         skillCatalog.loading ||
         (!!chat.selectedSkillKey && !selectedSkill)
       "
@@ -307,14 +278,24 @@ watch(
   overflow-y: auto;
 }
 
+.chat__recovery {
+  padding-inline: var(--ma-space-md);
+  color: var(--ma-color-muted);
+}
+
+.chat__recovery button {
+  font: inherit;
+  background: transparent;
+  border: 0;
+  margin-inline-start: var(--ma-space-sm);
+}
+
 .chat__skill-status {
   padding-inline: var(--ma-space-md);
   color: var(--ma-color-muted);
 }
 
-.chat__older,
-.chat__legacy {
-  color: var(--ma-color-muted);
+.chat__older {
   font: inherit;
 }
 
@@ -324,10 +305,6 @@ watch(
   background: transparent;
   border: 0;
   border-radius: var(--ma-radius-sm);
-  cursor: pointer;
-}
-
-.chat__legacy > summary {
   cursor: pointer;
 }
 
