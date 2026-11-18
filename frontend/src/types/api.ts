@@ -47,7 +47,6 @@ export interface ChatConversationDetail extends ChatConversation {
   messages: ChatMessage[]
   next_before_message_id?: number | null
   runs?: AgentRunSummary[]
-  legacy_runs?: AgentRunSummary[]
 }
 
 /** 会话分页响应 */

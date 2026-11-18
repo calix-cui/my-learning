@@ -64,7 +64,6 @@ class ConversationHistoryResponse(ConversationDetailResponse):
     messages: list[MessageResponse] = Field(description="当前页消息，按消息 ID 升序")
     next_before_message_id: int | None
     runs: list[AgentRunSummary]
-    legacy_runs: list[AgentRunSummary]
 
 
 class ConversationPageResponse(BaseModel):

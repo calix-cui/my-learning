@@ -416,7 +416,7 @@ data: {"type":"run_finished","run_id":1,"assistant_message_id":43,"content":"3 �
 
 聊天页通过 `GET /api/conversations/{id}?message_limit=50` 读取最近一页消息；追加 `before_message_id` 读更早消息。消息按 ID 升序返回，`next_before_message_id` 为空时到达末页。未传分页参数时仍返回原会话详情。
 
-分页数据中的 `runs` 包含关联本页消息的执行摘要及活跃运行。每条摘要包含 `id`、`user_message_id`、`assistant_message_id`、`status` 和 `visible_step_count`。已完成运行展示在助手消息下，缺少助手消息的未完成运行展示在用户消息下。最晚一页的 `legacy_runs` 收录最近五条有可展示步骤且缺少消息关联的已结束运行。
+分页数据中的 `runs` 包含关联本页消息的执行摘要及活跃运行。每条摘要包含 `id`、`user_message_id`、`assistant_message_id`、`status` 和 `visible_step_count`。已完成运行展示在助手消息下，缺少助手消息的未完成运行展示在用户消息下。不再返回 `legacy_runs`；迁移 `b72e80d193ac` 删除两个消息关联均为空的已结束运行及其步骤、审批，保留消息正文、具备任一消息关联的运行和活跃运行。
 
 展开回放时调用 `GET /api/agent/runs/{run_id}/steps`。返回 `data.items`，每条为按 `seq` 排序的工具或 Skill 步骤。他人运行返回 404。
 

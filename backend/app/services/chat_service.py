@@ -130,30 +130,12 @@ def read_message_history(
             )
         ).order_by(AgentRun.id.desc())
     ).mappings()
-    # 老运行没有消息锚点，在首页单独显示最近记录。
-    legacy = (
-        list(
-            db.execute(
-                summaries.where(
-                    AgentRun.user_message_id.is_(None),
-                    AgentRun.assistant_message_id.is_(None),
-                    ~active,
-                    visible_count > 0,
-                )
-                .order_by(AgentRun.id.desc())
-                .limit(5)
-            ).mappings()
-        )
-        if before_message_id is None
-        else []
-    )
     return ConversationHistoryResponse.model_validate(
         {
             **ConversationResponse.model_validate(conversation).model_dump(),
             "messages": messages,
             "next_before_message_id": messages[0].id if len(rows) > limit else None,
             "runs": list(runs),
-            "legacy_runs": legacy,
         }
     )
 

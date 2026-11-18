@@ -333,7 +333,7 @@ def test_replay_does_not_attach_unlinked_legacy_run_to_a_message(
     page = client.get(path, params={"message_limit": 10}).json()["data"]
     assert page["runs"] == []
     assert len(page["messages"]) == 2
-    assert [item["id"] for item in page["legacy_runs"]] == [run_id]
+    assert "legacy_runs" not in page
 
 
 @pytest.mark.usefixtures("llm")
