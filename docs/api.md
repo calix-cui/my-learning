@@ -416,7 +416,7 @@ data: {"type":"run_finished","run_id":1,"assistant_message_id":43,"content":"3 �
 
 聊天页通过 `GET /api/conversations/{id}?message_limit=50` 读取最近一页消息；追加 `before_message_id` 读更早消息。消息按 ID 升序返回，`next_before_message_id` 为空时到达末页。未传分页参数时仍返回原会话详情。
 
-分页数据中的 `runs` 包含关联本页消息的执行摘要及活跃运行。每条摘要包含 `id`、`user_message_id`、`assistant_message_id`、`status` 和 `visible_step_count`。已完成运行展示在助手消息下，缺少助手消息的未完成运行展示在用户消息下。不再返回 `legacy_runs`；迁移 `b72e80d193ac` 删除两个消息关联均为空的已结束运行及其步骤、审批，保留消息正文、具备任一消息关联的运行和活跃运行。
+分页数据中的 `runs` 包含关联本页消息的执行摘要及活跃运行。每条摘要包含 `id`、`user_message_id`、`assistant_message_id`、`status`、`visible_step_count`，以及断线后用来回答「我那条到底发出去了吗、为什么没答复」的三项：`request_id`（客户端提交时的幂等标识，可能为空）、`error_message`（失败原因，来自服务端）、`finished_time`（结束时间，未结束为空）。已完成运行展示在助手消息下，缺少助手消息的未完成运行展示在用户消息下。不再返回 `legacy_runs`；迁移 `b72e80d193ac` 删除两个消息关联均为空的已结束运行及其步骤、审批，保留消息正文、具备任一消息关联的运行和活跃运行。
 
 展开回放时调用 `GET /api/agent/runs/{run_id}/steps`。返回 `data.items`，每条为按 `seq` 排序的工具或 Skill 步骤。他人运行返回 404。
 
@@ -453,6 +453,32 @@ data: {"type":"run_finished","run_id":1,"assistant_message_id":43,"content":"3 �
 ```
 
 `status` 取值：`running` / `completed` / `failed` / `cancelled`（取消暂未实现）。越权同样 404，不暴露会话是否存在。
+
+### 6.2.1 断线后的核对与续查
+
+断流时前端手里可能有两种信息：知道 `run_id`（收到过 `run_started`），或者只知道自己的 `request_id`（连开始事件都没收到）。这两种情况各有一个只读入口，都不重发消息。
+
+`GET /api/agent/runs/{run_id}`：一次请求拿回运行详情——`id`、`conversation_id`、`user_message_id`、`assistant_message_id`、`status`、`step_count`、`model`、`request_id`、`started_time`、`finished_time`、`error_message`、`steps`（按 `seq` 升序）。他人运行 404。
+
+`GET /api/conversations/{conversation_id}/agent/runs?request_id=<uuid>`：按客户端提交时带的 `request_id` 找这次提交。查到返回与上面相同的 `items` 列表（通常一条）；查不到返回 404，`message` 为「这次提交还没有落库，可以重新发送」——这是**唯一可以据此放心重发**的信号。
+
+`GET /api/agent/runs/{run_id}/steps?since_seq=<n>`：增量读取步骤，返回对象而不是数组：
+
+```json
+{
+  "code": 200,
+  "message": "请求成功",
+  "data": {
+    "items": [{ "seq": 3, "kind": "tool_result", "tool_name": "calculator", "ok": true, "content": "243" }],
+    "status": "running",
+    "visible_step_count": 4,
+    "error_message": null,
+    "finished_time": null
+  }
+}
+```
+
+`items` 只含 `seq > since_seq` 的可见步骤；`status` / `visible_step_count` 描述整次运行，所以「还在跑吗」和「有没有新步骤」一次请求就能回答。前端断流后按 1.5 秒、最多 20 次轮询这个接口，跑到终态再刷新一次正文；轮询不做重发。
 
 ### 6.3 内置工具（只读）
 

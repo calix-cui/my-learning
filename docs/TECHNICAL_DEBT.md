@@ -19,10 +19,16 @@
 | T-18 | 数据 | `create_time` 用 naive `datetime.now`，没有时区语义（容器 UTC / 本机 CST 混用） | P2 | S |
 | T-27 | 前端 | `styles/index.css` 的兜底 token 与 `theme/themes/pine.ts` 有细微不一致（success/warn），靠人工同步 | P2 | S |
 | T-28 | 后端 | MCP 连接池是**进程内**的：多 worker（`uvicorn --workers N`）部署时每个进程各连一份，stdio 服务器子进程数会翻 N 倍 | P2 | M |
+| T-29 | 后端 | 断线后运行直接失败，不能「接着生成」；用户只能重新提交，已花的 token 白费 | P2 | L |
 
 已随模块归档或已在实现中解决的条目（T-01/02/03/05/07/09/12/13/14/16/19/20/22/24/25）不再列出。
 
 ## 1. 后端与数据
+
+### T-29 断线后无法真续跑（P2 · L）
+- **现状**：运行与请求线程是同一件事——连接断开时 `backend/app/agent/executor.py` 的 `_finish_interrupted_run` 立刻 `_fail(db, run, "运行被中断")`（测试 `backend/tests/test_agent_executor.py` 已锁定）。前端能做到的只是「认出这次提交、读回终态」（ADR-0018），不能让它继续生成。
+- **为什么不顺手做**：想续跑就得把执行从请求线程里拿出来（后台任务 + 消费者 + 取消信号），并解决「续跑期间用户又改主意」的冲突；已经花掉的 token 会再花一遍，模型上下文也可能已经变了（提示词、Skill 版本、工具定义都可能不同），需要指纹校验兜底。
+- **建议**：等执行模型整体改造（后台任务化）时一起做，届时用 `POST /api/agent/runs/{id}/resume` 暴露给前端，并把「断线但仍可续」与「已终态」分开表达。在那之前维持 ADR-0018 的只读契约，不要在前端伪造成「继续生成」。
 
 ### T-04 MySQL 方言没有测试覆盖（P1 · M）
 - **证据**：`backend/tests/conftest.py` 的 `db_session` 用内存 SQLite；`app/models/*.py` 里的 `server_default=text("('[]')")`、`JSON` 列、`utf8mb4` 索引长度只有真 MySQL 才验得到。

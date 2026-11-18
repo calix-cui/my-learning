@@ -40,3 +40,4 @@
 - [ADR-0015 聊天消息流投影与稳定执行项](0015-chat-feed-projection.md)
 - [ADR-0016 聊天执行状态与断流恢复](0016-chat-execution-state-and-recovery.md)
 - [ADR-0017 聊天 Store 的模块边界](0017-chat-store-module-boundaries.md)
+- [ADR-0018 断线核对契约：按 request_id 认领、只读续查、不做真续跑](0018-reconnect-contract-and-read-only-polling.md)

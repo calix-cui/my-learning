@@ -355,11 +355,11 @@ flowchart TD
 | 2. 统一消息流投影（已完成） | 第一步通过；增加 feed.ts、ChatMessageList、ChatExecutionItem，页面改为消费展示项 | 完成时不重复正文、不重置已展开过程；临时 ID 转正式 ID、分页、切会话与刷新位置一致 |
 | 3. 统一执行状态（已完成） | 第二步通过；按运行合并实时与历史步骤，提取 execution/events；先锁发送再创建会话，保留 requestId，错误不降级为空数据 | 双击首发只建一会话一运行；审批批准/拒绝/再审批、断流恢复、重复事件、旧历史响应、删除及退出后的回调均有验证 |
 | 4. 收拢历史和页面职责（已完成） | 已提取 `conversations` / `history` / `threads`（Store 835 → 475 行，对外接口不变）、`composables/useChatScroll.ts` 与 `composables/useChatRoute.ts`，`ChatView.vue` 315 → 233 行，只剩 Skill 参数与提交参数 | 草稿隔离、改名/删除、分页、断流核对（142 项单测）；浏览器验收：断流恢复 12 项、滚动 10 项、地址 11 项（深链、刷新、后退/前进、设置浮层共存、非数字路径回落） |
-| 5. 增量后端契约 | 仅在前四步稳定且确认具体字段后实施 events/schemas/service 与前端类型同步变更 | 终态事件与刷新结果一致；完整提交信息可替代成功后的整页刷新；审批/错误恢复仍保留查询；调用配对覆盖同名工具 |
+| 5. 断线核对契约（已完成） | 摘要补 `request_id` / `error_message` / `finished_time`；新增 `GET /api/agent/runs/{id}` 与按 `request_id` 认领的查询；步骤接口支持 `since_seq` 并带回运行状态；前端只读续查、不做真续跑 | 只知 `request_id` 也能回答「发出去了吗、为什么没答复」；查不到才提示可重发；运行中轮询增量到终态才恢复正文；全程不重复 POST |
 
 每步先补对应的行为测试，再改实现，运行相关 Vitest、类型检查、ESLint 和构建；修改后端时增加接口/事务与授权测试。涉及布局的步骤用可控工具流在浏览器验证运行→完成→刷新，并检查展开态和分页。模拟验收与真实模型联调分别报告，不将静态推断写成已验证行为。
 
-实施时同步当前架构说明、API（如变）、DESIGN（如变）和项目状态；架构方案获确认落地时记录 ADR。前三步已完成。当前每个 Execution 持有唯一的步骤、审批、预览、服务端状态和连接状态；`agentSteps` 等视图实际使用的只读接口由它派生，`runsByMessage` / `replayDetails` / `activeUserMessageId` 三个无人使用的派生出口已删除（测试改断言展示项）。发送与审批共用 runExecution，读取历史和步骤有版本及会话实例校验。第四步已把会话目录、会话状态容器与历史读路径拆到 `conversations.ts` / `threads.ts` / `history.ts`（见 ADR-0017），`stores/chat.ts` 835 → 475 行且对外接口不变；滚动与帧合并收进 `composables/useChatScroll.ts`，地址与状态双向同步收进 `composables/useChatRoute.ts`（`ChatView.vue` 315 → 233 行，只剩 Skill 参数与提交参数）。第五步后端契约未开始。实际验证结果见 PROJECT_STATUS.md。
+实施时同步当前架构说明、API（如变）、DESIGN（如变）和项目状态；架构方案获确认落地时记录 ADR。前三步已完成。当前每个 Execution 持有唯一的步骤、审批、预览、服务端状态和连接状态；`agentSteps` 等视图实际使用的只读接口由它派生，`runsByMessage` / `replayDetails` / `activeUserMessageId` 三个无人使用的派生出口已删除（测试改断言展示项）。发送与审批共用 runExecution，读取历史和步骤有版本及会话实例校验。第四步已把会话目录、会话状态容器与历史读路径拆到 `conversations.ts` / `threads.ts` / `history.ts`（见 ADR-0017），`stores/chat.ts` 835 → 475 行且对外接口不变；滚动与帧合并收进 `composables/useChatScroll.ts`，地址与状态双向同步收进 `composables/useChatRoute.ts`（`ChatView.vue` 315 → 233 行，只剩 Skill 参数与提交参数）。第五步补上了断线核对契约：摘要透出 `request_id` / `error_message` / `finished_time`，新增单点运行详情与按 `request_id` 认领的查询，步骤接口支持增量并带回运行状态；前端据此只读续查（绝不重发），仍不做真续跑（见 ADR-0018 与技术债 T-29）。实际验证结果见 PROJECT_STATUS.md。
 
 
 ### 9.6 第三步的恢复与错误边界
@@ -372,6 +372,6 @@ flowchart TD
 - 步骤按运行内 seq 去重；异步详情请求复用，版本落后的结果不覆盖新事件。实时完成、历史核对仍沿用第二步的稳定 key 和两层展开节点。
 - 删除会话、退出账号时取消本地流读取，并使旧事件和查询结果失效；仅切换会话时原运行继续写回自己的会话。
 - 核对到这条消息已经落进历史时清空已发出的草稿，否则同一句话会被当成新消息再发一遍；结果未知时草稿仍然保留。
-- 当前历史契约不返回 request_id。若 run_started 未收到，不能把后来发现的某个运行猜作本次提交：保留结果未知，提示刷新页面核对。支持按 request_id 精确找回或续接 SSE 需要后续后端契约配合，本步未实施。
+- 若 run_started 未收到，不把后来发现的某个运行猜作本次提交，而是用提交时生成的 `request_id` 去认领：认领到就采用它的运行号再核对，认领不到（404「这次提交还没有落库，可以重新发送」）才提示可以重发。认领到的运行仍在跑时按 1.5 秒、最多 20 次轮询增量步骤，跑到终态才刷新正文；轮询不重发、不阻塞「重新核对状态」按钮。
 
 详见 [ADR-0016](adr/0016-chat-execution-state-and-recovery.md)。浏览器验收用 `pnpm acceptance:recovery`（`frontend/scripts/chat-recovery-acceptance.mjs`）跑模拟 API/SSE；不将其视为真实模型验收。

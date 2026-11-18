@@ -141,7 +141,7 @@ flowchart LR
 | 组合式函数 | `frontend/src/composables/useChatRoute.test.ts` | 8 | `pnpm test` | 否（happy-dom + 内存路由） | 无参数回草稿态且不重复清空、深链打开会话、发送中不重开同一会话、非法 id 擦回 `/chat`、建库后改写地址并保留 query、删除后回空白地址、非对话路由不改写；拦不住浏览器真实历史栈 |
 | 端到端 | `frontend/scripts/chat-scroll-acceptance.mjs` | 10 项 | `pnpm acceptance:scroll` | 否（拦截 `/api`） | 打开会话停在底部、滚到顶部后入口完整可见、翻页时正在读的那条不跳位（198.25 → 198.25）、补回新增高度、连续翻页仍稳定、最后一页入口收起、每次只多读一页、无页面运行错误 |
 | 端到端 | `frontend/scripts/chat-route-acceptance.mjs` | 11 项 | `pnpm acceptance:route` | 否（拦截 `/api`） | 深链打开会话、刷新保持、点侧栏换地址、后退/前进回到对应会话、新建会话回 `/chat`、`?settings=1` 与对话页共存且地址不变、非数字路径落到 `/chat`、无页面运行错误 |
-| 端到端 | `frontend/scripts/chat-recovery-acceptance.mjs` | 12 项 | `pnpm acceptance:recovery` | 否（拦截 `/api`，模拟断开的 SSE） | 断流后出现恢复提示且锁住发送、不凭空出现正文、只发过 1 次 POST；点「重新核对状态」后只多一次历史查询、恢复正式正文、清空已发出的草稿、输入框恢复可用、无页面运行错误 |
+| 端到端 | `frontend/scripts/chat-recovery-acceptance.mjs` | 20 项 | `pnpm acceptance:recovery` | 否（拦截 `/api`，模拟断开的 SSE） | 断流后出现恢复提示且锁住发送、不凭空出现正文、只发过 1 次 POST；点「重新核对状态」后只多一次历史查询、恢复正式正文、清空已发出的草稿、输入框恢复可用；连 `run_started` 都没收到时按 `request_id` 认领且不重复提交；无页面运行错误 |
 
 门禁口径：后端 `--cov-fail-under=80`（当前 204 passed / 93.22%）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`。
 
