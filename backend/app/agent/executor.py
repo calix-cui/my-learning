@@ -33,6 +33,7 @@ from app.agent import policy as policy_module
 from app.agent.evidence import EvidenceRef, append_web_sources, collect_web_evidence
 from app.agent.tools import BuiltinSource, ToolRegistry, ToolSource
 from app.common.dev_trace import trace, trace_context, trace_enabled
+from app.database import SessionLocal
 from app.common.exceptions import BusinessError
 from app.llm import LLMClient, LLMError
 from app.llm.base import LLMMessage, ReasoningEffort, ToolCall, ToolCallReply, ToolSpec
@@ -95,6 +96,7 @@ _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-tool")
 class LoopState:
     """一轮循环的可变状态：暂停时要把它们带出生成器。"""
 
+    run_id: int = 0
     seq: int = 1
     failures: dict[str, int] = field(default_factory=dict)
     skill_catalog: list[SkillDescriptor] = field(default_factory=list)
@@ -915,8 +917,35 @@ def _run_loop(
 
 
 def _finish_interrupted_run(db: Session, run: AgentRun, state: LoopState) -> None:
-    if not state.finished and not state.suspended and run.status == RUN_RUNNING:
-        _fail(db, run, "运行被中断")
+    """收尾没跑完的运行：连接断开时也要保证不会停在 running。
+
+    断流时请求依赖已经把 Session 关掉，`run` 变成 detached，读 `run.status` 会抛
+    `DetachedInstanceError`；以前这个异常在 `finally` 里被静默吞掉，真实断流后运行
+    会一直停在 running（2026-11-18 真实模型联调复现）。所以先试请求期 Session，
+    不可用就换一个独立 Session 按 id 收尾。
+    """
+    if state.finished or state.suspended:
+        return
+    try:
+        if run.status == RUN_RUNNING:
+            _fail(db, run, "运行被中断")
+        return
+    except Exception:
+        logger.warning("请求期 Session 已不可用，改用独立 Session 收尾运行", exc_info=True)
+    _mark_interrupted(state.run_id)
+
+
+def _mark_interrupted(run_id: int) -> None:
+    """用一个独立 Session 把仍标着 running 的运行标失败。"""
+    if not run_id:
+        return
+    try:
+        with SessionLocal() as fresh:
+            run = fresh.get(AgentRun, run_id)
+            if run is not None and run.status == RUN_RUNNING:
+                _fail(fresh, run, "运行被中断")
+    except Exception:
+        logger.exception("收尾被中断的 agent 运行时出错", extra={"run_id": run_id})
 
 
 def _snapshot_descriptor(item: SkillDescriptor) -> dict[str, Any]:
@@ -1003,6 +1032,7 @@ def _loop_state(db: Session, run: AgentRun) -> LoopState:
             )
         )
     return LoopState(
+        run_id=run.id,
         seq=_last_seq(db, run),
         skill_catalog=catalog[:MAX_SKILL_CATALOG],
         loaded_skills=loaded[:MAX_SKILLS_PER_RUN],

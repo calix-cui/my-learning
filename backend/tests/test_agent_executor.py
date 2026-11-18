@@ -9,8 +9,9 @@ from typing import Any
 
 import pytest
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.agent import executor
 from app.agent.executor import (
     MAX_STEPS,
     SKILL_LOAD_TOOL_NAME,
@@ -74,6 +75,46 @@ def test_stream_closed_after_start_does_not_leave_running_row(db_session: Sessio
     db_session.refresh(run)
     assert run.status == "failed"
     assert run.assistant_message_id is None
+
+
+def test_stream_closed_after_session_teardown_still_marks_failed(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    """真实断流的顺序：请求依赖先关 Session，生成器随后才被关闭。
+
+    这时 `run` 已经是 detached，读 `run.status` 会抛 DetachedInstanceError。
+    以前收尾被静默跳过，运行永远停在 running（2026-11-18 联调复现）。
+    """
+    user, conversation = _setup(db_session, email="detached@example.com")
+    _, run, messages, is_first = prepare_run(
+        db_session,
+        user_id=user.id,
+        conversation_id=conversation.id,
+        content="查当前时间",
+        reasoning_effort="none",
+    )
+    run_id = run.id
+    engine = db_session.get_bind()
+    stream = stream_run(
+        db_session,
+        run=run,
+        conversation=conversation,
+        messages=messages,
+        llm=FakeLLM(),
+        is_first_message=is_first,
+        user_id=user.id,
+    )
+    assert next(stream)["type"] == "run_started"
+
+    db_session.close()
+    monkeypatch.setattr(executor, "SessionLocal", sessionmaker(bind=engine))
+    stream.close()
+
+    with sessionmaker(bind=engine)() as fresh:
+        row = fresh.get(AgentRun, run_id)
+        assert row is not None
+        assert row.status == "failed"
+        assert row.error_message == "运行被中断"
 
 
 def test_plain_answer_without_tools(db_session: Session):
