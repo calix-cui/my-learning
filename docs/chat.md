@@ -314,15 +314,16 @@ flowchart TD
 
 | 边界 | 所有权与建议文件 |
 | --- | --- |
-| chat Store | 保留一个 Pinia 协调入口；拥有按会话隔离的状态和模块实例生命周期。不要每次调用 composable 创建独立聊天状态 |
-| 会话目录 | `stores/chat/conversations.ts`：列表、创建、改名、删除；弹窗留在调用方，模块接受明确参数 |
-| 消息历史 | `stores/chat/history.ts`：分页游标、请求版本、摘要合并、步骤懒加载与错误状态 |
+| chat Store | 只做组合根：选择当前会话、串发送与审批、派生视图值。拥有模块实例生命周期，不重复创建 |
+| 会话目录 | `stores/chat/conversations.ts`（已提取）：列表行、`activeId`/`draft`、账号代次、创建/改名/删除 |
+| 会话状态容器 | `stores/chat/threads.ts`（已提取）：`threads` Map、取消句柄、步骤与建会话的请求去重、释放 |
+| 消息历史 | `stores/chat/history.ts`（已提取）：分页游标、刷新对齐、摘要合并、步骤懒加载与错误状态 |
 | 执行流程 | `stores/chat/execution.ts`：发送、审批续跑、恢复核对；`events.ts`：事件到运行状态的转换 |
 | 展示投影 | `stores/chat/feed.ts`：关联消息与运行、排序、临时正文交接；不发请求 |
 | 消息区域 | `ChatMessageList.vue` 与 `ChatExecutionItem.vue`：空态、加载更多、运行展示与详情请求事件 |
-| DOM 与路由 | `useChatScroll.ts` 管理帧合并、滚动和卸载清理；`useChatRoute.ts` 管理 URL 与会话同步 |
+| DOM 与路由 | 未开始：计划 `useChatScroll.ts` 管帧合并、滚动和卸载清理，`useChatRoute.ts` 管 URL 与会话同步；当前仍在 `ChatView.vue` |
 
-这些模块按阶段提取，不一次建立全部空壳。ChatView 只读取展示项和必要的输入状态，不直接读取 replayDetails/runsByMessage；侧栏保留列表及 isBusy 等明确接口。不要只把几十个字段塞进一个大对象来隐藏复杂度。
+这些模块按阶段提取，不一次建立全部空壳。ChatView 只读取展示项和必要的输入状态，不直接读取 replayDetails/runsByMessage；侧栏保留列表及 isBusy 等明确接口。不要只把几十个字段塞进一个大对象来隐藏复杂度。模块用 `createX(deps)` 工厂注入依赖而不是各建一个 Pinia store，读函数显式接收 `(id, thread)` 而不读「当前会话」，边界与取舍见 [ADR-0017](adr/0017-chat-store-module-boundaries.md)。
 
 每个 Execution 独立持有 runId、消息关联、服务端状态、步骤、详情加载状态、临时正文及待审批信息；实时步骤与回放使用同一份步骤集合，持久步骤按运行与 seq 去重。详情请求捕获版本，避免较旧历史响应覆盖新到达事件。
 
@@ -350,12 +351,12 @@ flowchart TD
 | 1. 修复时间线跳位（已完成） | 确认固定展示顺序；修改 ChatView.vue 及视图测试，同步 DESIGN.md 展示规则 | 运行、完成、刷新后过程均在正文前；仅助手消息的一页、无助手的失败/审批记录位置正确；零调用无空入口 |
 | 2. 统一消息流投影（已完成） | 第一步通过；增加 feed.ts、ChatMessageList、ChatExecutionItem，页面改为消费展示项 | 完成时不重复正文、不重置已展开过程；临时 ID 转正式 ID、分页、切会话与刷新位置一致 |
 | 3. 统一执行状态（已完成） | 第二步通过；按运行合并实时与历史步骤，提取 execution/events；先锁发送再创建会话，保留 requestId，错误不降级为空数据 | 双击首发只建一会话一运行；审批批准/拒绝/再审批、断流恢复、重复事件、旧历史响应、删除及退出后的回调均有验证 |
-| 4. 收拢历史和页面职责 | 第三步通过；提取 history/conversations 及路由、滚动逻辑，收窄 Store 对外接口 | 草稿隔离、深链、返回、改名/删除、分页滚动锚点和用户主动上滚阅读不退化；不重复请求详情 |
+| 4. 收拢历史和页面职责（进行中） | 第三步通过；已提取 `conversations` / `history` / `threads`，Store 由 835 行降到 475 行，对外接口不变；路由与滚动逻辑待提取 | 已完成部分：草稿隔离、改名/删除、分页、断流核对不退化（126 项单测 + 12 项浏览器验收）。未完成：深链、返回、滚动锚点与用户主动上滚阅读 |
 | 5. 增量后端契约 | 仅在前四步稳定且确认具体字段后实施 events/schemas/service 与前端类型同步变更 | 终态事件与刷新结果一致；完整提交信息可替代成功后的整页刷新；审批/错误恢复仍保留查询；调用配对覆盖同名工具 |
 
 每步先补对应的行为测试，再改实现，运行相关 Vitest、类型检查、ESLint 和构建；修改后端时增加接口/事务与授权测试。涉及布局的步骤用可控工具流在浏览器验证运行→完成→刷新，并检查展开态和分页。模拟验收与真实模型联调分别报告，不将静态推断写成已验证行为。
 
-实施时同步当前架构说明、API（如变）、DESIGN（如变）和项目状态；架构方案获确认落地时记录 ADR。前三步已完成。当前每个 Execution 持有唯一的步骤、审批、预览、服务端状态和连接状态；`agentSteps` 等视图实际使用的只读接口由它派生，`runsByMessage` / `replayDetails` / `activeUserMessageId` 三个无人使用的派生出口已删除（测试改断言展示项）。发送与审批共用 runExecution，读取历史和步骤有版本及会话实例校验。第四步会话/历史模块、路由/滚动拆分和第五步后端契约尚未开始。实际验证结果见 PROJECT_STATUS.md。
+实施时同步当前架构说明、API（如变）、DESIGN（如变）和项目状态；架构方案获确认落地时记录 ADR。前三步已完成。当前每个 Execution 持有唯一的步骤、审批、预览、服务端状态和连接状态；`agentSteps` 等视图实际使用的只读接口由它派生，`runsByMessage` / `replayDetails` / `activeUserMessageId` 三个无人使用的派生出口已删除（测试改断言展示项）。发送与审批共用 runExecution，读取历史和步骤有版本及会话实例校验。第四步已把会话目录、会话状态容器与历史读路径拆到 `conversations.ts` / `threads.ts` / `history.ts`（见 ADR-0017），`stores/chat.ts` 835 → 475 行且对外接口不变；路由与滚动仍在页面层，尚未提取。第五步后端契约未开始。实际验证结果见 PROJECT_STATUS.md。
 
 
 ### 9.6 第三步的恢复与错误边界

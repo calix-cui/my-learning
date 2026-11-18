@@ -1,7 +1,9 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-18 · 第三步：统一执行状态与断流恢复
+> 最近更新：2026-11-18 · 第四步（部分）：聊天 Store 拆分
+
+- **第四步进行中（拆分 Store）**：`stores/chat.ts` 835 → 475 行，只保留组合根职责（选择当前会话、串发送与审批、派生视图值）。新增 `stores/chat/threads.ts`（`threads` Map、取消句柄、步骤与建会话的请求去重、释放）、`stores/chat/conversations.ts`（列表行、`activeId`/`draft`、账号代次、创建/改名/删除）、`stores/chat/history.ts`（历史页合并、刷新对齐、分页、步骤与审批重查）。三者用 `createX(deps)` 工厂注入依赖，读函数显式接收 `(id, thread)`，不各自建 Pinia store；Store 对外接口名与数量不变，`ChatView` 未改。决策与取舍见 [ADR-0017](adr/0017-chat-store-module-boundaries.md)。验证：前端全量 **126 项（21 文件）**、ESLint、`vue-tsc --noEmit`、生产构建通过；`pnpm acceptance:recovery` 12 项在真实 Chrome 里仍全通过。**未做**：路由（`useChatRoute`）与滚动（`useChatScroll`）仍在 `ChatView`，深链/返回/滚动锚点未验收；第五步后端契约未开始；未进行真实模型联调。
 
 - **第三步已完成（统一执行状态与断流恢复）**：每个 Execution 成为步骤、预览、审批与运行状态的唯一可写来源（`stores/chat/execution.ts`），事件归并到 `stores/chat/events.ts`。创建前锁定草稿并复用创建请求；断流后只读历史核对、不自动重发；等待审批时读取当前待决定项；历史/审批/步骤读取失败保留错误与重试入口；迟到结果按账号代次与会话实例失效。本轮补上此前缺的浏览器验收：新增 `frontend/scripts/chat-recovery-acceptance.mjs`（`pnpm acceptance:recovery`，12 项断言，模拟 API/SSE）。验收中发现并修复「核对确认消息已落库后草稿仍留在输入框、同一句话会被再发一遍」，并补单测（去掉修复该用例失败）。前端全量 **126 项（21 文件）**、ESLint、类型检查、生产构建通过。同步 chat.md §9.6、ADR-0016 验证段、DESIGN §5.9、前端 README 与 toolchain 测试清单。随后清理了三个只剩测试引用的派生出口（`runsByMessage` / `replayDetails` / `activeUserMessageId`，`stores/chat.ts` 874 → 835 行），断言改为读展示项，前端 126 项仍全通过。未进行真实模型或完整应用 E2E 验收；未修改后端。
 

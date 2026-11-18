@@ -149,7 +149,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 
 ### 对话页行为
 
-消息区域读取 `chat.feedItems`：`stores/chat/feed.ts` 将消息、运行摘要和当前过程投影为统一展示项，`ChatMessageList` / `ChatExecutionItem` 负责渲染。执行项使用会话内稳定标识，完成时保留过程及详情展开状态，助手正文只输出一次；分页只含助手消息时也能展示过程。路由、帧合并与滚动仍由页面负责。每次运行的正文预览、步骤、审批和状态统一存于 `Execution`；`execution.ts` 收拢发送与审批连接生命周期，`events.ts` 按 seq 去重步骤。创建会话前锁定发送，断流后查询历史并显示「重新核对状态」，不会自动重发；结果未知或待审批时禁止新发送。审批、步骤读取失败保留错误，不以空数据替代。若开始事件丢失而尚无运行 ID，需刷新页面核对历史，当前接口不支持按 request_id 查询或自动续流。
+消息区域读取 `chat.feedItems`：`stores/chat/feed.ts` 将消息、运行摘要和当前过程投影为统一展示项，`ChatMessageList` / `ChatExecutionItem` 负责渲染。Store 本身只是组合根（`stores/chat.ts`，475 行）：会话列表与当前 id 在 `conversations.ts`，每个会话的运行时状态容器在 `threads.ts`，历史分页与刷新核对在 `history.ts`，三者用 `createX(deps)` 工厂接线（见 [ADR-0017](../docs/adr/0017-chat-store-module-boundaries.md)）。执行项使用会话内稳定标识，完成时保留过程及详情展开状态，助手正文只输出一次；分页只含助手消息时也能展示过程。路由、帧合并与滚动仍由页面负责。每次运行的正文预览、步骤、审批和状态统一存于 `Execution`；`execution.ts` 收拢发送与审批连接生命周期，`events.ts` 按 seq 去重步骤。创建会话前锁定发送，断流后查询历史并显示「重新核对状态」，不会自动重发；结果未知或待审批时禁止新发送。审批、步骤读取失败保留错误，不以空数据替代。若开始事件丢失而尚无运行 ID，需刷新页面核对历史，当前接口不支持按 request_id 查询或自动续流。
 
 - 左栏：会话列表按 `update_time` 倒序，hover 显示「改名 / 删除」两个内联按钮；空态提示「还没有会话，点「新建」开始」。会话状态由 `stores/chat.ts` 持有，侧栏与对话页共用同一份。
 - 右栏：消息气泡，用户消息纯文本、助手消息 Markdown；流式时显示「正在输入…」，结束后落到完整消息并带模型名。
@@ -191,7 +191,14 @@ frontend/
     │   └── unauthorized.ts    # 401 回调注册（避免 client 与 store 互相 import）
     ├── stores/
     │   ├── session.ts         # Pinia：登录态（user / loaded / 登录登出清除）
-    │   ├── chat.ts            # Pinia：会话列表 + 当前会话 + 流式发送 + 深度回答（侧栏与对话页共用）
+    │   ├── chat.ts            # Pinia 组合根：当前会话 + 发送/审批接线 + 视图派生值（侧栏与对话页共用）
+    │   ├── chat/
+    │   │   ├── threads.ts     # 每个会话的运行时状态容器、取消句柄、请求去重
+    │   │   ├── conversations.ts # 会话列表、当前 id、账号代次、建/改/删
+    │   │   ├── history.ts     # 历史分页、刷新对齐、步骤与审批重查
+    │   │   ├── execution.ts   # 发送/审批状态机与 runExecution
+    │   │   ├── events.ts      # SSE 事件归并（按 seq 去重）
+    │   │   └── feed.ts        # 消息 + 运行 → 展示项的纯投影
     │   ├── settings.ts        # Pinia：模型标签、主题偏好
     │   └── theme.ts           # Pinia：主题（themeId / mode / 跟随系统 / 落盘）
     ├── theme/
