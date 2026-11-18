@@ -27,12 +27,14 @@ from app.common.response import Response
 from app.dependencies import get_db
 from app.llm import LLMClient, get_user_llm
 from app.llm.base import ReasoningEffort
-from app.models import AgentApproval, AgentRun, AgentStep
+from app.models import AgentApproval, AgentRun
 from app.models.agent_step import REPLAY_STEP_KINDS
 from app.schemas.agent import (
     AgentApprovalListResponse,
     AgentMessageRequest,
     AgentRunListResponse,
+    AgentRunResponse,
+    AgentStepListResponse,
     AgentStepResponse,
     ApprovalDecisionRequest,
 )
@@ -117,46 +119,95 @@ def agent_stream_response(
     "/{conversation_id}/agent/runs",
     response_model=Response,
     summary="查看历史运行",
-    description="返回该会话最近的运行记录与步骤，用于刷新后回放时间线。",
+    description=(
+        "返回该会话最近的运行记录与步骤，用于刷新后回放时间线。"
+        "带 `request_id` 时只按该请求 ID 查一次运行（断线后核对「我这条发出去没有」）；"
+        "查不到返回 404，表示这次提交没有落库，可以安全重发。"
+    ),
 )
 def list_agent_runs(
     conversation_id: Annotated[int, Path(gt=0, description="会话ID")],
     user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
     limit: Annotated[int, Query(ge=1, le=20, description="最多返回几条")] = 5,
+    request_id: Annotated[
+        str | None, Query(max_length=36, description="按客户端请求 ID 精确定位一次运行")
+    ] = None,
 ):
     # 先校验会话归属：别人的会话在这里就 404，不会漏出运行记录
     chat_service.get_conversation(db, user.id, conversation_id)
+    statement = select(AgentRun).where(AgentRun.conversation_id == conversation_id)
+    if request_id is not None:
+        # 同一会话内 request_id 有唯一约束，这里最多一条
+        statement = statement.where(AgentRun.request_id == request_id)
     rows = db.scalars(
-        select(AgentRun)
-        .where(AgentRun.conversation_id == conversation_id)
-        .options(selectinload(AgentRun.steps))
-        .order_by(AgentRun.id.desc())
-        .limit(limit)
+        statement.options(selectinload(AgentRun.steps)).order_by(AgentRun.id.desc()).limit(limit)
     ).all()
+    if request_id is not None and not rows:
+        raise BusinessError("这次提交还没有落库，可以重新发送", code=404)
     return Response.success(data=AgentRunListResponse.model_validate({"items": list(rows)}))
+
+
+@approvals_router.get(
+    "/runs/{run_id}",
+    response_model=Response,
+    summary="查看某次运行",
+    description=(
+        "一个请求同时回答「跑到哪了」和「跑了什么」：运行状态、失败原因、结束时间与全部步骤。"
+        "断线后前端用它定点核对，不必再拉整页历史。"
+    ),
+)
+def get_agent_run(
+    run_id: Annotated[int, Path(gt=0, description="运行ID")],
+    user: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+):
+    run = db.scalar(
+        select(AgentRun)
+        .where(AgentRun.id == run_id, AgentRun.user_id == user.id)
+        .options(selectinload(AgentRun.steps))
+    )
+    if run is None:
+        # 与其它接口一致：不是自己的运行一律 404，不暴露存在性
+        raise BusinessError("运行不存在", code=404)
+    return Response.success(data=AgentRunResponse.model_validate(run))
 
 
 @approvals_router.get(
     "/runs/{run_id}/steps",
     response_model=Response,
     summary="查看某次运行的执行步骤",
+    description=(
+        "按 `seq` 升序返回可见步骤，同时带上运行状态。"
+        "带 `since_seq` 时只返回该步之后的增量，用于断线后的低开销轮询。"
+    ),
 )
 def get_replay_steps(
     run_id: Annotated[int, Path(gt=0, description="运行ID")],
     user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
+    since_seq: Annotated[int | None, Query(ge=0, description="只返回 seq 大于它的步骤")] = None,
 ):
-    run = db.scalar(select(AgentRun.id).where(AgentRun.id == run_id, AgentRun.user_id == user.id))
+    run = db.scalar(
+        select(AgentRun)
+        .where(AgentRun.id == run_id, AgentRun.user_id == user.id)
+        .options(selectinload(AgentRun.steps))
+    )
     if run is None:
         raise BusinessError("运行不存在", code=404)
-    steps = db.scalars(
-        select(AgentStep)
-        .where(AgentStep.run_id == run_id, AgentStep.kind.in_(REPLAY_STEP_KINDS))
-        .order_by(AgentStep.seq)
-    )
+    visible = [step for step in run.steps if step.kind in REPLAY_STEP_KINDS]
     return Response.success(
-        data={"items": [AgentStepResponse.model_validate(step) for step in steps]}
+        data=AgentStepListResponse(
+            items=[
+                AgentStepResponse.model_validate(step)
+                for step in visible
+                if since_seq is None or step.seq > since_seq
+            ],
+            status=run.status,
+            visible_step_count=len(visible),
+            error_message=run.error_message,
+            finished_time=run.finished_time,
+        )
     )
 
 

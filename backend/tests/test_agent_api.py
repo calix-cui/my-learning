@@ -296,15 +296,12 @@ def test_replay_is_linked_by_message_ids_across_runs_and_pages(client: TestClien
         user_id, assistant_id = [message["id"] for message in page["messages"]]
         assert started["user_message_id"] == user_id
         assert finished["assistant_message_id"] == assistant_id
-        assert page["runs"] == [
-            {
-                "id": started["run_id"],
-                "user_message_id": user_id,
-                "assistant_message_id": assistant_id,
-                "status": "completed",
-                "visible_step_count": 2,
-            }
+        assert [(run["id"], run["status"], run["visible_step_count"]) for run in page["runs"]] == [
+            (started["run_id"], "completed", 2)
         ]
+        # 摘要还要带 request_id / finished_time，断线核对才能对齐到这次运行
+        assert page["runs"][0]["request_id"] is None
+        assert page["runs"][0]["finished_time"] is not None
         response = client.get(f"/api/agent/runs/{started['run_id']}/steps")
         assert response.status_code == 200
         steps = response.json()["data"]["items"]
@@ -349,3 +346,135 @@ def test_foreign_account_cannot_fetch_replay(client: TestClient, anon_client: Te
     )
     assert anon_client.get(f"/api/agent/runs/{run_id}/steps").status_code == 404
     assert anon_client.get(path, params={"message_limit": 2}).status_code == 404
+
+
+@pytest.mark.usefixtures("llm")
+def test_run_detail_answers_where_and_what(client: TestClient):
+    """断线后只发一个请求就要同时拿到「跑到哪了」和「跑了什么」。"""
+    conversation_id = _conversation(client)
+    with client.stream(
+        "POST", f"/api/conversations/{conversation_id}/agent/stream", json={"content": "算一下"}
+    ) as stream:
+        run_id = _read_events(stream)[0]["run_id"]
+
+    detail = client.get(f"/api/agent/runs/{run_id}").json()["data"]
+    assert detail["id"] == run_id
+    assert detail["conversation_id"] == conversation_id
+    assert detail["status"] == "completed"
+    assert detail["finished_time"] is not None
+    assert detail["error_message"] is None
+    assert [step["kind"] for step in detail["steps"]] == [
+        "user_message",
+        "tool_call",
+        "tool_result",
+        "final_answer",
+    ]
+
+
+@pytest.mark.usefixtures("llm")
+def test_run_detail_reports_request_id_and_failure_reason(client: TestClient, db_session: Session):
+    """request_id 与失败原因都要能从接口读回来：前端据此判定「能否安全重发」。"""
+    conversation_id = _conversation(client)
+    request_id = "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+    with client.stream(
+        "POST",
+        f"/api/conversations/{conversation_id}/messages/stream",
+        json={"content": "算一下", "execution": "auto", "request_id": request_id},
+    ) as stream:
+        run_id = _read_events(stream)[0]["run_id"]
+
+    # 历史页摘要带 request_id，前端才能把核对对齐到具体一次运行
+    page = client.get(f"/api/conversations/{conversation_id}", params={"message_limit": 10})
+    summary = page.json()["data"]["runs"][0]
+    assert summary["request_id"] == request_id
+    assert summary["error_message"] is None
+    assert summary["finished_time"] is not None
+
+    # 服务端记下的失败原因要原样透出，前端不再自己编通用文案
+    run = db_session.get(AgentRun, run_id)
+    run.status = "failed"
+    run.error_message = "运行被中断"
+    db_session.commit()
+    detail = client.get(f"/api/agent/runs/{run_id}").json()["data"]
+    assert detail["status"] == "failed"
+    assert detail["error_message"] == "运行被中断"
+
+
+@pytest.mark.usefixtures("llm")
+def test_run_detail_is_scoped_to_the_owner(client: TestClient, anon_client: TestClient):
+    conversation_id = _conversation(client)
+    with client.stream(
+        "POST", f"/api/conversations/{conversation_id}/agent/stream", json={"content": "算一下"}
+    ) as stream:
+        run_id = _read_events(stream)[0]["run_id"]
+
+    assert anon_client.get(f"/api/agent/runs/{run_id}").status_code == 401
+    anon_client.post(
+        "/api/auth/register",
+        json={"email": "run-detail-other@example.com", "password": "password123"},
+    )
+    assert anon_client.get(f"/api/agent/runs/{run_id}").status_code == 404
+
+
+@pytest.mark.usefixtures("llm")
+def test_runs_can_be_located_by_request_id(client: TestClient):
+    """断线后只凭客户端手里的 request_id 就能问出「这条提交落库了吗」。"""
+    conversation_id = _conversation(client)
+    request_id = "9b2f0c4e-1d3a-4c8b-8f7e-2a5d6c7b8a91"
+    with client.stream(
+        "POST",
+        f"/api/conversations/{conversation_id}/messages/stream",
+        json={"content": "算一下", "execution": "auto", "request_id": request_id},
+    ) as stream:
+        run_id = _read_events(stream)[0]["run_id"]
+
+    found = client.get(
+        f"/api/conversations/{conversation_id}/agent/runs", params={"request_id": request_id}
+    ).json()["data"]
+    assert [item["id"] for item in found["items"]] == [run_id]
+    assert found["items"][0]["request_id"] == request_id
+
+    # 同一个 request_id 重复提交是 409（已有去重），这里确认它指向的仍是同一条运行
+    duplicate = client.post(
+        f"/api/conversations/{conversation_id}/messages/stream",
+        json={"content": "算一下", "execution": "auto", "request_id": request_id},
+    )
+    assert duplicate.status_code == 409
+
+    # 没落库的 request_id 返回 404：前端据此判定可以安全重发
+    missing = client.get(
+        f"/api/conversations/{conversation_id}/agent/runs",
+        params={"request_id": "00000000-0000-4000-8000-000000000000"},
+    )
+    assert missing.status_code == 404
+    assert missing.json()["message"] == "这次提交还没有落库，可以重新发送"
+
+
+@pytest.mark.usefixtures("llm")
+def test_steps_endpoint_answers_incremental_reads(client: TestClient):
+    """轮询只要增量，同时还能拿到运行状态，一个请求回答两个问题。"""
+    conversation_id = _conversation(client)
+    with client.stream(
+        "POST", f"/api/conversations/{conversation_id}/agent/stream", json={"content": "算一下"}
+    ) as stream:
+        run_id = _read_events(stream)[0]["run_id"]
+
+    full = client.get(f"/api/agent/runs/{run_id}/steps").json()["data"]
+    assert [step["kind"] for step in full["items"]] == ["tool_call", "tool_result"]
+    assert full["status"] == "completed"
+    assert full["visible_step_count"] == 2
+    assert full["finished_time"] is not None
+    assert full["error_message"] is None
+
+    incremental = client.get(f"/api/agent/runs/{run_id}/steps", params={"since_seq": 2}).json()[
+        "data"
+    ]
+    assert [step["kind"] for step in incremental["items"]] == ["tool_result"]
+    # 总数不受 since_seq 影响，前端据此判断「还有没有更早的没拿到」
+    assert incremental["visible_step_count"] == 2
+
+    nothing_new = client.get(f"/api/agent/runs/{run_id}/steps", params={"since_seq": 99}).json()[
+        "data"
+    ]
+    assert nothing_new["items"] == []
+    assert nothing_new["status"] == "completed"

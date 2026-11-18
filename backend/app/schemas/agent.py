@@ -42,12 +42,22 @@ class AgentRunSummary(BaseModel):
     assistant_message_id: int | None
     status: Literal["running", "waiting_approval", "completed", "failed", "cancelled"]
     visible_step_count: int
+    request_id: str | None = Field(
+        default=None, description="客户端提交时的请求 ID，用于把断线后的核对对齐到具体一次运行"
+    )
+    error_message: str | None = Field(default=None, description="失败原因（与库中记录一致）")
+    finished_time: datetime | None = Field(default=None, description="结束时间")
+
+    @field_serializer("finished_time")
+    def serialize_finished_time(self, value: datetime | None) -> str | None:
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
 
 
 class AgentRunResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    conversation_id: int = Field(description="所属会话")
     user_message_id: int | None = None
     assistant_message_id: int | None = None
     status: Literal["running", "waiting_approval", "completed", "failed", "cancelled"] = Field(
@@ -55,6 +65,7 @@ class AgentRunResponse(BaseModel):
     )
     step_count: int = Field(description="已执行步数")
     model: str | None = Field(default=None, description="实际使用的模型")
+    request_id: str | None = Field(default=None, description="客户端请求 ID")
     started_time: datetime
     finished_time: datetime | None = None
     error_message: str | None = Field(default=None, description="失败原因")
@@ -67,6 +78,20 @@ class AgentRunResponse(BaseModel):
 
 class AgentRunListResponse(BaseModel):
     items: list[AgentRunResponse]
+
+
+class AgentStepListResponse(BaseModel):
+    """步骤 + 运行状态一起返回：轮询一次就够判断「有新步骤吗」「跑完了吗」。"""
+
+    items: list[AgentStepResponse]
+    status: Literal["running", "waiting_approval", "completed", "failed", "cancelled"]
+    visible_step_count: int = Field(description="该运行可见步骤总数（不受 since_seq 影响）")
+    error_message: str | None = Field(default=None, description="失败原因")
+    finished_time: datetime | None = Field(default=None, description="结束时间")
+
+    @field_serializer("finished_time")
+    def serialize_finished_time(self, value: datetime | None) -> str | None:
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
 
 
 class ApprovalDecisionRequest(BaseModel):
@@ -102,6 +127,8 @@ __all__ = [
     "AgentMessageRequest",
     "AgentRunListResponse",
     "AgentRunResponse",
+    "AgentRunSummary",
+    "AgentStepListResponse",
     "AgentStepResponse",
     "ApprovalDecisionRequest",
 ]
