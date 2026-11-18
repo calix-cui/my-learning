@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmpty from '@/components/chat/ChatEmpty.vue'
 import ChatToolbar from '@/components/chat/ChatToolbar.vue'
+import { useChatRoute } from '@/composables/useChatRoute'
 import { useChatScroll } from '@/composables/useChatScroll'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
@@ -13,8 +13,6 @@ import { useSkillsStore } from '@/stores/skills'
 const MAX_LENGTH = 4000
 
 const chat = useChatStore()
-const route = useRoute()
-const router = useRouter()
 const settings = useSettingsStore()
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null)
 const skillCatalog = useSkillsStore()
@@ -93,40 +91,14 @@ function loadOlderMessages() {
   void keepAnchor(() => chat.loadOlderMessages())
 }
 
-// 深链、刷新和历史导航都以路由参数为准。
-watch(
-  () => route.params.conversationId,
-  async (param) => {
-    if (route.name !== 'chat') return
-    if (!param) {
-      if (chat.activeId !== null || !chat.draft) chat.startNew()
-      return
-    }
-    const id = Number(param)
-    if (!Number.isSafeInteger(id) || id <= 0) {
-      await router.replace({ name: 'chat', params: { conversationId: '' } })
-      return
-    }
-    if (chat.activeId === id && chat.sending) return
-    await chat.openConversation(id)
-  },
-  { immediate: true },
-)
-
-// 首条消息建库后更新草稿地址；删除或无法打开当前会话时回到草稿地址。
-watch(
-  () => chat.activeId,
-  (id, previousId) => {
-    if (route.name !== 'chat') return
-    const param = route.params.conversationId
-    if (id !== null && !param && previousId === null) {
-      void router.replace({ name: 'chat', params: { conversationId: id }, query: route.query })
-    } else if (id === null && param === String(previousId)) {
-      void router.replace({ name: 'chat', params: { conversationId: '' }, query: route.query })
-    }
-  },
-  { flush: 'sync' },
-)
+// 地址与会话状态双向同步：深链、刷新、浏览器返回都以此为准
+useChatRoute({
+  activeId: () => chat.activeId,
+  inDraft: () => chat.draft,
+  sending: () => chat.sending,
+  open: (id) => chat.openConversation(id),
+  startNew: () => chat.startNew(),
+})
 </script>
 
 <template>
