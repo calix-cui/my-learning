@@ -34,10 +34,14 @@
 
 ## 不做
 
-- 路由（`useChatRoute`）与滚动（`useChatScroll`）仍在 `ChatView`：它们绑定组件生命周期和 DOM，收益要到页面层才能兑现，本轮不动。
+- 路由（`useChatRoute`）仍在 `ChatView`：绑定组件生命周期和 URL，收益要到页面层才能兑现。滚动已在紧随其后的提交里提取成 `composables/useChatScroll.ts`（见文末补充）。
 - 不把 `feed.ts` / `execution.ts` / `events.ts` 再拆（第三步已就位），也不换响应式方案——仍是 `reactive Map` 加 `WeakMap` 旁表。
 - 不为拆而拆地新建 Pinia store：多实例、跨 store 循环依赖都会立刻反噬。
 
 ## 验证
 
 `pnpm test` 126 项（21 文件）、`pnpm lint`、`vue-tsc --noEmit`、`pnpm build` 全通过；`pnpm acceptance:recovery` 12 项在真实 Chrome 里仍全通过（模拟断流 → 核对 → 恢复）。
+
+## 补充（2026-11-18）
+
+滚动与帧合并随后从 `ChatView.vue` 提取到 `composables/useChatScroll.ts`（`ChatView.vue` 315 → 253 行）。它不属于 Store：DOM 测量、`requestAnimationFrame` 与模板 ref 都在组件侧，跨组件状态只剩「当前会话 id」。滚动策略（切会话无条件贴底、流式只跟随仍在底部的用户、翻页补偿高度）属于局部且易改的展示规则，记录在 [`docs/chat.md`](../chat.md) §9，不单独开 ADR。验证：`pnpm test` 134 项（22 文件）、`pnpm acceptance:scroll` 10 项、`pnpm acceptance:recovery` 12 项。

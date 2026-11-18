@@ -277,7 +277,7 @@ const activeKey = computed(() => activeId.value ?? 0)
 | 时间线完成后跳到正文下方 | `ChatView.vue` 先输出 ChatMessage 再输出时间线；`chat.ts` 的 runsByMessage 优先 assistant_message_id，实时则用 activeUserMessageId | 运行时位于用户消息后，完成后位于助手消息后；这是展示锚点变化，不是 CSS 问题 |
 | 同一次执行有两套过程状态 | ChatThread 同时维护 steps、runs、replayDetails；appendAssistantMessage 把实时步骤复制到回放缓存并清空活动锚点 | 页面需要自己判断实时/历史分支，组件可能重建、丢失展开状态 |
 | Store 职责集中 | chat.ts 包含会话列表、分页合并、发送、事件转换、审批恢复、弹窗、提示和草稿 | 一个异常路径需要同时理解多个业务域；仅缩短 return 列表不能解决 |
-| 页面承担底层协调 | ChatView 处理路由、动画帧、滚动、分页锚点、Skill 参数、运行归属与懒加载 | 页面模板直接依赖内部缓存结构 |
+| 页面承担底层协调 | ChatView 处理路由、Skill 参数与提交参数；动画帧、滚动和分页锚点已交给 `useChatScroll` | 页面模板直接依赖内部缓存结构 |
 | 状态语义混杂 | sending/runningAgent/approval 加上后端 run.status | 请求结束与运行结束不同，等待审批与断线容易被当作空闲 |
 | 新会话发送存在竞态窗口 | send 在 await ensureConversation 后才设置 sending | 创建会话期间再次发送可能重复建会话；需受控延迟测试验证 |
 | 错误被当作空数据 | listApprovals 对非成功响应返回 []；审批续跑加载步骤失败回退 [] | 无法区分没有审批/步骤与读取失败 |
@@ -321,9 +321,12 @@ flowchart TD
 | 执行流程 | `stores/chat/execution.ts`：发送、审批续跑、恢复核对；`events.ts`：事件到运行状态的转换 |
 | 展示投影 | `stores/chat/feed.ts`：关联消息与运行、排序、临时正文交接；不发请求 |
 | 消息区域 | `ChatMessageList.vue` 与 `ChatExecutionItem.vue`：空态、加载更多、运行展示与详情请求事件 |
-| DOM 与路由 | 未开始：计划 `useChatScroll.ts` 管帧合并、滚动和卸载清理，`useChatRoute.ts` 管 URL 与会话同步；当前仍在 `ChatView.vue` |
+| DOM 与滚动 | `composables/useChatScroll.ts`（已提取）：帧合并、贴底跟随、往上加载时的锚点补偿、卸载清理 |
+| 路由 | 未开始：计划 `useChatRoute.ts` 管 URL 与会话同步；当前仍在 `ChatView.vue` |
 
 这些模块按阶段提取，不一次建立全部空壳。ChatView 只读取展示项和必要的输入状态，不直接读取 replayDetails/runsByMessage；侧栏保留列表及 isBusy 等明确接口。不要只把几十个字段塞进一个大对象来隐藏复杂度。模块用 `createX(deps)` 工厂注入依赖而不是各建一个 Pinia store，读函数显式接收 `(id, thread)` 而不读「当前会话」，边界与取舍见 [ADR-0017](adr/0017-chat-store-module-boundaries.md)。
+
+滚动策略分三种来源，不能混成一个 `scrollToBottom()`：切换会话时才无条件贴底；流式分片、步骤到达、新消息只对「仍在底部」的用户跟随，用户往上翻历史时不改变 `scrollTop`（阈值 80px，往回滚到底部自动恢复跟随）；往上翻页由 `keepAnchor` 先记高度、插入后把差值补进 `scrollTop`，让正在读的那一行留在原位。自己发消息和审批出结果例外：无条件贴回底部，因为那是用户自己的动作。
 
 每个 Execution 独立持有 runId、消息关联、服务端状态、步骤、详情加载状态、临时正文及待审批信息；实时步骤与回放使用同一份步骤集合，持久步骤按运行与 seq 去重。详情请求捕获版本，避免较旧历史响应覆盖新到达事件。
 
@@ -351,12 +354,12 @@ flowchart TD
 | 1. 修复时间线跳位（已完成） | 确认固定展示顺序；修改 ChatView.vue 及视图测试，同步 DESIGN.md 展示规则 | 运行、完成、刷新后过程均在正文前；仅助手消息的一页、无助手的失败/审批记录位置正确；零调用无空入口 |
 | 2. 统一消息流投影（已完成） | 第一步通过；增加 feed.ts、ChatMessageList、ChatExecutionItem，页面改为消费展示项 | 完成时不重复正文、不重置已展开过程；临时 ID 转正式 ID、分页、切会话与刷新位置一致 |
 | 3. 统一执行状态（已完成） | 第二步通过；按运行合并实时与历史步骤，提取 execution/events；先锁发送再创建会话，保留 requestId，错误不降级为空数据 | 双击首发只建一会话一运行；审批批准/拒绝/再审批、断流恢复、重复事件、旧历史响应、删除及退出后的回调均有验证 |
-| 4. 收拢历史和页面职责（进行中） | 第三步通过；已提取 `conversations` / `history` / `threads`，Store 由 835 行降到 475 行，对外接口不变；路由与滚动逻辑待提取 | 已完成部分：草稿隔离、改名/删除、分页、断流核对不退化（126 项单测 + 12 项浏览器验收）。未完成：深链、返回、滚动锚点与用户主动上滚阅读 |
+| 4. 收拢历史和页面职责（进行中） | 第三步通过；已提取 `conversations` / `history` / `threads`，Store 由 835 行降到 475 行，对外接口不变；已提取滚动到 `composables/useChatScroll.ts`，`ChatView.vue` 315 → 253 行；剩路由未提取 | 已完成：草稿隔离、改名/删除、分页、断流核对（126 项单测 + 12 项浏览器验收）、打开会话贴底与两次翻页锚点（10 项浏览器验收）、上滚不被拽回（8 项组合式函数单测）。未完成：深链与返回 |
 | 5. 增量后端契约 | 仅在前四步稳定且确认具体字段后实施 events/schemas/service 与前端类型同步变更 | 终态事件与刷新结果一致；完整提交信息可替代成功后的整页刷新；审批/错误恢复仍保留查询；调用配对覆盖同名工具 |
 
 每步先补对应的行为测试，再改实现，运行相关 Vitest、类型检查、ESLint 和构建；修改后端时增加接口/事务与授权测试。涉及布局的步骤用可控工具流在浏览器验证运行→完成→刷新，并检查展开态和分页。模拟验收与真实模型联调分别报告，不将静态推断写成已验证行为。
 
-实施时同步当前架构说明、API（如变）、DESIGN（如变）和项目状态；架构方案获确认落地时记录 ADR。前三步已完成。当前每个 Execution 持有唯一的步骤、审批、预览、服务端状态和连接状态；`agentSteps` 等视图实际使用的只读接口由它派生，`runsByMessage` / `replayDetails` / `activeUserMessageId` 三个无人使用的派生出口已删除（测试改断言展示项）。发送与审批共用 runExecution，读取历史和步骤有版本及会话实例校验。第四步已把会话目录、会话状态容器与历史读路径拆到 `conversations.ts` / `threads.ts` / `history.ts`（见 ADR-0017），`stores/chat.ts` 835 → 475 行且对外接口不变；路由与滚动仍在页面层，尚未提取。第五步后端契约未开始。实际验证结果见 PROJECT_STATUS.md。
+实施时同步当前架构说明、API（如变）、DESIGN（如变）和项目状态；架构方案获确认落地时记录 ADR。前三步已完成。当前每个 Execution 持有唯一的步骤、审批、预览、服务端状态和连接状态；`agentSteps` 等视图实际使用的只读接口由它派生，`runsByMessage` / `replayDetails` / `activeUserMessageId` 三个无人使用的派生出口已删除（测试改断言展示项）。发送与审批共用 runExecution，读取历史和步骤有版本及会话实例校验。第四步已把会话目录、会话状态容器与历史读路径拆到 `conversations.ts` / `threads.ts` / `history.ts`（见 ADR-0017），`stores/chat.ts` 835 → 475 行且对外接口不变；滚动与帧合并收进 `composables/useChatScroll.ts`（`ChatView.vue` 315 → 253 行），只有路由还留在页面层。第五步后端契约未开始。实际验证结果见 PROJECT_STATUS.md。
 
 
 ### 9.6 第三步的恢复与错误边界
