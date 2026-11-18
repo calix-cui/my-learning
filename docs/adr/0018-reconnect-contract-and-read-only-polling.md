@@ -62,4 +62,6 @@ ADR-0016 把断流处理定成「不猜、只读核对」，但当时的契约�
 - 后端 `tests/test_agent_api.py` 13 → 18 项：运行详情字段与失败原因、越权 404、按 `request_id` 查到/查不到、增量步骤与 `visible_step_count` 不变。
 - 前端 `stores/chat/execution.test.ts` 新增：按 `request_id` 认领后不重发、404 时提示可重发并保留草稿、运行中轮询到终态才恢复正文（增量参数为 `since_seq`）。
 - 浏览器验收 `pnpm acceptance:recovery` 12 → 20 项：新增「连 `run_started` 都没收到」的场景——历史页此刻什么都没有，只能靠 `request_id` 认领，且全程只有一次 POST。
+- 真实模型联调（真实 DeepSeek + 真实 MySQL，2026-11-18）：`backend/scripts/check_reconnect_live.py` 20 项全过（断流被记成失败、失败原因来自服务端、按 `request_id` 认领、404 文案、详情、增量读、完整流式跑通）；`frontend/scripts/chat-live-acceptance.mjs` 14 项全过（真实 Chrome 里发消息→刷新断流→恢复提示→核对后显示「运行被中断」且不重发）。
+- **联调发现并修掉一个真 bug**：断流时请求依赖已关闭 Session，生成器 `finally` 里的 `_finish_interrupted_run` 读 `run.status` 抛 `DetachedInstanceError` 并被静默吞掉，收尾被跳过，运行永久停在 `running`（同一会话再发消息被 409 锁死）。修复：`LoopState` 记 `run_id`，收尾失败时回落到独立 Session 的 `_mark_interrupted(run_id)`。单测 `test_stream_closed_after_session_teardown_still_marks_failed` 锁定；未打补丁时该用例报 `ObjectDereferencedError`。
 - 实测：后端全量 356 passed（失败项均为沙箱起不了 MCP echo 子进程）；前端 144 项（23 文件）、ESLint、`vue-tsc`、生产构建通过；三组浏览器验收 20 / 10 / 11 项全通过。
