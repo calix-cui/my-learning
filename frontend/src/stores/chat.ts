@@ -419,6 +419,14 @@ export const useChatStore = defineStore('chat', () => {
     if (execution) execution.transport = 'reconciling'
     try {
       await refreshThread(id, thread)
+      // 核对确认这条消息已经落进历史，草稿就已经发出去了：再留着会被当成新消息发第二遍。
+      const sent =
+        execution && execution.userMessageId !== null
+          ? thread.messages.find(
+              (message) => message.id === execution.userMessageId && message.role === 'user',
+            )
+          : undefined
+      if (sent && sent.content.trim() === thread.draftText.trim()) thread.draftText = ''
       return (
         threads.get(id) === thread &&
         !thread.executions.some((item) => item.transport === 'disconnected')

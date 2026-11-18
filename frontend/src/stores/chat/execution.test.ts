@@ -245,6 +245,23 @@ it('开始事件丢失时不猜测运行关联、不自动重发', async () => {
   expect(sendAgentStream).toHaveBeenCalledTimes(1)
 })
 
+it('核对到消息已落库后清空草稿，避免同一句话再发一遍', async () => {
+  const chat = useChatStore()
+  chat.activeId = 1
+  chat.composerText = '问题'
+  const result = chat.send('问题')
+  handlers.onEvent?.({ type: 'run_started', run_id: 7, conversation_id: 1, user_message_id: 11 })
+  vi.mocked(getConversation).mockResolvedValueOnce(history('running'))
+  stream.reject(new Error('断流'))
+  expect(await result).toBe(false)
+  expect(chat.composerText).toBe('问题')
+  expect(chat.canSend).toBe(false)
+  vi.mocked(getConversation).mockResolvedValue(history('running'))
+  await chat.recoverExecution()
+  expect(chat.composerText).toBe('')
+  expect(chat.messages.filter((message) => message.role === 'user')).toHaveLength(1)
+})
+
 it('审批查询失败和空审批都不能当成已恢复，重查成功后才允许决定', async () => {
   const chat = useChatStore()
   vi.mocked(getConversation).mockResolvedValue(history('waiting_approval'))
