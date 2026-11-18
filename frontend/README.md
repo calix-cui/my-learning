@@ -112,7 +112,7 @@ pnpm test:watch    # 监听模式，开发时用
 单测边界：组件测**行为**（渲染出什么、点击后 emit / store 怎么变），不写快照、不断言 class 名与 DOM 结构；页面级完整流程（登录拦截、流式对话）交给 E2E 与人工验收。
 
 > 端到端脚本（都要前后端在跑）：`pnpm acceptance:chat`（对话流 10 项）、`pnpm acceptance:agent`（深度回答与工具时间线，10 项）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录，13 项）、`pnpm acceptance:settings`（模型接入→测试连接→改显示名→设备→导出→注销→主题同步，15 项）、`pnpm acceptance:tools`（设置窗口可点→工具启停→每日上限→审批拒绝→审批批准→刷新无残留，9 项）。
-> `pnpm acceptance:scroll`（打开会话贴底→滚到顶部翻两页→正在读的那条不跳位→入口收起，10 项）与 `pnpm acceptance:recovery`（断流后提示与锁定→只读核对→恢复正文，12 项）不需要后端：它自己拦截 `/api` 返回模拟数据与断开的 SSE，只要一个 dev server 在跑（`pnpm dev --port 5199`）。
+> `pnpm acceptance:scroll`（打开会话贴底→滚到顶部翻两页→正在读的那条不跳位→入口收起，10 项）、`pnpm acceptance:route`（深链→刷新→侧栏切换→后退/前进→设置浮层共存→非法路径回落，11 项）与 `pnpm acceptance:recovery`（断流后提示与锁定→只读核对→恢复正文，12 项）不需要后端：它自己拦截 `/api` 返回模拟数据与断开的 SSE，只要一个 dev server 在跑（`pnpm dev --port 5199`）。
 > 对话 E2E 跑前跑后都会清空会话。它默认打 5173 的 dev server；如果你刚改过前端代码（HMR 可能中途整页重载），改用 `pnpm build && pnpm preview` 后 `BASE=http://127.0.0.1:4173 pnpm acceptance:chat`，结果更稳定。
 
 ## 与后端联调
@@ -149,7 +149,7 @@ make run          # 等价于 uv run uvicorn app.main:app --host 127.0.0.1 --por
 
 ### 对话页行为
 
-消息区域读取 `chat.feedItems`：`stores/chat/feed.ts` 将消息、运行摘要和当前过程投影为统一展示项，`ChatMessageList` / `ChatExecutionItem` 负责渲染。Store 本身只是组合根（`stores/chat.ts`，475 行）：会话列表与当前 id 在 `conversations.ts`，每个会话的运行时状态容器在 `threads.ts`，历史分页与刷新核对在 `history.ts`，三者用 `createX(deps)` 工厂接线（见 [ADR-0017](../docs/adr/0017-chat-store-module-boundaries.md)）。执行项使用会话内稳定标识，完成时保留过程及详情展开状态，助手正文只输出一次；分页只含助手消息时也能展示过程。滚动与帧合并交给 `composables/useChatScroll.ts`：切会话才无条件贴底，流式分片和步骤只跟随「仍在底部」的用户（阈值 80px），往上翻页由 `keepAnchor` 补回新增高度；只有路由还留在页面层。每次运行的正文预览、步骤、审批和状态统一存于 `Execution`；`execution.ts` 收拢发送与审批连接生命周期，`events.ts` 按 seq 去重步骤。创建会话前锁定发送，断流后查询历史并显示「重新核对状态」，不会自动重发；结果未知或待审批时禁止新发送。审批、步骤读取失败保留错误，不以空数据替代。若开始事件丢失而尚无运行 ID，需刷新页面核对历史，当前接口不支持按 request_id 查询或自动续流。
+消息区域读取 `chat.feedItems`：`stores/chat/feed.ts` 将消息、运行摘要和当前过程投影为统一展示项，`ChatMessageList` / `ChatExecutionItem` 负责渲染。Store 本身只是组合根（`stores/chat.ts`，475 行）：会话列表与当前 id 在 `conversations.ts`，每个会话的运行时状态容器在 `threads.ts`，历史分页与刷新核对在 `history.ts`，三者用 `createX(deps)` 工厂接线（见 [ADR-0017](../docs/adr/0017-chat-store-module-boundaries.md)）。执行项使用会话内稳定标识，完成时保留过程及详情展开状态，助手正文只输出一次；分页只含助手消息时也能展示过程。滚动与帧合并交给 `composables/useChatScroll.ts`：切会话才无条件贴底，流式分片和步骤只跟随「仍在底部」的用户（阈值 80px），往上翻页由 `keepAnchor` 补回新增高度。地址与会话状态的双向同步在 `composables/useChatRoute.ts`：`/chat/:id` 打开会话、`/chat` 回草稿态、首条消息建库后把地址换成真实 id、删除或打不开时退回 `/chat`，且只在对话路由上改写地址（设置浮层不会吃掉会话地址）。每次运行的正文预览、步骤、审批和状态统一存于 `Execution`；`execution.ts` 收拢发送与审批连接生命周期，`events.ts` 按 seq 去重步骤。创建会话前锁定发送，断流后查询历史并显示「重新核对状态」，不会自动重发；结果未知或待审批时禁止新发送。审批、步骤读取失败保留错误，不以空数据替代。若开始事件丢失而尚无运行 ID，需刷新页面核对历史，当前接口不支持按 request_id 查询或自动续流。
 
 - 左栏：会话列表按 `update_time` 倒序，hover 显示「改名 / 删除」两个内联按钮；空态提示「还没有会话，点「新建」开始」。会话状态由 `stores/chat.ts` 持有，侧栏与对话页共用同一份。
 - 右栏：消息气泡，用户消息纯文本、助手消息 Markdown；流式时显示「正在输入…」，结束后落到完整消息并带模型名。
@@ -171,7 +171,8 @@ frontend/
 │   ├── chat-acceptance.mjs    # 对话端到端验收（10 项，CDP 驱动真实浏览器）
 │   ├── auth-acceptance.mjs    # 账号端到端验收（13 项：注册→刷新→退出→再登录）
 │   ├── chat-recovery-acceptance.mjs # 断流恢复验收（12 项：模拟 API/SSE，不依赖后端）
-│   └── chat-scroll-acceptance.mjs   # 滚动验收（10 项：贴底、两次翻页锚点，不依赖后端）
+│   ├── chat-scroll-acceptance.mjs   # 滚动验收（10 项：贴底、两次翻页锚点，不依赖后端）
+│   └── chat-route-acceptance.mjs    # 会话地址验收（11 项：深链、刷新、后退/前进，不依赖后端）
 └── src/
     ├── main.ts                # 挂载 Element Plus（zh-cn）+ router
     ├── App.vue                # 外壳：左栏 + 对话区 + 设置悬浮窗（登录页不套外壳）

@@ -34,7 +34,7 @@
 
 ## 不做
 
-- 路由（`useChatRoute`）仍在 `ChatView`：绑定组件生命周期和 URL，收益要到页面层才能兑现。滚动已在紧随其后的提交里提取成 `composables/useChatScroll.ts`（见文末补充）。
+- 路由（`useChatRoute`）当时仍在 `ChatView`：绑定组件生命周期和 URL，收益要到页面层才能兑现。随后它与滚动一起被提取成 `composables/useChatScroll.ts` / `composables/useChatRoute.ts`（见文末补充）。
 - 不把 `feed.ts` / `execution.ts` / `events.ts` 再拆（第三步已就位），也不换响应式方案——仍是 `reactive Map` 加 `WeakMap` 旁表。
 - 不为拆而拆地新建 Pinia store：多实例、跨 store 循环依赖都会立刻反噬。
 
@@ -44,4 +44,8 @@
 
 ## 补充（2026-11-18）
 
-滚动与帧合并随后从 `ChatView.vue` 提取到 `composables/useChatScroll.ts`（`ChatView.vue` 315 → 253 行）。它不属于 Store：DOM 测量、`requestAnimationFrame` 与模板 ref 都在组件侧，跨组件状态只剩「当前会话 id」。滚动策略（切会话无条件贴底、流式只跟随仍在底部的用户、翻页补偿高度）属于局部且易改的展示规则，记录在 [`docs/chat.md`](../chat.md) §9，不单独开 ADR。验证：`pnpm test` 134 项（22 文件）、`pnpm acceptance:scroll` 10 项、`pnpm acceptance:recovery` 12 项。
+滚动与帧合并随后从 `ChatView.vue` 提取到 `composables/useChatScroll.ts`，地址同步再提取到 `composables/useChatRoute.ts`（`ChatView.vue` 315 → 233 行，只剩 Skill 参数与提交参数）。两者都不属于 Store：DOM 测量、`requestAnimationFrame`、模板 ref 与 `useRoute`/`useRouter` 都只能在组件 setup 里取，放进模块工厂要么多带一套路由依赖，要么把 URL 概念泄进 Store。
+
+两个方向的同步都带 `name === 'chat'` 守卫（地址 → `openConversation`/`startNew`，状态 → `router.replace`）：离开对话页时（登录页、退出过程中的地址变更）不该被地址逻辑写回对话地址。设置浮层只在对话地址上加 `?settings=1`，`name` 不变，所以会话 id 自然保留（浏览器验收第 9 项）。滚动策略（切会话无条件贴底、流式只跟随仍在底部的用户、翻页补偿高度）属于局部且易改的展示规则，记录在 [`docs/chat.md`](../chat.md) §9，不为它单独开 ADR。
+
+验证：`pnpm test` 142 项（23 文件）、`pnpm acceptance:scroll` 10 项、`pnpm acceptance:route` 11 项、`pnpm acceptance:recovery` 12 项。
