@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmpty from '@/components/chat/ChatEmpty.vue'
 import ChatToolbar from '@/components/chat/ChatToolbar.vue'
+import { useChatScroll } from '@/composables/useChatScroll'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
 import { useSkillsStore } from '@/stores/skills'
@@ -16,7 +17,6 @@ const route = useRoute()
 const router = useRouter()
 const settings = useSettingsStore()
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null)
-const scroller = ref<HTMLElement | null>(null)
 const skillCatalog = useSkillsStore()
 const autoSkills = ref(true)
 
@@ -47,50 +47,23 @@ const showEmptyState = computed(
   () => !chat.loadingMessages && chat.messages.length === 0 && !chat.streamingText,
 )
 
-const streamingPreview = ref('')
-let renderFrame: number | null = null
-let unmounting = false
-
-/** 同一帧只提交最新累计文本，等 Markdown 进入 DOM 后再读取滚动高度。 */
-function scheduleMessageRender() {
-  if (unmounting || renderFrame !== null) return
-  renderFrame = requestAnimationFrame(() => {
-    renderFrame = null
-    const conversationId = chat.activeId
-    streamingPreview.value = chat.streamingText
-    void nextTick(() => {
-      const el = scroller.value
-      if (el && chat.activeId === conversationId) el.scrollTop = el.scrollHeight
-    })
-  })
-}
-
-function cancelMessageRender() {
-  if (renderFrame === null) return
-  cancelAnimationFrame(renderFrame)
-  renderFrame = null
-}
-
-onBeforeUnmount(() => {
-  unmounting = true
-  cancelMessageRender()
+// 帧合并、贴底跟随、分页锚点都在这个组合式函数里；页面只把状态喂给它。
+const {
+  scroller,
+  preview: streamingPreview,
+  follow: followScroll,
+  keepAnchor,
+} = useChatScroll({
+  conversationId: () => chat.activeId,
+  streamingText: () => chat.streamingText,
+  lastMessageId: () => chat.messages.at(-1)?.id,
+  stepCount: () => chat.agentSteps.length,
 })
-
-watch(
-  () => chat.activeId,
-  () => {
-    // 切换时立即清除旧会话的预览，下一帧读取新会话自己的文本。
-    cancelMessageRender()
-    streamingPreview.value = ''
-    scheduleMessageRender()
-  },
-  { flush: 'sync' },
-)
 
 async function handleApproval(decision: 'approve' | 'reject', note?: string) {
   const ok =
     decision === 'approve' ? await chat.approveApproval(note) : await chat.rejectApproval(note)
-  if (ok) scheduleMessageRender()
+  if (ok) followScroll()
 }
 
 async function handleSend() {
@@ -112,39 +85,12 @@ async function handleSend() {
   if (ok) {
     composer.value?.focus()
   }
-  scheduleMessageRender()
+  followScroll()
 }
 
-// 执行步骤逐个到达，新增步骤时跟随滚动。
-watch(
-  () => chat.agentSteps.length,
-  () => scheduleMessageRender(),
-)
-watch(
-  () => chat.streamingText,
-  (text) => {
-    if (!text) streamingPreview.value = ''
-    scheduleMessageRender()
-  },
-  { immediate: true },
-)
-watch(
-  () => chat.messages.at(-1)?.id,
-  () => scheduleMessageRender(),
-)
-
-async function loadOlderMessages() {
-  const el = scroller.value
-  const conversationId = chat.activeId
-  if (!el) return
-  const previousHeight = el.scrollHeight
-  const previousTop = el.scrollTop
-  if (await chat.loadOlderMessages()) {
-    await nextTick()
-    if (chat.activeId === conversationId && scroller.value === el) {
-      el.scrollTop = previousTop + el.scrollHeight - previousHeight
-    }
-  }
+/** 往上翻页：由组合式函数负责把新增高度补进 scrollTop */
+function loadOlderMessages() {
+  void keepAnchor(() => chat.loadOlderMessages())
 }
 
 // 深链、刷新和历史导航都以路由参数为准。

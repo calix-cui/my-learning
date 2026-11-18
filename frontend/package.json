@@ -23,7 +23,8 @@
     "acceptance:tools": "node scripts/tools-acceptance.mjs",
     "acceptance:mcp": "node scripts/mcp-acceptance.mjs",
     "acceptance:skills": "node scripts/skills-acceptance.mjs",
-    "acceptance:recovery": "node scripts/chat-recovery-acceptance.mjs"
+    "acceptance:recovery": "node scripts/chat-recovery-acceptance.mjs",
+    "acceptance:scroll": "node scripts/chat-scroll-acceptance.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
