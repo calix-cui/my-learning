@@ -25,7 +25,8 @@
     "acceptance:skills": "node scripts/skills-acceptance.mjs",
     "acceptance:recovery": "node scripts/chat-recovery-acceptance.mjs",
     "acceptance:scroll": "node scripts/chat-scroll-acceptance.mjs",
-    "acceptance:route": "node scripts/chat-route-acceptance.mjs"
+    "acceptance:route": "node scripts/chat-route-acceptance.mjs",
+    "acceptance:live": "node scripts/chat-live-acceptance.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
