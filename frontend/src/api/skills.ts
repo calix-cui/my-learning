@@ -17,8 +17,3 @@ export async function getSkill(key: string, version: string): Promise<{ instruct
   )
   return data.data
 }
-
-export async function exportLegacySkills(): Promise<Blob> {
-  const response = await client.get('/skills/legacy/export', { responseType: 'blob' })
-  return response.data
-}

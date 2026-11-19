@@ -10,7 +10,6 @@ import { rescanSkills, getSkill } from '@/api/skills'
 vi.mock('@/api/skills', () => ({
   rescanSkills: vi.fn(),
   getSkill: vi.fn(),
-  exportLegacySkills: vi.fn(),
 }))
 afterEach(() => vi.clearAllMocks())
 
@@ -33,7 +32,6 @@ it('进入设置再次扫描，页面只读，说明按需读取，重新扫描�
       },
     ],
     version: 'catalog1',
-    legacy_count: 1,
   }
   vi.mocked(rescanSkills).mockResolvedValue(catalog)
   await useSkillsStore(pinia).initialize(1)
@@ -43,7 +41,6 @@ it('进入设置再次扫描，页面只读，说明按需读取，重新扫描�
   expect(wrapper.find('form').exists()).toBe(false)
   expect(wrapper.findAll('input, textarea')).toHaveLength(0)
   expect(wrapper.text()).toContain('Skill')
-  expect(wrapper.text()).toContain('导出旧 Skill')
   expect(wrapper.text()).not.toContain('编辑')
   expect(getSkill).not.toHaveBeenCalled()
   vi.mocked(getSkill).mockResolvedValueOnce({ instructions: '**只读内容**' })

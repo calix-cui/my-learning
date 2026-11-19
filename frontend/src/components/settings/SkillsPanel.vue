@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { getSkill, exportLegacySkills } from '@/api/skills'
+import { getSkill } from '@/api/skills'
 import { useSkillsStore } from '@/stores/skills'
 import { useSessionStore } from '@/stores/session'
 import MarkdownContent from '@/components/chat/MarkdownContent.vue'
@@ -40,20 +39,6 @@ async function openDetail(skill: LocalSkill) {
     if (request === detailRequest) detailError.value = '读取失败，请重新扫描后重试'
   } finally {
     if (request === detailRequest) detailLoading.value = false
-  }
-}
-
-async function downloadLegacy() {
-  try {
-    const blob = await exportLegacySkills()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'legacy-skills.zip'
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 0)
-  } catch {
-    ElMessage.error('导出旧 Skill 失败')
   }
 }
 
@@ -108,15 +93,6 @@ onMounted(() => {
       </template>
     </div>
 
-    <div v-if="catalog.legacyCount" class="skills__legacy">
-      <p>
-        有 {{ catalog.legacyCount }} 个旧版数据库
-        Skill。导出后解压到账号对应的本地目录，再重新扫描。
-      </p>
-      <button type="button" class="skills__action u-tint" @click="downloadLegacy">
-        导出旧 Skill
-      </button>
-    </div>
   </section>
 </template>
 

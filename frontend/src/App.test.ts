@@ -32,7 +32,7 @@ async function setup(loggedIn = false) {
 }
 
 it('登录及刷新各获取一次 Skill，切换会话和退出不再发目录请求', async () => {
-  vi.mocked(rescanSkills).mockResolvedValue({ items: [], version: 'v1', legacy_count: 0 })
+  vi.mocked(rescanSkills).mockResolvedValue({ items: [], version: 'v1' })
   const { session, router, wrapper } = await setup()
   await flushPromises()
   expect(rescanSkills).not.toHaveBeenCalled()

@@ -24,7 +24,6 @@ const result = (name = '指引'): SkillCatalog => ({
     },
   ],
   version: name,
-  legacy_count: 0,
 })
 
 it('登录后只初始化一次，并发扫描合并，重新进入应用重新获取', async () => {

@@ -283,5 +283,4 @@ export interface LocalSkill {
 export interface SkillCatalog {
   items: LocalSkill[]
   version: string
-  legacy_count: number
 }

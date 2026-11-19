@@ -7,7 +7,6 @@ import type { LocalSkill } from '@/types/api'
 export const useSkillsStore = defineStore('skills', () => {
   const items = ref<LocalSkill[]>([])
   const version = ref('')
-  const legacyCount = ref(0)
   const loading = ref(false)
   const error = ref('')
   const accountId = ref<number | null>(null)
@@ -19,7 +18,6 @@ export const useSkillsStore = defineStore('skills', () => {
     accountId.value = null
     items.value = []
     version.value = ''
-    legacyCount.value = 0
     loading.value = false
     error.value = ''
     inFlight = null
@@ -36,7 +34,6 @@ export const useSkillsStore = defineStore('skills', () => {
         if (requestGeneration !== generation) return
         items.value = data.items
         version.value = data.version
-        legacyCount.value = data.legacy_count
       })
       .catch((reason) => {
         if (requestGeneration !== generation) return
@@ -58,5 +55,5 @@ export const useSkillsStore = defineStore('skills', () => {
     return scan()
   }
 
-  return { items, version, legacyCount, loading, error, accountId, initialize, scan, reset }
+  return { items, version, loading, error, accountId, initialize, scan, reset }
 })
