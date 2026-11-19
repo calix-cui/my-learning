@@ -16,7 +16,6 @@ MAX_INSTRUCTIONS_CHARS = 4000
 MAX_TOOLS = 20
 
 SOURCE_BUILTIN = "builtin"
-SOURCE_CUSTOM = "custom"
 
 
 @dataclass(frozen=True)
@@ -30,7 +29,6 @@ class Skill:
     tools: tuple[str, ...] = ()
     icon: str = "sparkle"
     source: str = SOURCE_BUILTIN
-    skill_id: int | None = None
 
     @property
     def tool_count(self) -> int:
@@ -45,7 +43,6 @@ class Skill:
             tools=self.tools,
             icon=self.icon,
             source=self.source,
-            skill_id=self.skill_id,
         )
 
 
@@ -59,7 +56,6 @@ class SkillSummary:
     tools: tuple[str, ...] = field(default_factory=tuple)
     icon: str = "sparkle"
     source: str = SOURCE_BUILTIN
-    skill_id: int | None = None
 
     @property
     def tool_count(self) -> int:
@@ -79,7 +75,6 @@ class SkillDescriptor:
     version: str
     tools: tuple[str, ...] = ()
     icon: str = "sparkle"
-    skill_id: int | None = None
 
     @property
     def tool_count(self) -> int:
@@ -93,7 +88,6 @@ class SkillDescriptor:
             tools=self.tools,
             icon=self.icon,
             source=self.source,
-            skill_id=self.skill_id,
         )
 
 
@@ -117,7 +111,6 @@ class LoadedSkill:
             tools=self.descriptor.tools,
             icon=self.descriptor.icon,
             source=self.descriptor.source,
-            skill_id=self.descriptor.skill_id,
         )
 
 

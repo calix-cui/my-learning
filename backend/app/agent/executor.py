@@ -973,7 +973,6 @@ def _snapshot_descriptor(item: SkillDescriptor) -> dict[str, Any]:
         "version": item.version,
         "tools": list(item.tools),
         "icon": item.icon,
-        "skill_id": item.skill_id,
     }
 
 
@@ -996,7 +995,6 @@ def _restore_descriptor(raw: Any) -> SkillDescriptor | None:
         if isinstance(tools, list)
         else (),
         icon=raw.get("icon") if isinstance(raw.get("icon"), str) else "sparkle",
-        skill_id=raw.get("skill_id") if isinstance(raw.get("skill_id"), int) else None,
     )
 
 

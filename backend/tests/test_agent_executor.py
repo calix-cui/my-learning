@@ -660,19 +660,10 @@ def test_disabled_setting_hides_the_tool_from_the_registry(db_session: Session):
 
 def test_auto_skill_is_discovered_as_metadata_then_loaded_on_request(db_session: Session):
     user, conversation = _setup(db_session, "auto-skill@example.com")
-    skill_service.create_skill(
-        db_session,
-        user.id,
-        slug="auto-guide",
-        name="自动指引",
-        description="只在需要时读取的流程说明。",
-        instructions="AUTO_GUIDE_PRIVATE_INSTRUCTIONS",
-        tools=["now"],
-    )
     descriptor = next(
         item
         for item in skill_service.registry_for(db_session, user.id).discover()
-        if item.slug == "auto-guide"
+        if item.slug == "meeting-notes"
     )
     _, run, messages, is_first = prepare_run(
         db_session,
@@ -719,13 +710,13 @@ def test_auto_skill_is_discovered_as_metadata_then_loaded_on_request(db_session:
     # 其他 Skill 仍可发现。
     assert SKILL_LOAD_TOOL_NAME in llm.tool_names_seen[1]
     assert descriptor.description in llm.messages_seen[0][0]["content"]
-    assert "AUTO_GUIDE_PRIVATE_INSTRUCTIONS" not in llm.messages_seen[0][0]["content"]
-    assert "AUTO_GUIDE_PRIVATE_INSTRUCTIONS" in llm.messages_seen[1][0]["content"]
+    assert "把它变成能执行的东西" not in llm.messages_seen[0][0]["content"]
+    assert "把它变成能执行的东西" in llm.messages_seen[1][0]["content"]
     db_session.refresh(run)
-    assert run.skill_snapshot["loaded"][0]["instructions"] == "AUTO_GUIDE_PRIVATE_INSTRUCTIONS"
+    assert "把它变成能执行的东西" in run.skill_snapshot["loaded"][0]["instructions"]
     loaded_step = db_session.query(AgentStep).filter_by(run_id=run.id, kind="skill_loaded").one()
     assert loaded_step.skill_key == descriptor.key
-    assert loaded_step.skill_name == "自动指引"
+    assert loaded_step.skill_name == "会议纪要"
 
 
 def test_auto_skill_load_failure_is_reported_and_model_can_continue(db_session: Session):
@@ -807,90 +798,6 @@ def test_off_mode_ignores_mounted_skill_and_does_not_expose_skill_control(db_ses
     assert all(item["role"] != "system" for item in llm.messages_seen[0])
     assert SKILL_LOAD_TOOL_NAME not in llm.tool_names_seen[0]
     assert run.skill_snapshot == {"catalog": [], "loaded": []}
-
-
-def test_loaded_skill_snapshot_is_replayed_after_approval(db_session: Session):
-    user, conversation = _setup(db_session, "skill-approval-resume@example.com")
-    skill = skill_service.create_skill(
-        db_session,
-        user.id,
-        slug="approval-guide",
-        name="审批指引",
-        description="用于审批恢复测试。",
-        instructions="ORIGINAL_SKILL_SNAPSHOT",
-        tools=[],
-    )
-    descriptor = next(
-        item
-        for item in skill_service.registry_for(db_session, user.id).discover()
-        if item.slug == "approval-guide"
-    )
-    registry = registry_for(db_session, user.id, conversation.id)
-    _, run, messages, is_first = prepare_run(
-        db_session,
-        user_id=user.id,
-        conversation_id=conversation.id,
-        content="读取技能并改名",
-        skill_mode="auto",
-    )
-    llm = FakeLLM(
-        tool_script=[
-            tool_reply(SKILL_LOAD_TOOL_NAME, {"skill_key": descriptor.key}),
-            tool_reply("rename_conversation", {"title": "审批后改名"}),
-            final_reply("已完成"),
-        ]
-    )
-    initial_events = _drain(
-        stream_run(
-            db_session,
-            run=run,
-            conversation=conversation,
-            messages=messages,
-            llm=llm,
-            is_first_message=True,
-            user_id=user.id,
-            registry=registry,
-            policy=ToolPolicy(registry=registry),
-        )
-    )
-    assert initial_events[-1]["type"] == "approval_required"
-    approval = db_session.query(AgentApproval).filter_by(run_id=run.id).one()
-
-    skill_service.update_skill(
-        db_session, user.id, skill.skill_id, instructions="UPDATED_SKILL_CONTENT"
-    )
-    run, approval = decide_approval(
-        db_session,
-        user_id=user.id,
-        run_id=run.id,
-        approval_id=approval.id,
-        approved=True,
-        note=None,
-    )
-    base_registry = registry_for(db_session, user.id, conversation.id)
-    resumed_events = _drain(
-        resume_run(
-            db_session,
-            run=run,
-            approval=approval,
-            llm=llm,
-            user_id=user.id,
-            registry=base_registry,
-            policy=build_policy(db_session, user_id=user.id, registry=base_registry, run=run),
-        )
-    )
-
-    assert _types(resumed_events) == ["tool_result", "run_finished"]
-    resumed_messages = llm.tool_calls_seen[-1]
-    system = next(item for item in resumed_messages if item["role"] == "system")
-    assert "ORIGINAL_SKILL_SNAPSHOT" in system["content"]
-    assert "UPDATED_SKILL_CONTENT" not in system["content"]
-    assert any(
-        call["function"]["name"] == SKILL_LOAD_TOOL_NAME
-        for item in resumed_messages
-        if item.get("role") == "assistant"
-        for call in item.get("tool_calls", [])
-    )
 
 
 def test_skill_resources_survive_approval_and_do_not_reread_files(

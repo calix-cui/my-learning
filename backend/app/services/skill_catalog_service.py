@@ -88,13 +88,4 @@ def catalog_response(db: Session, user_id: int, *, rescan: bool = False) -> dict
     return {
         "items": [asdict(item) for item in registry.discover()],
         "version": snapshot["version"],
-        "legacy_count": legacy_count(db, user_id),
     }
-
-
-def legacy_count(db: Session, user_id: int) -> int:
-    from sqlalchemy import func
-
-    from app.models import Skill
-
-    return db.scalar(select(func.count(Skill.id)).where(Skill.user_id == user_id)) or 0

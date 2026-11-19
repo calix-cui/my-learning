@@ -1,10 +1,8 @@
 """本地 Skill 发现、单条选择、渐进加载与账号隔离。"""
 
-import io
 import json
 import os
 from pathlib import Path
-from zipfile import ZipFile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,7 +13,6 @@ from app.llm import get_user_llm
 from app.llm.fake import FakeLLM, final_reply, tool_reply
 from app.main import app
 from app.models import AgentRun
-from app.models import Skill as SkillRow
 from app.services import skill_catalog_service
 
 LOAD_SKILL = "__runtime_request_skill_load"
@@ -60,26 +57,14 @@ def send(client: TestClient, conversation_id: int, **kwargs):
     )
 
 
-def test_account_catalog_reads_files_and_rescans_without_database_skills(client, db_session, roots):
+def test_account_catalog_reads_files_and_rescans(client, roots):
     shared, private = roots
     user_id = client.get("/api/auth/me").json()["data"]["id"]
     package(shared)
     package(private / str(user_id), "private")
-    db_session.add(
-        SkillRow(
-            user_id=user_id,
-            slug="legacy",
-            name="旧方法",
-            description="旧内容",
-            instructions="旧正文",
-        )
-    )
-    db_session.commit()
     first = client.post("/api/skills/catalog/rescan").json()["data"]
     keys = [item["key"] for item in first["items"]]
     assert {"shared-0:guide", "user:private"} <= set(keys)
-    assert not any("legacy" in key for key in keys)
-    assert first["legacy_count"] == 1
     assert "LOCAL_PRIVATE_INSTRUCTIONS" not in json.dumps(first)
     package(shared, "new")
     assert client.get("/api/skills/catalog").json()["data"] == first
@@ -93,27 +78,12 @@ def test_account_catalog_reads_files_and_rescans_without_database_skills(client,
     assert detail.json()["data"]["instructions"] == "LOCAL_PRIVATE_INSTRUCTIONS"
 
 
-def test_catalog_and_legacy_export_are_account_scoped(client, anon_client, db_session, roots):
+def test_catalog_is_account_scoped(client, anon_client, roots):
     _, private = roots
     user_id = client.get("/api/auth/me").json()["data"]["id"]
     package(private / str(user_id), "private")
-    db_session.add(
-        SkillRow(
-            user_id=user_id,
-            slug="old",
-            name="旧方法",
-            description="旧描述",
-            instructions="仅属于当前账号",
-        )
-    )
-    db_session.commit()
     assert anon_client.get("/api/skills/catalog").status_code == 401
     assert anon_client.post("/api/skills/catalog/rescan").status_code == 401
-    assert anon_client.get("/api/skills/legacy/export").status_code == 401
-    exported = client.get("/api/skills/legacy/export")
-    with ZipFile(io.BytesIO(exported.content)) as archive:
-        assert archive.namelist() == ["old/SKILL.md"]
-        assert "仅属于当前账号" in archive.read("old/SKILL.md").decode()
     anon_client.post(
         "/api/auth/register", json={"email": "other-catalog@example.com", "password": "password123"}
     )
@@ -123,8 +93,6 @@ def test_catalog_and_legacy_export_are_account_scoped(client, anon_client, db_se
         anon_client.get("/api/skills/catalog/detail", params={"key": "user:private"}).status_code
         == 404
     )
-    with ZipFile(io.BytesIO(anon_client.get("/api/skills/legacy/export").content)) as archive:
-        assert archive.namelist() == []
 
 
 def test_explicit_skill_only_applies_to_current_message_and_chat_does_not_scan(
