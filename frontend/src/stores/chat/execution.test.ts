@@ -399,6 +399,42 @@ it.each(['approve', 'reject'] as const)(
   },
 )
 
+it('首发撞上审批：核对期间卡片不能显示「执行中…」，否则点了没反应', async () => {
+  const chat = useChatStore()
+  chat.activeId = 1
+  const pending = chat.send('改名')
+  const refresh = deferred<ChatConversationDetail>()
+  vi.mocked(getConversation).mockReturnValue(refresh.promise)
+  const ask = {
+    type: 'approval_required' as const,
+    run_id: 7,
+    approval_id: 9,
+    seq: 3,
+    tool: 'rename_conversation',
+    args: { title: '改名' },
+    reason: '写操作',
+    call_id: 'c1',
+  }
+  handlers.onEvent?.(ask)
+  handlers.onApproval?.(ask)
+  stream.resolve()
+  // 卡片这时已经渲染出来了，但核对还没回来
+  await vi.waitFor(() => expect(getConversation).toHaveBeenCalled())
+  expect(chat.pendingApproval?.approvalId).toBe(9)
+  expect(chat.sending).toBe(false)
+
+  refresh.resolve(history('waiting_approval'))
+  expect(await pending).toBe(true)
+  expect(chat.sending).toBe(false)
+
+  stream = deferred<void>()
+  vi.mocked(getConversation).mockResolvedValue(history('completed'))
+  const decided = chat.approveApproval()
+  await vi.waitFor(() => expect(decideApprovalStream).toHaveBeenCalledTimes(1))
+  stream.resolve()
+  expect(await decided).toBe(true)
+})
+
 it('审批已提交但响应丢失时查询终态，不恢复旧审批卡', async () => {
   const chat = useChatStore()
   vi.mocked(getConversation).mockResolvedValue(history('waiting_approval'))

@@ -273,6 +273,71 @@ async function main() {
     const finalRuns = finalDetail.body?.data?.runs ?? []
     check('重新生成开了一次新运行', finalRuns.length >= 2, `runs=${finalRuns.length}`)
 
+    // ---- 场景 D：写操作要审批，批准之后真的执行 ----
+    // 用真实模型走完整条链：模型请求工具 → 后端挂起 → 卡片 → 批准 → 恢复执行 → 落库。
+    await send(page, '把这个会话重命名为「联调改名」，只调用工具，不要解释')
+    await page.waitForSelector('.approval', { timeout: 60000 })
+    const card = await page.$eval('.approval', (node) => node.innerText)
+    check('写操作弹出审批卡片', card.includes('需要你确认'), card.split('\n')[0])
+    check('卡片上写明要调用的工具', card.includes('rename_conversation'), card)
+
+    // 卡片刚出现时可能还在核对（按钮 disabled），等它真的可点再点
+    await page.waitForFunction(
+      () => {
+        const button = document.querySelector('.approval__btn--primary')
+        return button instanceof HTMLButtonElement && !button.disabled
+      },
+      { timeout: 30000 },
+    )
+    await page.click('.approval__btn--primary')
+    await waitFor(page, () => !document.querySelector('.approval'), 60000, '审批后卡片收起')
+    check('批准之后卡片收起', true)
+
+    // 等运行真的跑完（模型拿到工具结果还要再说一句）
+    await waitFor(
+      page,
+      () => !document.querySelector('button[aria-label="停止"]'),
+      60000,
+      '审批后运行结束',
+    )
+    const approved = await request(
+      'GET',
+      `/api/conversations/${conversationId}?message_limit=50`,
+      { cookie },
+    )
+    const approvedRun = (approved.body?.data?.runs ?? []).find(
+      (item) => item.status === 'completed' && item.id > (cancelled?.id ?? 0),
+    )
+    check('批准之后运行跑完', Boolean(approvedRun), `run=${approvedRun?.id} ${approvedRun?.status}`)
+    const renamed = await request('GET', `/api/conversations/${conversationId}`, { cookie })
+    check(
+      '工具真的执行了：会话改名生效',
+      renamed.body?.data?.title === '联调改名',
+      String(renamed.body?.data?.title),
+    )
+    const approvalList = approvedRun
+      ? await request('GET', `/api/agent/runs/${approvedRun.id}/approvals`, { cookie })
+      : { body: null }
+    const decided = (approvalList.body?.data?.items ?? [])[0]
+    check(
+      '审批记录记成 approved',
+      decided?.status === 'approved',
+      `${decided?.tool_name} ${decided?.status}`,
+    )
+
+    const steps = approvedRun
+      ? await request('GET', `/api/agent/runs/${approvedRun.id}/steps`, { cookie })
+      : { body: null }
+    const items = steps.body?.data?.items ?? []
+    const callStep = items.find((item) => item.kind === 'tool_call')
+    const resultStep = items.find((item) => item.kind === 'tool_result')
+    check(
+      '步骤按 call_id 配对，而不是靠名字',
+      Boolean(callStep?.call_id) && callStep.call_id === resultStep?.call_id,
+      `${callStep?.call_id} / ${resultStep?.call_id}`,
+    )
+    await page.screenshot({ path: `${OUT}/live-approval.png` })
+
     check('页面没有未捕获异常', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
     check('没有 5xx 响应', serverErrors.length === 0, serverErrors.slice(0, 2).join(' | '))
   } finally {

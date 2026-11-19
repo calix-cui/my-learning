@@ -141,7 +141,10 @@ export async function runExecution(
   }
   if (!operation.current()) return false
   execution.preview = ''
-  execution.transport = 'reconciling'
+  // 审批已经把决定权交回用户：这条连接不会再收到事件，核对期间也别再算「传输中」，
+  // 否则卡片会在核对的那一下显示「执行中…」，用户点上去什么也不会发生。
+  const handedOver = execution.status === 'waiting_approval' && execution.approval !== null
+  execution.transport = handedOver ? 'idle' : 'reconciling'
   try {
     await operation.reconcile()
   } catch (error) {
@@ -156,7 +159,12 @@ export async function runExecution(
   if (
     execution.status === 'completed' ||
     execution.status === 'failed' ||
-    execution.status === 'cancelled'
+    execution.status === 'cancelled' ||
+    // 审批把决定权交回用户，这条连接不会再收到事件：核对完就该松开。
+    // 只有核对本身失败（disconnected）时保持锁住，等用户重新核对。
+    (execution.transport !== 'disconnected' &&
+      execution.status === 'waiting_approval' &&
+      execution.approval !== null)
   ) {
     execution.transport = 'idle'
   }
