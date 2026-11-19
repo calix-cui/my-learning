@@ -13,9 +13,17 @@ SSE_HEADERS = {
 }
 
 
-def encode_sse(events: Iterator[dict]) -> Iterator[str]:
+def encode_sse(events: Iterator[dict | None]) -> Iterator[str]:
+    """`None` 表示心跳位，写成 SSE 注释：客户端解析器会忽略它。
+
+    心跳不是装饰：拔网线、休眠这类「静默消失」不会触发 `http.disconnect`，
+    只有往这条连接写点东西才会失败，执行线程这才知道没人在看。
+    """
     try:
         for event in events:
+            if event is None:
+                yield ": ping\n\n"
+                continue
             # 保留中文，便于调试事件流。
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
     finally:

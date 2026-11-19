@@ -48,6 +48,13 @@ HISTORY_LIMIT = 512
 # 正文快照的写入节奏：攒够这么多字，或者距上次写入超过这么久，就落一次库
 DRAFT_FLUSH_CHARS = 200
 DRAFT_FLUSH_SECONDS = 0.5
+# 没有订阅者时靠心跳发现「人真的走了」：拔网线不会触发 http.disconnect，
+# 只有写这一帧才会失败。顺带让反代别把 60 秒空闲的连接掐掉。
+HEARTBEAT_SECONDS = 15
+ABANDONED_MESSAGE = "长时间没有客户端接收，已停止"
+# 一个运行连续这么久没人接收就停下：刷新页面必然有短暂空窗，不能立刻停
+RUN_ORPHAN_TIMEOUT_SECONDS = 600
+ORPHAN_SWEEP_SECONDS = 30
 
 _END: Any = None
 
@@ -61,11 +68,16 @@ class Subscription:
         self._history = history
         self._closed = False
 
-    def events(self) -> Iterator[dict]:
+    def events(self) -> Iterator[dict | None]:
+        """`None` 是心跳位：HTTP 层把它写成一行注释，客户端看不见。"""
         try:
             yield from self._history
             while True:
-                item = self._live.get()
+                try:
+                    item = self._live.get(timeout=HEARTBEAT_SECONDS)
+                except queue.Empty:
+                    yield None
+                    continue
                 if item is _END:
                     return
                 yield item
@@ -88,6 +100,9 @@ class _Channel:
         self._subscribers: list[queue.Queue] = []
         self._closed = False
         self._stop_requested = False
+        self._stop_reason = "user_cancelled"
+        # 订阅数掉到 0 的时刻；再有人订阅就清空
+        self._orphaned_at: float | None = None
 
     def subscribe(self) -> Subscription:
         live: queue.Queue = queue.Queue(maxsize=SUBSCRIBER_BUFFER)
@@ -97,12 +112,22 @@ class _Channel:
                 live.put_nowait(_END)
             else:
                 self._subscribers.append(live)
+                self._orphaned_at = None
         return Subscription(self, live, history)
 
     def unsubscribe(self, live: queue.Queue) -> None:
         with self._lock:
             if live in self._subscribers:
                 self._subscribers.remove(live)
+            if not self._subscribers and not self._closed:
+                self._orphaned_at = time.monotonic()
+
+    def orphaned_for(self, now: float | None = None) -> float:
+        """没人接收持续了多久；有人接收或已结束返回 0。"""
+        with self._lock:
+            if self._subscribers or self._orphaned_at is None or self._closed:
+                return 0.0
+            return (now if now is not None else time.monotonic()) - self._orphaned_at
 
     def emit(self, event: dict) -> None:
         with self._lock:
@@ -120,8 +145,13 @@ class _Channel:
     def stop_requested(self) -> bool:
         return self._stop_requested
 
-    def request_stop(self) -> None:
+    @property
+    def stop_reason(self) -> str:
+        return self._stop_reason
+
+    def request_stop(self, reason: str = "user_cancelled") -> None:
         """请执行线程在下一个事件边界停下；它是协作式的，不会从别的线程掐生成器。"""
+        self._stop_reason = reason
         self._stop_requested = True
 
     def close(self) -> None:
@@ -160,7 +190,10 @@ class _DraftWriter:
         if not piece:
             return
         self._text += piece
-        if len(piece) >= DRAFT_FLUSH_CHARS or time.monotonic() - self._last >= DRAFT_FLUSH_SECONDS:
+        if (
+            len(self._text) >= DRAFT_FLUSH_CHARS
+            or time.monotonic() - self._last >= DRAFT_FLUSH_SECONDS
+        ):
             self.flush()
 
     def flush(self) -> None:
@@ -193,6 +226,7 @@ class RunHub:
         self._threads: set[threading.Thread] = set()
         self._lock = threading.Lock()
         self._session_factory: Callable[[], Session] = SessionLocal
+        self._watchdog: threading.Thread | None = None
         # 测试把它置真：任务同步跑完，事件全进 history，读起来与改造前一致
         self.inline = False
 
@@ -239,14 +273,51 @@ class RunHub:
             channel = self._channels.get(run_id)
         return channel.subscribe() if channel is not None else None
 
-    def stop(self, run_id: int) -> bool:
+    def stop(self, run_id: int, reason: str = "user_cancelled") -> bool:
         """请求停止；运行不在本进程时返回 False，由调用方直接落终态。"""
         with self._lock:
             channel = self._channels.get(run_id)
         if channel is None:
             return False
-        channel.request_stop()
+        channel.request_stop(reason)
         return True
+
+    def sweep_orphans(self, now: float | None = None, timeout: float | None = None) -> int:
+        """停掉「长时间没人接收」的运行，返回这次停了几条。
+
+        刷新页面时旧连接先断、新连接后连，必然有空窗；所以只有空窗超过
+        `RUN_ORPHAN_TIMEOUT_SECONDS` 才算「人真的走了」。
+        """
+        limit = RUN_ORPHAN_TIMEOUT_SECONDS if timeout is None else timeout
+        stopped = 0
+        with self._lock:
+            channels = list(self._channels.items())
+        for run_id, channel in channels:
+            if channel.orphaned_for(now) < limit:
+                continue
+            logger.info("长时间没有订阅者，停止运行", extra={"run_id": run_id})
+            channel.request_stop("abandoned")
+            stopped += 1
+        return stopped
+
+    def _ensure_watchdog(self) -> None:
+        if self._watchdog is not None:
+            return
+        with self._lock:
+            if self._watchdog is not None:
+                return
+            self._watchdog = threading.Thread(
+                target=self._watch_orphans, name="run-orphan-watchdog", daemon=True
+            )
+            self._watchdog.start()
+
+    def _watch_orphans(self) -> None:
+        while True:
+            time.sleep(ORPHAN_SWEEP_SECONDS)
+            try:
+                self.sweep_orphans()
+            except Exception:  # pragma: no cover - 看门狗自己不能死
+                logger.exception("清理无人接收的运行失败")
 
     def active_runs(self) -> int:
         with self._lock:
@@ -255,6 +326,7 @@ class RunHub:
     # ---- 内部 -----------------------------------------------------------
 
     def _open(self, run_id: int) -> tuple[_Channel, Subscription]:
+        self._ensure_watchdog()
         with self._lock:
             channel = self._channels.get(run_id)
             if channel is None:
@@ -398,7 +470,7 @@ class RunHub:
                 # 先把已经生成的部分变成消息、把状态落成 cancelled，
                 # 再关生成器——这样 `_finish_interrupted_run` 的状态守卫会跳过它
                 draft.flush()
-                cancel_run(db, run)
+                cancel_run(db, run, channel.stop_reason)
             # 关闭生成器，让 `stream_run` 的 finally 有机会把没跑完的运行收掉
             close = getattr(stream, "close", None)
             if close is not None:
@@ -406,7 +478,7 @@ class RunHub:
 
 
 def cancel_run(db: Session, run: AgentRun, reason: str = "user_cancelled") -> None:
-    """把运行收成「用户终止」：已生成的正文照常保留成一条消息。"""
+    """把运行收成终止态：已生成的正文照常保留成一条消息。"""
     if run.status not in {RUN_RUNNING, RUN_WAITING_APPROVAL}:
         return
     text = (run.draft_content or "").strip()
@@ -421,7 +493,7 @@ def cancel_run(db: Session, run: AgentRun, reason: str = "user_cancelled") -> No
     run.stop_reason = reason
     run.finished_time = datetime.now()  # noqa: DTZ005
     if not text:
-        run.error_message = "已按你的要求终止"
+        run.error_message = ABANDONED_MESSAGE if reason == "abandoned" else "已按你的要求终止"
     db.commit()
 
 

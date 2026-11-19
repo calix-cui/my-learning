@@ -145,3 +145,35 @@ def test_stop_keeps_what_was_generated_and_marks_cancelled(db_session, user) -> 
     message = db_session.get(Message, run.assistant_message_id)
     assert message is not None
     assert message.content == "先说一半"
+
+
+def test_no_sweep_while_someone_is_watching() -> None:
+    hub = RunHub()
+    channel, subscription = hub._open(21)
+    assert hub.sweep_orphans(now=time.monotonic() + 3600) == 0
+    assert not channel.stop_requested
+    subscription.close()
+
+
+def test_orphaned_run_is_stopped_after_the_timeout() -> None:
+    hub = RunHub()
+    channel, subscription = hub._open(22)
+    subscription.close()
+
+    # 刚断开不算「人走了」：刷新页面时旧连接先断、新连接后连
+    assert hub.sweep_orphans() == 0
+    assert not channel.stop_requested
+
+    assert hub.sweep_orphans(now=time.monotonic() + hub_module.RUN_ORPHAN_TIMEOUT_SECONDS + 1) == 1
+    assert channel.stop_requested
+    assert channel.stop_reason == "abandoned"
+
+
+def test_heartbeat_shows_up_as_a_comment_frame() -> None:
+    from app.api.sse import encode_sse
+
+    frames = list(encode_sse(iter([{"type": "run_started"}, None, {"type": "run_finished"}])))
+
+    assert frames[0].startswith("data: ")
+    assert frames[1] == ": ping\n\n"
+    assert frames[2].startswith("data: ")

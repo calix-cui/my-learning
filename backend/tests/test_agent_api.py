@@ -548,7 +548,7 @@ def _user_id(client: TestClient) -> int:
 
 
 @pytest.mark.usefixtures("llm")
-def test_regenerate_replaces_the_old_answer(client: TestClient, db_session: Session):
+def test_regenerate_replaces_the_old_answer(client: TestClient):
     conversation_id = _conversation(client)
     with client.stream(
         "POST",
@@ -575,9 +575,7 @@ def test_regenerate_replaces_the_old_answer(client: TestClient, db_session: Sess
 @pytest.mark.usefixtures("llm")
 def test_regenerate_refuses_running_run(client: TestClient, db_session: Session):
     conversation_id = _conversation(client)
-    run = AgentRun(
-        conversation_id=conversation_id, user_id=_user_id(client), status="running"
-    )
+    run = AgentRun(conversation_id=conversation_id, user_id=_user_id(client), status="running")
     db_session.add(run)
     db_session.commit()
 
