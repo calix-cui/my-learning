@@ -560,6 +560,37 @@ it('详情读取与审批预加载同时发生时只读一次步骤', async () =
   expect(await deciding).toBe(true)
 })
 
+it('轮询跑满仍停在运行中：标出等待过久，用户可以决定不再等待', async () => {
+  vi.useFakeTimers()
+  try {
+    const chat = useChatStore()
+    chat.activeId = 1
+    const pending = chat.send('问题')
+    stream.reject(new Error('断流'))
+    expect(await pending).toBe(false)
+
+    vi.mocked(findRunByRequestId).mockResolvedValue(runDetail('running'))
+    vi.mocked(getConversation).mockResolvedValue(history('running'))
+    vi.mocked(getAgentSteps).mockResolvedValue(stepsPage([], { status: 'running' }))
+    await chat.recoverExecution()
+    expect(chat.waitingTooLong).toBe(false)
+
+    // 跑满 20 次轮询服务端还是 running
+    await vi.advanceTimersByTimeAsync(1600 * 21)
+    expect(chat.waitingTooLong).toBe(true)
+    expect(chat.canSend).toBe(false)
+
+    // 不再等待只改本地判定：不发第二个请求，也不重发提交
+    expect(chat.abandonExecution()).toBe(true)
+    expect(chat.canSend).toBe(true)
+    expect(chat.waitingTooLong).toBe(false)
+    expect(chat.recoveryMessage).toContain('已停止等待')
+    expect(sendAgentStream).toHaveBeenCalledTimes(1)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
 it('核对时服务端还在跑：只读轮询增量步骤，跑到终态才恢复正文', async () => {
   vi.useFakeTimers()
   try {

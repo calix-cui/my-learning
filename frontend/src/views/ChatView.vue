@@ -134,6 +134,14 @@ useChatRoute({
       >
         重新核对状态
       </button>
+      <button
+        v-if="hasConversation && chat.waitingTooLong"
+        type="button"
+        class="u-text-action"
+        @click="chat.abandonExecution"
+      >
+        不再等待
+      </button>
     </p>
 
     <div ref="scroller" v-loading="chat.loadingMessages" class="chat__scroll">

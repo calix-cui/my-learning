@@ -108,6 +108,9 @@ export const useChatStore = defineStore('chat', () => {
       null,
   )
 
+  /** 轮询跑满次数仍未终态：界面要给出「不再等待」这条路 */
+  const waitingTooLong = computed(() => activeExecution.value?.gaveUp === true)
+
   let localSequence = 0
 
   /** 输入框内容也是会话状态的一部分：每个会话各存各的草稿 */
@@ -239,6 +242,27 @@ export const useChatStore = defineStore('chat', () => {
         return
       }
     }
+    // 跑满上限仍停在 running：标出来，让用户自己决定继续等还是不等
+    if (threadState.threads.get(id) === thread && execution.status === 'running')
+      execution.gaveUp = true
+  }
+
+  /**
+   * 停止等待一次服务端仍显示在跑的运行。
+   *
+   * 只改本地判定：不动服务端、不发请求。服务端真跑完时下一次读历史会照常
+   * 显示正文；这里只是把「一直等不到终态」的会话解放出来，避免永久锁死。
+   */
+  function abandonExecution() {
+    const thread = activeThread.value
+    const execution = currentExecution(thread)
+    if (conversations.activeId.value === null || !execution || execution.status !== 'running')
+      return false
+    execution.status = 'failed'
+    execution.transport = 'idle'
+    execution.gaveUp = false
+    execution.error = '已停止等待，服务端仍显示这次运行在跑；刷新可再核对'
+    return true
   }
 
   function lastStepSeq(execution: Execution) {
@@ -500,7 +524,9 @@ export const useChatStore = defineStore('chat', () => {
     feedItems,
     canSend,
     recoveryMessage,
+    waitingTooLong,
     recoverExecution,
+    abandonExecution,
     agentMode,
     agentRunning,
     pendingApproval,
