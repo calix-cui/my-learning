@@ -34,6 +34,7 @@ from app.database import SessionLocal
 from app.llm import LLMClient
 from app.llm.base import LLMMessage
 from app.models import AgentApproval, AgentRun, Conversation, Message
+from app.models.agent_run import RUN_CANCELLED, RUN_RUNNING, RUN_WAITING_APPROVAL
 from app.services import chat_service
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ class _Channel:
         self._history: list[dict] = []
         self._subscribers: list[queue.Queue] = []
         self._closed = False
+        self._stop_requested = False
 
     def subscribe(self) -> Subscription:
         live: queue.Queue = queue.Queue(maxsize=SUBSCRIBER_BUFFER)
@@ -113,6 +115,14 @@ class _Channel:
                 # 读得太慢：踢掉这个订阅者，执行不为它停
                 logger.warning("订阅者落后太多，已断开", extra={"event": event.get("type")})
                 self.unsubscribe(live)
+
+    @property
+    def stop_requested(self) -> bool:
+        return self._stop_requested
+
+    def request_stop(self) -> None:
+        """请执行线程在下一个事件边界停下；它是协作式的，不会从别的线程掐生成器。"""
+        self._stop_requested = True
 
     def close(self) -> None:
         with self._lock:
@@ -222,6 +232,21 @@ class RunHub:
             caller_db=db,
         )
         return subscription
+
+    def subscribe(self, run_id: int) -> Subscription | None:
+        """挂到已经在跑的运行上；不在本进程返回 None（调用方按终端态处理）。"""
+        with self._lock:
+            channel = self._channels.get(run_id)
+        return channel.subscribe() if channel is not None else None
+
+    def stop(self, run_id: int) -> bool:
+        """请求停止；运行不在本进程时返回 False，由调用方直接落终态。"""
+        with self._lock:
+            channel = self._channels.get(run_id)
+        if channel is None:
+            return False
+        channel.request_stop()
+        return True
 
     def active_runs(self) -> int:
         with self._lock:
@@ -356,8 +381,12 @@ class RunHub:
         run: AgentRun,
     ) -> None:
         draft = _DraftWriter(db, run)
+        cancelled = False
         try:
             for event in stream:
+                if channel.stop_requested:
+                    cancelled = True
+                    break
                 channel.emit(event)
                 kind = event.get("type")
                 if kind == "assistant_delta":
@@ -365,10 +394,35 @@ class RunHub:
                 elif kind in {"assistant_preview_reset", "run_finished"}:
                     draft.clear()
         finally:
+            if cancelled:
+                # 先把已经生成的部分变成消息、把状态落成 cancelled，
+                # 再关生成器——这样 `_finish_interrupted_run` 的状态守卫会跳过它
+                draft.flush()
+                cancel_run(db, run)
             # 关闭生成器，让 `stream_run` 的 finally 有机会把没跑完的运行收掉
             close = getattr(stream, "close", None)
             if close is not None:
                 close()
+
+
+def cancel_run(db: Session, run: AgentRun, reason: str = "user_cancelled") -> None:
+    """把运行收成「用户终止」：已生成的正文照常保留成一条消息。"""
+    if run.status not in {RUN_RUNNING, RUN_WAITING_APPROVAL}:
+        return
+    text = (run.draft_content or "").strip()
+    if text:
+        message = Message(conversation_id=run.conversation_id, role="assistant", content=text)
+        db.add(message)
+        db.flush()
+        run.assistant_message_id = message.id
+    run.draft_content = None
+    run.draft_updated_time = None
+    run.status = RUN_CANCELLED
+    run.stop_reason = reason
+    run.finished_time = datetime.now()  # noqa: DTZ005
+    if not text:
+        run.error_message = "已按你的要求终止"
+    db.commit()
 
 
 def _context(db: Session, conversation_id: int) -> list[LLMMessage]:

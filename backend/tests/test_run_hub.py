@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from app.agent import hub as hub_module
 from app.agent.hub import RunHub, _DraftWriter
-from app.models import AgentRun, Conversation
+from app.models import AgentRun, Conversation, Message
 
 
 class _NullSession:
@@ -119,3 +119,29 @@ def test_draft_snapshot_is_flushed_while_generating(db_session, user) -> None:
     writer.clear()
     db_session.refresh(run)
     assert run.draft_content is None
+
+
+def test_stop_keeps_what_was_generated_and_marks_cancelled(db_session, user) -> None:
+    conversation = Conversation(user_id=user.id, title="终止")
+    db_session.add(conversation)
+    db_session.flush()
+    run = AgentRun(conversation_id=conversation.id, user_id=user.id)
+    db_session.add(run)
+    db_session.commit()
+    channel = hub_module._Channel()
+
+    def stream():
+        yield {"type": "assistant_delta", "content": "先说一半"}
+        # 用户在别的连接上点了「终止」：标志在下一个事件边界被看到
+        channel.request_stop()
+        yield {"type": "assistant_delta", "content": "不该出现"}
+
+    hub_module.RunHub._pump(channel, stream(), db=db_session, run=run)
+
+    db_session.refresh(run)
+    assert run.status == "cancelled"
+    assert run.stop_reason == "user_cancelled"
+    assert run.draft_content is None
+    message = db_session.get(Message, run.assistant_message_id)
+    assert message is not None
+    assert message.content == "先说一半"

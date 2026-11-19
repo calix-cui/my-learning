@@ -27,6 +27,15 @@ def upgrade() -> None:
     op.add_column(
         "agent_runs",
         sa.Column(
+            "stop_reason",
+            sa.String(length=32),
+            nullable=True,
+            comment="非正常结束的原因，如 user_cancelled",
+        ),
+    )
+    op.add_column(
+        "agent_runs",
+        sa.Column(
             "draft_updated_time",
             sa.DateTime(),
             nullable=True,
@@ -36,5 +45,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_column("agent_runs", "stop_reason")
     op.drop_column("agent_runs", "draft_updated_time")
     op.drop_column("agent_runs", "draft_content")

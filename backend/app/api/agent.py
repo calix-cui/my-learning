@@ -4,15 +4,16 @@
 复用同一执行循环，保留各自的 SSE 契约。
 """
 
+from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.agent.executor import decide_approval, prepare_run
-from app.agent.hub import run_hub
+from app.agent.hub import cancel_run, run_hub
 from app.api.sse import SSE_HEADERS, encode_sse
 from app.auth.dependencies import CurrentUser
 from app.common.exceptions import BusinessError
@@ -20,7 +21,8 @@ from app.common.response import Response
 from app.dependencies import get_db
 from app.llm import LLMClient, get_user_llm
 from app.llm.base import ReasoningEffort
-from app.models import AgentApproval, AgentRun
+from app.models import AgentApproval, AgentRun, AgentStep
+from app.models.agent_run import RUN_CANCELLED, RUN_RUNNING, RUN_WAITING_APPROVAL
 from app.models.agent_step import REPLAY_STEP_KINDS
 from app.schemas.agent import (
     AgentApprovalListResponse,
@@ -189,6 +191,66 @@ def get_replay_steps(
     )
 
 
+@approvals_router.post(
+    "/runs/{run_id}/stop",
+    response_model=Response,
+    summary="终止一次运行",
+    description=(
+        "只有用户明确终止才停，连接断掉不算。"
+        "已经生成的部分会保留成一条助手消息，运行记为 cancelled（stop_reason=user_cancelled）。"
+    ),
+)
+def stop_agent_run(
+    run_id: Annotated[int, Path(gt=0, description="运行ID")],
+    user: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+):
+    run = db.scalar(select(AgentRun).where(AgentRun.id == run_id, AgentRun.user_id == user.id))
+    if run is None:
+        raise BusinessError("运行不存在", code=404)
+    if run.status not in {RUN_RUNNING, RUN_WAITING_APPROVAL}:
+        raise BusinessError("这次运行已经结束", code=409)
+    if not run_hub.stop(run.id):
+        # 进程重启过、或运行不在本进程：没有线程可协作停下，直接落终态
+        cancel_run(db, run)
+    return Response.success(data={"run_id": run.id, "status": RUN_CANCELLED})
+
+
+@approvals_router.get(
+    "/runs/{run_id}/stream",
+    summary="订阅一次运行",
+    description=(
+        "先发一帧 `run_snapshot`（当前状态与已生成的正文），再跟实时事件。"
+        "断线重连、换设备都能重复订阅，都不影响执行。"
+    ),
+)
+def stream_agent_run_events(
+    run_id: Annotated[int, Path(gt=0, description="运行ID")],
+    user: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+    since_seq: Annotated[int, Query(ge=0, description="只转发 seq 大于它的步骤")] = 0,
+):
+    run = db.scalar(select(AgentRun).where(AgentRun.id == run_id, AgentRun.user_id == user.id))
+    if run is None:
+        raise BusinessError("运行不存在", code=404)
+
+    def events() -> Iterator[dict]:
+        yield _run_snapshot(db, run)
+        subscription = run_hub.subscribe(run.id)
+        if subscription is None:
+            # 不在本进程（进程重启过或已结束）：快照就是全部内容
+            return
+        for event in subscription.events():
+            seq = event.get("seq")
+            if isinstance(seq, int) and seq <= since_seq:
+                continue
+            yield event
+
+    return StreamingResponse(
+        encode_sse(events()), media_type="text/event-stream", headers=SSE_HEADERS
+    )
+
+
 @approvals_router.get(
     "/runs/{run_id}/approvals",
     response_model=Response,
@@ -248,3 +310,25 @@ def decide(
     return StreamingResponse(
         encode_sse(subscription.events()), media_type="text/event-stream", headers=SSE_HEADERS
     )
+
+
+def _run_snapshot(db: Session, run: AgentRun) -> dict:
+    """订阅的第一帧：状态 + 已生成的正文，让重连的客户端可以先画出来。"""
+    visible = db.scalar(
+        select(func.count(AgentStep.id)).where(
+            AgentStep.run_id == run.id, AgentStep.kind.in_(REPLAY_STEP_KINDS)
+        )
+    )
+    return {
+        "type": "run_snapshot",
+        "run_id": run.id,
+        "conversation_id": run.conversation_id,
+        "status": run.status,
+        "draft_content": run.draft_content,
+        "visible_step_count": visible or 0,
+        "error_message": run.error_message,
+        "stop_reason": run.stop_reason,
+        "finished_time": (
+            run.finished_time.strftime("%Y-%m-%d %H:%M:%S") if run.finished_time else None
+        ),
+    }

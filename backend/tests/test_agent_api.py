@@ -478,3 +478,70 @@ def test_steps_endpoint_answers_incremental_reads(client: TestClient):
     ]
     assert nothing_new["items"] == []
     assert nothing_new["status"] == "completed"
+
+
+@pytest.mark.usefixtures("llm")
+def test_stop_refuses_finished_run(client: TestClient):
+    conversation_id = _conversation(client)
+    with client.stream(
+        "POST",
+        f"/api/conversations/{conversation_id}/agent/stream",
+        json={"content": "2 的 10 次方"},
+    ) as response:
+        events = _read_events(response)
+    run_id = events[0]["run_id"]
+
+    stopped = client.post(f"/api/agent/runs/{run_id}/stop")
+    assert stopped.status_code == 409
+    assert stopped.json()["message"] == "这次运行已经结束"
+
+
+def test_stop_keeps_generated_text_as_message(client: TestClient, db_session: Session):
+    # 真实断线里这一列由后台线程写；这里直接造出「跑到一半」的样子
+    conversation_id = _conversation(client)
+    run = AgentRun(
+        conversation_id=conversation_id,
+        user_id=_user_id(client),
+        status="running",
+        draft_content="我先把两个数加起来",
+    )
+    db_session.add(run)
+    db_session.commit()
+
+    stopped = client.post(f"/api/agent/runs/{run.id}/stop")
+    assert stopped.status_code == 200
+    assert stopped.json()["data"]["status"] == "cancelled"
+
+    db_session.refresh(run)
+    assert run.status == "cancelled"
+    assert run.stop_reason == "user_cancelled"
+    assert run.draft_content is None
+    assert run.finished_time is not None
+    history = client.get(f"/api/conversations/{conversation_id}?message_limit=50").json()["data"]
+    assert [item["content"] for item in history["messages"] if item["role"] == "assistant"] == [
+        "我先把两个数加起来"
+    ]
+
+
+def test_subscribe_starts_with_snapshot(client: TestClient, db_session: Session):
+    conversation_id = _conversation(client)
+    run = AgentRun(
+        conversation_id=conversation_id,
+        user_id=_user_id(client),
+        status="running",
+        draft_content="先说一半",
+    )
+    db_session.add(run)
+    db_session.commit()
+
+    with client.stream("GET", f"/api/agent/runs/{run.id}/stream") as response:
+        assert response.status_code == 200
+        events = _read_events(response)
+    assert [event["type"] for event in events] == ["run_snapshot"]
+    assert events[0]["draft_content"] == "先说一半"
+    assert events[0]["status"] == "running"
+    assert events[0]["run_id"] == run.id
+
+
+def _user_id(client: TestClient) -> int:
+    return client.get("/api/auth/me").json()["data"]["id"]

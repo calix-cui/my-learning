@@ -108,6 +108,9 @@ class AgentRun(Base):
     draft_updated_time: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, comment="正文快照的最后写入时间"
     )
+    stop_reason: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="非正常结束的原因，如 user_cancelled"
+    )
 
     steps: Mapped[list["AgentStep"]] = relationship(
         back_populates="run",

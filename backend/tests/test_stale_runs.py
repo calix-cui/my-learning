@@ -21,9 +21,7 @@ def _run(db: Session, user: User, conversation: Conversation, status: str) -> Ag
     return run
 
 
-def test_startup_marks_runs_left_by_a_dead_process(
-    db_session: Session, user: User, monkeypatch
-):
+def test_startup_marks_runs_left_by_a_dead_process(db_session: Session, user: User, monkeypatch):
     conversation = Conversation(user_id=user.id, title="重启前")
     db_session.add(conversation)
     db_session.flush()
