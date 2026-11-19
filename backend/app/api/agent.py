@@ -21,7 +21,7 @@ from app.common.response import Response
 from app.dependencies import get_db
 from app.llm import LLMClient, get_user_llm
 from app.llm.base import ReasoningEffort
-from app.models import AgentApproval, AgentRun, AgentStep
+from app.models import AgentApproval, AgentRun, AgentStep, Message
 from app.models.agent_run import RUN_CANCELLED, RUN_RUNNING, RUN_WAITING_APPROVAL
 from app.models.agent_step import REPLAY_STEP_KINDS
 from app.schemas.agent import (
@@ -214,6 +214,57 @@ def stop_agent_run(
         # 进程重启过、或运行不在本进程：没有线程可协作停下，直接落终态
         cancel_run(db, run)
     return Response.success(data={"run_id": run.id, "status": RUN_CANCELLED})
+
+
+@approvals_router.post(
+    "/runs/{run_id}/regenerate",
+    response_class=StreamingResponse,
+    summary="按同一条提问重新生成",
+    description=(
+        "只在运行已经结束时可用。会把这次运行的问答一起删掉，再按同样的内容开一次新运行，"
+        "所以历史里不会出现两个一模一样的问题。"
+    ),
+    responses={200: {"content": {"text/event-stream": {}}, "description": "SSE 事件流"}},
+)
+def regenerate_agent_run(
+    run_id: Annotated[int, Path(gt=0, description="运行ID")],
+    user: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(get_user_llm)],
+):
+    run = db.scalar(select(AgentRun).where(AgentRun.id == run_id, AgentRun.user_id == user.id))
+    if run is None:
+        raise BusinessError("运行不存在", code=404)
+    if run.status in {RUN_RUNNING, RUN_WAITING_APPROVAL}:
+        raise BusinessError("这次运行还没结束，先终止再重新生成", code=409)
+    question = db.get(Message, run.user_message_id) if run.user_message_id else None
+    if question is None:
+        raise BusinessError("找不到这次运行对应的提问", code=404)
+
+    content = question.content
+    skill_mode = run.skill_mode
+    reasoning_effort = run.reasoning_effort
+    conversation_id = run.conversation_id
+    # 旧的一问一答一起删：新运行会重新落一条用户消息，历史里不留重复。
+    # 先断开旧运行的锚点，否则删掉消息后它仍占着 assistant_message_id，
+    # 新消息的 id 被复用时会撞上「一次运行只能有一条助手消息」的唯一约束。
+    for message_id in (run.assistant_message_id, run.user_message_id):
+        message = db.get(Message, message_id) if message_id else None
+        if message is not None:
+            db.delete(message)
+    run.assistant_message_id = None
+    run.user_message_id = None
+    db.commit()
+
+    return agent_stream_response(
+        db,
+        llm,
+        user.id,
+        conversation_id,
+        content=content,
+        skill_mode=skill_mode,
+        reasoning_effort=reasoning_effort,  # type: ignore[arg-type]
+    )
 
 
 @approvals_router.get(

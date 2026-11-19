@@ -545,3 +545,42 @@ def test_subscribe_starts_with_snapshot(client: TestClient, db_session: Session)
 
 def _user_id(client: TestClient) -> int:
     return client.get("/api/auth/me").json()["data"]["id"]
+
+
+@pytest.mark.usefixtures("llm")
+def test_regenerate_replaces_the_old_answer(client: TestClient, db_session: Session):
+    conversation_id = _conversation(client)
+    with client.stream(
+        "POST",
+        f"/api/conversations/{conversation_id}/agent/stream",
+        json={"content": "上次你说什么"},
+    ) as response:
+        first = _read_events(response)
+    run_id = first[0]["run_id"]
+    before = client.get(f"/api/conversations/{conversation_id}?message_limit=50").json()["data"]
+    assert [item["role"] for item in before["messages"]] == ["user", "assistant"]
+
+    with client.stream("POST", f"/api/agent/runs/{run_id}/regenerate") as response:
+        assert response.status_code == 200
+        again = _read_events(response)
+    assert again[0]["type"] == "run_started"
+    assert again[-1]["type"] == "run_finished"
+
+    after = client.get(f"/api/conversations/{conversation_id}?message_limit=50").json()["data"]
+    # 旧的问答一起删掉了，历史里只有一问一答，不会出现两个相同的问题
+    assert [item["role"] for item in after["messages"]] == ["user", "assistant"]
+    assert after["messages"][0]["content"] == "上次你说什么"
+
+
+@pytest.mark.usefixtures("llm")
+def test_regenerate_refuses_running_run(client: TestClient, db_session: Session):
+    conversation_id = _conversation(client)
+    run = AgentRun(
+        conversation_id=conversation_id, user_id=_user_id(client), status="running"
+    )
+    db_session.add(run)
+    db_session.commit()
+
+    response = client.post(f"/api/agent/runs/{run.id}/regenerate")
+    assert response.status_code == 409
+    assert response.json()["message"] == "这次运行还没结束，先终止再重新生成"
