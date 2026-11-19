@@ -119,9 +119,10 @@ def read_message_history(
         AgentRun.assistant_message_id,
         AgentRun.status,
         visible_count.label("visible_step_count"),
-        # 断线后前端靠这三项回答「我的请求落库了吗、为什么没答复」，缺一项就只能猜
+        # 断线后前端靠这几项回答「我的请求落库了吗、为什么没答复、是不是我停的」
         AgentRun.request_id,
         AgentRun.error_message,
+        AgentRun.stop_reason,
         AgentRun.finished_time,
     ).where(AgentRun.conversation_id == conversation_id, AgentRun.user_id == conversation.user_id)
     active = AgentRun.status.in_((RUN_RUNNING, RUN_WAITING_APPROVAL))

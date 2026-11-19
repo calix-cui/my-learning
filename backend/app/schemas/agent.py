@@ -46,6 +46,9 @@ class AgentRunSummary(BaseModel):
         default=None, description="客户端提交时的请求 ID，用于把断线后的核对对齐到具体一次运行"
     )
     error_message: str | None = Field(default=None, description="失败原因（与库中记录一致）")
+    stop_reason: str | None = Field(
+        default=None, description="非正常结束的原因：user_cancelled 表示用户主动终止"
+    )
     finished_time: datetime | None = Field(default=None, description="结束时间")
 
     @field_serializer("finished_time")

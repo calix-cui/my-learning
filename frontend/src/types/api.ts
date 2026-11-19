@@ -157,6 +157,8 @@ export interface AgentRunSummary {
   request_id: string | null
   /** 服务端记下的失败原因 */
   error_message: string | null
+  /** 非正常结束的原因：user_cancelled 表示用户主动终止 */
+  stop_reason?: string | null
   finished_time: string | null
 }
 
