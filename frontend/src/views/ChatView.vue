@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmpty from '@/components/chat/ChatEmpty.vue'
@@ -19,6 +19,24 @@ const skillCatalog = useSkillsStore()
 const autoSkills = ref(true)
 
 const hasConversation = computed(() => chat.activeId !== null)
+
+/** 恢复提示可以收起来：收起后不改变任何状态，只是不再占地方 */
+const recoveryDismissed = ref(false)
+const recoveryNotice = computed(() =>
+  recoveryDismissed.value ? null : chat.recoveryMessage,
+)
+
+function dismissRecovery() {
+  recoveryDismissed.value = true
+}
+
+// 提示内容变了（又一次断流、换会话、核对结果不同）就重新出现
+watch(
+  () => chat.recoveryMessage,
+  () => {
+    recoveryDismissed.value = false
+  },
+)
 
 const selectedSkill = computed(
   () => skillCatalog.items.find((item) => item.key === chat.selectedSkillKey) ?? null,
@@ -123,27 +141,6 @@ useChatRoute({
       Skill 目录读取失败，可在设置中重新扫描。
     </p>
 
-    <p v-if="chat.recoveryMessage" class="chat__recovery" role="status">
-      {{ chat.recoveryMessage }}
-      <button
-        v-if="hasConversation"
-        type="button"
-        class="u-text-action"
-        :disabled="chat.sending"
-        @click="chat.recoverExecution"
-      >
-        重新核对状态
-      </button>
-      <button
-        v-if="hasConversation && chat.waitingTooLong"
-        type="button"
-        class="u-text-action"
-        @click="chat.abandonExecution"
-      >
-        不再等待
-      </button>
-    </p>
-
     <div ref="scroller" v-loading="chat.loadingMessages" class="chat__scroll">
       <ChatEmpty v-if="showEmptyState" />
 
@@ -165,6 +162,37 @@ useChatRoute({
           @request-steps="chat.loadExecutionSteps"
           @decide="handleApproval"
         />
+      </div>
+    </div>
+
+    <div v-if="recoveryNotice" class="chat__recovery" role="status">
+      <div class="chat__recovery-inner">
+        <span class="chat__recovery-text">{{ recoveryNotice }}</span>
+        <button
+          v-if="hasConversation"
+          type="button"
+          class="u-text-action"
+          :disabled="chat.sending"
+          @click="chat.recoverExecution"
+        >
+          重新核对状态
+        </button>
+        <button
+          v-if="hasConversation && chat.waitingTooLong"
+          type="button"
+          class="u-text-action"
+          @click="chat.abandonExecution"
+        >
+          不再等待
+        </button>
+        <button
+          type="button"
+          class="chat__recovery-close"
+          aria-label="收起提示"
+          @click="dismissRecovery"
+        >
+          ×
+        </button>
       </div>
     </div>
 
@@ -205,15 +233,42 @@ useChatRoute({
 }
 
 .chat__recovery {
-  padding-inline: var(--ma-space-md);
+  /* 与输入区同一道左右留白，提示文字才会和输入框左边缘对齐 */
+  flex: none;
+  padding: 0 32px;
+}
+
+.chat__recovery-inner {
+  display: flex;
+  max-width: var(--ma-reading-width);
+  align-items: baseline;
+  gap: var(--ma-space-sm);
+  padding: 0 16px var(--ma-space-sm);
+  margin: 0 auto;
   color: var(--ma-color-muted);
+}
+
+.chat__recovery-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .chat__recovery button {
   font: inherit;
   background: transparent;
   border: 0;
-  margin-inline-start: var(--ma-space-sm);
+  flex: none;
+  cursor: pointer;
+}
+
+.chat__recovery-close {
+  padding: 0 var(--ma-space-xs);
+  color: var(--ma-color-muted);
+  opacity: 0.7;
+}
+
+.chat__recovery-close:hover {
+  opacity: 1;
 }
 
 .chat__skill-status {

@@ -460,6 +460,37 @@ it('分页只有助手消息时过程仍在正文前，补入用户消息后不�
   wrapper.unmount()
 })
 
+it('历史里的失败运行把服务端原因显示在原来该有回复的位置', async () => {
+  vi.mocked(getConversation).mockResolvedValue({
+    id: 1,
+    title: '重启前留下的运行',
+    agent_key: 'default',
+    skill_slug: null,
+    create_time: '',
+    update_time: '',
+    messages: [
+      { id: 11, conversation_id: 1, role: 'user', content: '用户问题', model: null, create_time: '' },
+    ],
+    runs: [
+      runSummary({
+        id: 32,
+        user_message_id: 11,
+        assistant_message_id: null,
+        status: 'failed',
+        error_message: '服务重启，这次运行已中断',
+      }),
+    ],
+  })
+  const { wrapper } = await setup('/chat/1', false, true)
+  await flushPromises()
+
+  // 失败原因属于「那一条运行」，写在原来该出现回复的位置，而不是全局横幅
+  expect(wrapper.get('.chat__execution-error').text()).toContain('服务重启，这次运行已中断')
+  expect(wrapper.find('.chat__recovery').exists()).toBe(false)
+  expect(wrapper.findComponent(ChatComposer).props('disabled')).toBe(false)
+  wrapper.unmount()
+})
+
 it.each(['failed', 'cancelled', 'waiting_approval'] as const)(
   '没有助手消息的 %s 运行保持在用户消息之后',
   async (status) => {
@@ -623,5 +654,27 @@ it('断流后显示核对入口并禁止重发，查询完成后恢复正文和�
   expect(chat.canSend).toBe(true)
   expect(wrapper.findComponent(ChatComposer).props('disabled')).toBe(false)
   expect(sendAgentStream).toHaveBeenCalledTimes(1)
+  wrapper.unmount()
+})
+
+it('恢复提示位于消息区与输入区之间，可以收起但不改变状态', async () => {
+  const { wrapper, handlers, disconnect, chat } = await setupStream()
+  handlers.onEvent?.({ type: 'run_started', run_id: 41, conversation_id: 1, user_message_id: 11 })
+  await disconnect()
+  const nodes = [...wrapper.element.children].map((el) => el.className)
+  const scrollAt = nodes.findIndex((name) => name.includes('chat__scroll'))
+  const recoveryAt = nodes.findIndex((name) => name.includes('chat__recovery'))
+  expect(scrollAt).toBeGreaterThanOrEqual(0)
+  // 提示紧挨在消息区之后、输入区之前：靠 flex 挤压消息区高度，而不是浮在页面上
+  expect(recoveryAt).toBe(scrollAt + 1)
+  expect(nodes).toHaveLength(recoveryAt + 2)
+  expect(wrapper.element.lastElementChild).toBe(wrapper.findComponent(ChatComposer).element)
+
+  await wrapper.get('[aria-label="收起提示"]').trigger('click')
+  expect(wrapper.find('.chat__recovery').exists()).toBe(false)
+  // 收起只是不再占地方：提示来源没变，发送仍然锁着
+  expect(chat.recoveryMessage).toContain('详情暂不可用')
+  expect(chat.canSend).toBe(false)
+  expect(wrapper.findComponent(ChatComposer).props('disabled')).toBe(true)
   wrapper.unmount()
 })

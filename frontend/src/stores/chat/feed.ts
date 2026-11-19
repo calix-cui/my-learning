@@ -12,6 +12,8 @@ export interface ExecutionItem {
   showTimeline: boolean
   lazy: boolean
   loadStatus?: 'loading' | 'loaded' | 'error'
+  /** 这次运行为什么没有回话（服务端给的原因）；中断的运行不会再补正文 */
+  error: string | null
   approval: PendingApproval | null
   approvalBlocked: boolean
 }
@@ -68,6 +70,7 @@ export function buildChatFeed(source: FeedSource, conversationKey: number): Chat
         showTimeline: live || steps.length > 0 || execution.visibleStepCount > 0,
         lazy: !live && execution.visibleStepCount > 0,
         loadStatus: execution.detailStatus,
+        error: execution.error,
         approval: execution.approval,
         approvalBlocked:
           execution.status !== 'waiting_approval' ||

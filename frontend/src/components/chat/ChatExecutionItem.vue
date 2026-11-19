@@ -38,4 +38,12 @@ function requestSteps() {
     class="chat__bubble--streaming"
     :content="preview"
   />
+  <p v-if="item.error" class="chat__execution-error" role="status">{{ item.error }}</p>
 </template>
+
+<style scoped>
+.chat__execution-error {
+  margin: var(--ma-space-sm) 0 var(--ma-space-md);
+  color: var(--ma-color-muted);
+}
+</style>
