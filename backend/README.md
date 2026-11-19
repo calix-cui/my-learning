@@ -206,9 +206,15 @@ ADMIN_EMAIL=me@example.com ADMIN_PASSWORD='至少8位的密码' uv run python -m
 ## 测试
 
 ```bash
-make test        # 123 个用例 + 覆盖率门槛（80%），全程不连 MySQL
+make test        # 用例 + 覆盖率门槛（80%），全程不连 MySQL
 make check       # lint + 测试，提交前跑这个
 ```
+
+`tests/known-failures.txt` 记着「在这个环境跑不过、但和代码无关」的用例（目前全是 MCP：
+测试要起 stdio 的 echo 子进程，沙箱里起不来）。它们跑起来显示为 `xfailed`，所以一屏绿
+是有意义的：**新出现的失败会让整跑变红**；表里的用例哪天修好了会以 `XPASS` 冒出来。
+想看全量原始结果用 `PYTEST_IGNORE_KNOWN_FAILURES=1 make test`。表本身有守卫
+（`tests/test_known_failures.py`），用例改名或删除后必须同步删掉对应行。
 
 两类用例共用 `tests/conftest.py` 里的占位 `DATABASE_URL`：
 

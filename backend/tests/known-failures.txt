@@ -1,0 +1,29 @@
+# 在这台机器上跑不过、但和业务代码无关的用例。
+#
+# 全是 MCP：测试要启动一个 stdio 的 echo 子进程，沙箱里起不来，
+# 报 `app.mcp.errors.McpError: 无法连接 MCP 服务器`。
+# 在能起子进程的环境里这些用例应当通过——如果它们通过了，pytest 会报 XPASS。
+#
+# 重新生成这张表：
+#   ./.venv/bin/pytest --no-cov -q --tb=no | grep -E '^(FAILED|ERROR)' | sed 's/ - .*//'
+# 然后去掉 FAILED/ERROR 前缀逐条粘进来。
+# 表里出现已经不存在的用例会失败（见 test_known_failures.py），避免表烂掉。
+tests/test_chat_tool_stream.py::test_web_search_requires_approval_and_replays_real_mcp_result[high]
+tests/test_chat_tool_stream.py::test_web_search_requires_approval_and_replays_real_mcp_result[none]
+tests/test_mcp_agent.py::test_mcp_call_suspends_then_runs_after_approval
+tests/test_mcp_agent.py::test_mcp_tools_are_external_and_need_approval
+tests/test_mcp_agent.py::test_rejected_mcp_call_is_fed_back_without_running
+tests/test_mcp_api.py::test_test_endpoint_reports_tools_and_persists_status
+tests/test_mcp_client.py::test_call_tool_error_is_not_exception
+tests/test_mcp_client.py::test_call_tool_returns_text
+tests/test_mcp_client.py::test_list_tools
+tests/test_mcp_source.py::test_forget_user_closes_only_that_users_connections
+tests/test_mcp_source.py::test_iserror_becomes_tool_error
+tests/test_mcp_source.py::test_mcp_schema_is_validated_before_remote_call
+tests/test_mcp_source.py::test_mcp_tool_runs_through_adapter
+tests/test_mcp_source.py::test_manager_reuses_connection_and_closes_on_forget
+tests/test_mcp_source.py::test_meta_marks_source_and_timeout
+tests/test_mcp_source.py::test_registry_for_wires_enabled_servers
+tests/test_mcp_source.py::test_spec_passes_remote_schema_through
+tests/test_mcp_source.py::test_sweep_reclaims_idle_connections
+tests/test_mcp_source.py::test_tools_are_prefixed_and_leveled

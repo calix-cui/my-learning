@@ -23,6 +23,7 @@ os.environ["LLM_API_KEY"] = ""
 os.environ["LLM_MODEL"] = ""
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -114,3 +115,33 @@ def client(db_session: Session) -> Iterator[TestClient]:
         yield test_client
     finally:
         app.dependency_overrides.clear()
+
+
+KNOWN_FAILURES_FILE = Path(__file__).with_name("known-failures.txt")
+
+
+def known_failure_ids() -> set[str]:
+    """读那张家常失败表：这些用例在当前环境跑不过，但不是代码坏了。"""
+    if not KNOWN_FAILURES_FILE.exists():
+        return set()
+    lines = KNOWN_FAILURES_FILE.read_text(encoding="utf-8").splitlines()
+    return {line.strip() for line in lines if line.strip() and not line.startswith("#")}
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """把表里的用例标成预期失败。
+
+    这样「一屏红」变成「除了已知的以外全绿」：新出现的失败直接让整跑变红，
+    表里的用例如果哪天修好了会以 XPASS 冒出来（而不是被悄悄跳过）。
+    临时想看全量：`MCP_TESTS=1` 之类不需要，直接 `PYTEST_IGNORE_KNOWN_FAILURES=1`。
+    """
+    if os.environ.get("PYTEST_IGNORE_KNOWN_FAILURES"):
+        return
+    known = known_failure_ids()
+    if not known:
+        return
+    for item in items:
+        if item.nodeid in known:
+            item.add_marker(
+                pytest.mark.xfail(reason="known-failures.txt：环境限制，非代码缺陷", strict=False)
+            )

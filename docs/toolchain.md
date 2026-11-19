@@ -51,6 +51,7 @@ flowchart TB
 | **Alembic** | 表结构变更要能复现、能回滚（不能靠 `create_all`） | `make revision m="说明"`、`make migrate`、`make check-migration` | `alembic.ini`、`migrations/` |
 | **ruff** | 代码风格与明显错误，一个工具代替 flake8+isort+black | `make lint`（只检查）、`make fmt`（自动改） | `pyproject.toml` 的 `[tool.ruff]` |
 | **pytest + pytest-cov** | 改完不知道有没有改坏；覆盖率防止测试形同虚设 | `make test`（含 80% 门槛） | `pyproject.toml` 的 `[tool.pytest]` / `[tool.coverage]` |
+| **已知失败表** | 「一屏总是 10 红」会让新失败混进去看不见；沙箱起不了 MCP echo 子进程，那些用例本机永远红 | 自动生效；`PYTEST_IGNORE_KNOWN_FAILURES=1 make test` 看原始结果 | `backend/tests/known-failures.txt`（`conftest.py` 标 xfail，`test_known_failures.py` 防表烂掉） |
 
 **为什么不用 requirements.txt**：uv 的 `uv.lock` 锁了完整依赖树（67 个包），`uv sync --frozen` 在任何机器上装出完全一致的环境，CI 也用它。
 
