@@ -10,7 +10,7 @@
 
 1. **Skill 渐进式发现与加载**：启动/运行时只向模型提供 Skill 元数据；模型通过 Runtime 的受控加载动作请求正文和资源。该动作是控制面请求，不注册成可执行 Tool。
 2. **Tool 执行链显式分层**：Provider 提供工具，Registry 管名称与 Schema，Policy 决定是否可见/可执行，Executor 做本地校验、审批、限时执行和结果归一化。模型拿到 Schema 不等于拿到授权。
-3. **保留两种 Skill 来源**：内置 Skill 继续用仓库文件；现有用户自定义 Skill 暂时继续从 `skills` 表读取。以后要支持用户上传目录时，再增加受控的文件包 Provider，不把用户给出的任意服务器路径当来源。
+3. **Skill 只剩文件一种来源**：内置 Skill 用仓库文件，账号私有 Skill 用受控目录里的文件包。~~原有数据库来源~~已于 2026-11-19 下线（迁移 `d39c4a07e1f2`），`DatabaseSkillProvider` 与 `skills` 表一并删除。
 4. **先修执行边界，再增加自动能力**：恢复审批时重新校验授权；MCP 工具 Schema 在本地校验；MCP 风险级别由本地配置决定；Skill 内容不再作为可信系统政策注入。
 
 ## 1. 当前 Agent Runtime 架构分析
@@ -41,7 +41,7 @@ flowchart LR
 | Tool 契约与注册 | `Tool`、`ToolMeta`、`ToolSpec`、`ToolResult`；`ToolSource`、`BuiltinSource`、`ToolRegistry` | `backend/app/agent/tools/base.py`、`backend/app/agent/tools/__init__.py` | 已有统一入口、JSON Schema 暴露、Pydantic 参数校验、禁用过滤、异常归一化；Registry 目前也直接负责执行 |
 | 权限与审批 | `ToolPolicy.check()` 检查禁用、预算、规则、审批；审批写 `agent_approvals`，执行过程写 `agent_steps` | `backend/app/agent/policy.py`、`backend/app/agent/executor.py` | 已有“模型提议、服务端决策、人类审批”的基础结构；恢复执行的授权重检需要补齐 |
 | MCP/工具市场 | `McpManager` 按服务器维护连接和工具缓存；`McpSource` 把远端工具包装成 `Tool`；设置页管理服务器 | `backend/app/mcp/`、`backend/app/api/mcp.py`、`frontend/src/components/settings/MarketPanel.vue` | 已有 MCP 接入市场，不是 Skills 市场，也不等同于有审核/签名/版本管理的公共插件商店 |
-| Skill 发现与挂载 | 内置 `SKILL.md` 在模块加载时扫描并缓存；用户自定义 Skill 存数据库；一个会话保存一个 `skill_slug`，由用户手动选择 | `backend/app/skills/loader.py`、`backend/app/services/skill_service.py`、`backend/app/models/skill.py` | 已有文件格式和来源合并，但还不是运行期动态发现，也没有模型按需加载 |
+| Skill 发现与挂载 | 内置与账号私有 `SKILL.md` 都由文件目录发现；一个会话保存一个 `skill_slug`，由用户手动选择 | `backend/app/skills/loader.py`、`backend/app/services/skill_service.py` | 文件格式统一，支持运行期发现与模型按需加载（2026-11-19 起不再有数据库来源） |
 | Skill 上下文 | `_with_skill()` 每次 run/resume 都读完整正文，`build_system_prompt()` 拼成 system 消息；Skill 的 `tools` 可收窄 Registry | `backend/app/agent/executor.py`、`backend/app/skills/models.py` | 没有渐进加载、引用资源、版本快照；用户内容与系统政策的信任层级需要分开 |
 | 前端过程 | 深度回答走 Agent SSE；Pinia store 更新消息、执行时间线与审批卡；普通对话走独立的消息 SSE | `frontend/src/api/agent.ts`、`frontend/src/stores/chat.ts`、`frontend/src/components/chat/AgentTimeline.vue`、`ApprovalCard.vue` | 可以增量增加 Skill 事件；普通对话现阶段不自动进入 Agent Loop |
 
@@ -87,7 +87,6 @@ backend/app/
 │   ├── registry.py              # 聚合来源、冲突检查、按 key 查找
 │   └── providers/
 │       ├── filesystem.py         # 仓库内置 Skill；将来受控用户 Skill 包
-│       └── database.py           # 现有按 user_id 隔离的自定义 Skill
 └── mcp/                         # 现有 SDK/manager/source 保持为 Tool Provider 适配层
 ```
 

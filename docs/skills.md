@@ -54,11 +54,11 @@ description: 用户需要按固定结构整理材料时使用。
 - 扫描失败时界面保留旧目录并提示重试。目录配置发生变化时，需要重新扫描后再发送。
 - 退出或切换账号会清除前端目录状态，迟到的旧账号响应会被丢弃。
 
-## 旧数据过渡
+## 旧数据过渡（已结束）
 
-设置页根据当前账号的旧记录数量提供「导出旧 Skill」，下载包含 `<slug>/SKILL.md` 的 ZIP。解压到账号私有目录后重新扫描。已有同名目录时，先由用户核对文件内容再合并。
+2026-11-19 下线了「数据库自定义 Skill」：`skills` 表（迁移 `d39c4a07e1f2`）、`DatabaseSkillProvider`、`GET /skills`、`GET /skills/{slug}`、`POST/PATCH/DELETE /skills` 与 `GET /skills/legacy/export` 全部删除。下线前的判定依据：库里 0 行、`conversations.skill_slug` 全为空、设置页没有创建入口、三条写接口早已标弃用。
 
-旧数据库记录、旧版 CRUD 与会话挂载 API 暂留作兼容，写接口标记弃用。现行聊天的目录只来自文件系统。已有旧运行继续根据原版本快照回放。数据库中的旧名称和说明保持其历史内容。
+现在装技能只有一条路：把 `SKILL.md` 包放进账号对应的本地目录，再重新扫描。已有旧运行继续按当时的快照回放，不受影响。
 
 ## 源码与测试
 
@@ -67,7 +67,7 @@ description: 用户需要按固定结构整理材料时使用。
 | 账号认证后的初始化 | [App.vue](../frontend/src/App.vue)、[Skill Store](../frontend/src/stores/skills.ts) |
 | 本条消息选择与提交 | [ChatView.vue](../frontend/src/views/ChatView.vue)、[ChatToolbar.vue](../frontend/src/components/chat/ChatToolbar.vue)、[Chat Store](../frontend/src/stores/chat.ts) |
 | 只读设置 | [SkillsPanel.vue](../frontend/src/components/settings/SkillsPanel.vue) |
-| 目录、重扫、说明、旧数据导出 API | [api/skills.py](../backend/app/api/skills.py) |
+| 目录、重扫与说明 API | [api/skills.py](../backend/app/api/skills.py) |
 | 账号快照和根目录作用域 | [skill_catalog_service.py](../backend/app/services/skill_catalog_service.py) |
 | 元数据、版本与安全文件访问 | [filesystem.py](../backend/app/skills/providers/filesystem.py)、[loader.py](../backend/app/skills/loader.py)、[resources.py](../backend/app/skills/resources.py) |
 | 加载、指令注入、资源快照、审批恢复 | [executor.py](../backend/app/agent/executor.py) |

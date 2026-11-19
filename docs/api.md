@@ -579,17 +579,16 @@ data: {"type":"run_finished","run_id":1,"assistant_message_id":43,"content":"3 �
 | GET | `/api/skills/catalog` | 当前账号元数据快照，空缓存时初始化 |
 | POST | `/api/skills/catalog/rescan` | 登录、刷新和设置页使用的扫描入口 |
 | GET | `/api/skills/catalog/detail?key=&version=` | 按稳定来源键加载只读正文 |
-| GET | `/api/skills/legacy/export` | 导出当前账号旧版 Skill 为 ZIP |
 
-目录响应包含 `items`、`version`、`legacy_count`。每项包含 `key`、`slug`、`name`、`description`、`source`、`trust`、`version`、`tools` 和 `icon`。目录响应只包含元数据。
+目录响应包含 `items`、`version`。每项包含 `key`、`slug`、`name`、`description`、`source`、`trust`、`version`、`tools` 和 `icon`。目录响应只包含元数据。
 
 自动聊天请求可附 `skill_keys`（最多 3 项）和 `skill_catalog_version`，默认 `skill_mode: "auto"`。显式选择只用于当前消息；`manual` 只加载显式选择项，`off` 关闭 Skill。`auto` 还允许模型按元数据选择。旧 `skill_slug` 不参与新聊天的选择。
 
 未知或越权的 Skill 键返回 400，过期目录版本返回 409。按需读取已变更的文件返回 404 或 409。目录扫描失败保留原快照。
 
-旧版 `GET /skills`、详情、数据库写接口及 `PUT /conversations/{id}/skill` 暂留兼容，写接口已标记弃用。新版网页通过上述本地目录接口工作。
+旧版 `GET /skills`、`GET /skills/{slug}`、数据库写接口与 `GET /skills/legacy/export` 已随 `skills` 表一起删除（迁移 `d39c4a07e1f2`，2026-11-19）。会话挂载仍是 `PUT /conversations/{id}/skill`，只接受本地目录里存在的 slug。
 
-## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages` / `agent_runs` / `agent_steps` / `agent_approvals` / `skills`）
+## 附录 A：数据模型（`users` / `sessions` / `user_settings` / `conversations` / `messages` / `agent_runs` / `agent_steps` / `agent_approvals`）
 
 ```
 users
@@ -691,23 +690,13 @@ agent_approvals
 
 删会话即删该会话全部消息（`ON DELETE CASCADE`），前端不需要逐条删；`messages` 不冗余 `user_id`，归属通过会话间接确定。
 
-skills
-  id            int  pk autoincrement
-  user_id       int  FK → users.id ON DELETE CASCADE，有索引
-  slug          varchar(32)   账号内唯一，正则 ^[a-z0-9][a-z0-9-]{0,31}$
-  name          varchar(30)
-  description   varchar(120)
-  instructions  text          技能正文，≤ 4000 字
-  tools         json          推荐工具，≤ 20 个
-  icon          varchar(32)   默认 sparkle
-  create_time / update_time datetime
-  唯一约束 (user_id, slug)
+`skills` 表已于 2026-11-19 删除（迁移 `d39c4a07e1f2`）：技能只剩文件一种来源，不再有数据库写入路径。`conversations.skill_slug` 仍保留，指向本地目录里的包。
 
 ## 附录 B：本地起服务与自检
 
 - 起服务：项目根 `./scripts/dev.sh`（推荐）或 `cd backend && make run` + `cd frontend && pnpm dev`。
 - 自检：`cd backend && make check`；`cd frontend && pnpm lint && pnpm test && pnpm build`。
-- 端到端（需前后端在跑）：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:agent`（深度回答与工具时间线）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录）、`pnpm acceptance:settings`（模型设置→测试连接→改显示名→导出→注销）、`pnpm acceptance:tools`（工具启停→审批拒绝→审批批准→刷新复原）、`pnpm acceptance:mcp`（市场接入→试连→审批整链路）、`pnpm acceptance:skills`（内置只读→自建→挂载→删除回落）。
+- 端到端（需前后端在跑）：`cd frontend && pnpm acceptance:chat`（对话流）、`pnpm acceptance:agent`（深度回答与工具时间线）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录）、`pnpm acceptance:settings`（模型设置→测试连接→改显示名→导出→注销）、`pnpm acceptance:tools`（工具启停→审批拒绝→审批批准→刷新复原）、`pnpm acceptance:mcp`（市场接入→试连→审批整链路）、`pnpm acceptance:skills`（内置只读→选择→挂载→卸载）。
 - 第一个管理员：`cd backend && ADMIN_EMAIL=... ADMIN_PASSWORD='至少8位' uv run python -m app.create_admin`（存在则重置密码并升权）。
 
 
