@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from app.common.dev_trace import trace
+from app.common.exceptions import BusinessError
 from app.llm.base import (
     ChatMessage,
     LLMError,
@@ -25,6 +26,26 @@ from app.llm.base import (
 from app.llm.exchange_trace import llm_exchange, trace_llm_stream
 
 logger = logging.getLogger(__name__)
+
+
+def _upstream_error_message(frame: object) -> str | None:
+    """上游把错误写进 SSE 帧（HTTP 仍是 200）时，给出可读原因。
+
+    否则这种帧只会表现为「格式无法解析」，用户和日志都看不出真实原因，
+    例如模型不支持工具调用、账号额度用尽。
+    """
+    if not isinstance(frame, dict):
+        return None
+    error = frame.get("error")
+    if isinstance(error, dict):
+        detail = str(error.get("message") or error.get("type") or "").strip()
+    elif isinstance(error, str):
+        detail = error.strip()
+    else:
+        return None
+    if not detail:
+        return "模型服务返回错误，请检查模型配置"
+    return f"模型服务返回错误：{detail[:120]}"
 
 
 def _default_client(timeout_seconds: float) -> httpx.Client:
@@ -143,8 +164,14 @@ class OpenAICompatibleClient:
                         return
                     try:
                         payload = json.loads(chunk)
+                    except ValueError as exc:
+                        raise LLMError("模型返回格式无法解析") from exc
+                    if (upstream := _upstream_error_message(payload)) is not None:
+                        logger.warning("模型流返回错误帧：%s", upstream)
+                        raise LLMError(upstream)
+                    try:
                         delta = payload["choices"][0]["delta"]
-                    except (ValueError, KeyError, IndexError, TypeError) as exc:
+                    except (KeyError, IndexError, TypeError) as exc:
                         raise LLMError("模型返回格式无法解析") from exc
                     piece = delta.get("content")
                     if piece:
@@ -229,6 +256,9 @@ class OpenAICompatibleClient:
                     if raw == "[DONE]":
                         break
                     frame = json.loads(raw)
+                    if (upstream := _upstream_error_message(frame)) is not None:
+                        logger.warning("模型流返回错误帧：%s", upstream)
+                        raise LLMError(upstream)
                     model = frame.get("model") or model
                     choices = frame["choices"]
                     if not choices:  # 使用量结算帧没有候选消息。
@@ -254,6 +284,9 @@ class OpenAICompatibleClient:
             raise LLMTimeoutError() from exc
         except httpx.HTTPError as exc:
             raise LLMError() from exc
+        except BusinessError:
+            # 业务错误（含上游错误帧）自带可读原因，不能再被下面的格式兜底吞掉。
+            raise
         except (KeyError, IndexError, ValueError, TypeError, AttributeError) as exc:
             raise LLMError("模型返回格式无法解析") from exc
 

@@ -75,6 +75,37 @@ def test_openai_compatible_stream_malformed_chunk():
     assert str(exc_info.value) == "模型返回格式无法解析"
 
 
+def test_openai_compatible_stream_surfaces_upstream_error_frame():
+    """上游用 200 + error 帧报错时，不能只报「格式无法解析」。"""
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        body = (
+            'data: {"error":{"message":"This model does not support tool calling"}}\n\n'
+            "data: [DONE]\n\n"
+        )
+        return httpx.Response(200, content=body.encode())
+
+    with pytest.raises(LLMError) as exc_info:
+        list(_client(handler).stream([{"role": "user", "content": "你好"}]))
+
+    assert "does not support tool calling" in str(exc_info.value)
+
+
+def test_openai_compatible_tool_stream_surfaces_upstream_error_frame():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        body = 'data: {"error":{"message":"Insufficient Balance"}}\n\n'
+        return httpx.Response(200, content=body.encode())
+
+    with pytest.raises(LLMError) as exc_info:
+        stream = _client(handler).stream_with_tools(
+            [{"role": "user", "content": "你好"}], [], "low"
+        )
+        for _ in stream:
+            pass
+
+    assert "Insufficient Balance" in str(exc_info.value)
+
+
 def test_fake_llm_honours_injected_error():
     llm = FakeLLM(error=LLMError("模型服务不可用"))
 
