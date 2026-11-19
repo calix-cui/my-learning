@@ -393,6 +393,8 @@ flowchart TD
 - 服务重启时把上一生命周期遗留的 `running` 运行标成「服务重启，这次运行已中断」（`lifespan` 里启动清理）。
 - 上游 `{"error": {...}}` 错误帧不再被吞成「模型返回格式无法解析」，而是透出上游原话。
 - 设置页列工具不再真连 MCP 服务器（`/api/settings/tools` 曾经因为对 exa 握手而 pending 数秒）。
+- 工具步骤带上模型的 `call_id`：同一轮里同名工具接连调用时，结果靠它配对，不再「按名字找最近一条」；审批恢复时也用它，而不是按 `seq` 拼一个对不上的 id。
+- 启动自检拒绝多 worker：检测到 `WEB_CONCURRENCY` / `UVICORN_WORKERS` / `GUNICORN_CMD_ARGS` 大于 1 直接报错并说明原因。
 
 ### 9.3 已被推翻、替换或没采纳的方案
 
@@ -410,7 +412,7 @@ flowchart TD
 | `ChatThread` 持有 `streamingText` / `steps` / `sending` / `runningAgent`（附录 C.2 的接口） | 这些都在单个 `Execution` 上，`ChatThread` 只留消息、运行数组与草稿等 | 同一次运行的状态必须跟着运行走，否则切会话、多运行就串 |
 | 原「后端配合边界」建议 1：扩展 `run_finished` 返回完整 `MessageResponse` | **未采纳**：`run_finished` 仍只带 `content`/`model`/`steps`/`assistant_message_id`，正文与元信息由历史刷新补齐 | 快照 + 历史已经能给出正文；把完整消息塞进事件会让两条真相 |
 | 原「后端配合边界」建议 2：为恢复提供一个聚合入口 | **部分采纳**：加了 `GET /runs/{id}` 与 `?request_id=` 认领，没做聚合 | 两个只读接口已经够用，聚合会让契约更难演进 |
-| 原「后端配合边界」建议 3：工具步骤补 `tool_call_id` 稳定关联 | **未采纳**：`tool_call` / `tool_result` 仍按工具名配对 | 同名多调用交错时确实不够，但改动涉及持久字段与前端时间线，留给独立任务 |
+| 原「后端配合边界」建议 3：工具步骤补 `tool_call_id` 稳定关联 | 当时**未采纳**：`tool_call` / `tool_result` 仍按工具名配对 | 2026-11-19 补上：`agent_steps.call_id` + 事件带 `call_id`，时间线按它配对，老数据仍回落到工具名；顺带修好审批恢复时按 `seq` 拼 id 导致结果挂错行的 bug |
 | 原「后端配合边界」建议 4：`request_id` 由前端持有，并补「重复请求如何返回原运行」 | **已按此实现**：前端生成并持有，后端唯一约束去重，`?request_id=` 可认领原运行 | 这条是唯一被完整采纳的建议 |
 
 ### 9.4 仍然成立的边界

@@ -11,6 +11,8 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+import pytest
+
 from app.agent import hub as hub_module
 from app.agent.hub import RunHub, _DraftWriter
 from app.models import AgentRun, Conversation, Message
@@ -177,3 +179,24 @@ def test_heartbeat_shows_up_as_a_comment_frame() -> None:
     assert frames[0].startswith("data: ")
     assert frames[1] == ": ping\n\n"
     assert frames[2].startswith("data: ")
+
+
+def test_single_process_guard_rejects_multiple_workers(monkeypatch: pytest.MonkeyPatch):
+    from app.agent.hub import assert_single_process
+
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+    monkeypatch.delenv("UVICORN_WORKERS", raising=False)
+    monkeypatch.setenv("GUNICORN_CMD_ARGS", "--workers 4")
+    with pytest.raises(RuntimeError, match="单进程"):
+        assert_single_process()
+
+    monkeypatch.setenv("GUNICORN_CMD_ARGS", "--workers 1")
+    assert_single_process()
+
+    monkeypatch.delenv("GUNICORN_CMD_ARGS")
+    monkeypatch.setenv("WEB_CONCURRENCY", "2")
+    with pytest.raises(RuntimeError, match="单进程"):
+        assert_single_process()
+
+    monkeypatch.setenv("WEB_CONCURRENCY", "1")
+    assert_single_process()

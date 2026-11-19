@@ -73,6 +73,9 @@ uv run python -m app.init_db
 
 # 5. 启动
 uv run python -m uvicorn app.main:app --reload
+
+# 必须单进程：聊天运行注册表在进程内存里，--workers > 1 会在启动时直接报错
+# （跨进程部署需要先换成任务队列，见 docs/TECHNICAL_DEBT.md 的 T-30）
 ```
 
 打开 <http://127.0.0.1:8000/docs> 查看接口文档。

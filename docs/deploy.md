@@ -134,6 +134,7 @@ docker compose down -v                  # 连数据一起清掉（谨慎）
 
 - 单机 Compose，没有多副本、滚动发布；要水平扩展需要换编排方案。
 - 镜像未在 CI 里构建，构建失败只能在本地暴露；后续可加 `docker build` 的 CI job。
-- 前端静态资源走 nginx，未做 CDN；后端未配 Gunicorn 多 worker，默认单进程。
+- 前端静态资源走 nginx，未做 CDN。
+- **后端必须单进程运行（`--workers 1`）**：聊天「运行」的注册表在进程内存里（`backend/app/agent/hub.py` 的 `run_hub`），多 worker 会让订阅、终止、启动清理各说各话——症状是刷新后正文空白、点停止没反应、重启清理误杀。镜像默认就是单进程；如果从环境变量里带进 `WEB_CONCURRENCY` / `UVICORN_WORKERS` / `GUNICORN_CMD_ARGS` 且值大于 1，启动会直接失败并说明原因。跨进程部署要先换成任务队列（技术债 T-30）。
 - 没有集中式日志与指标，排障依赖 `docker compose logs`。
 - **Caddy / HTTPS 未实测**：验证只覆盖了 HTTP（`http://localhost:8080`）。`--profile https` 的证书申请、`SITE_ADDRESS` 真实域名签发、HTTP→HTTPS 跳转均未在真实环境跑过。

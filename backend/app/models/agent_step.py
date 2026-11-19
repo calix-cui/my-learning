@@ -68,6 +68,9 @@ class AgentStep(Base):
     )
     content: Mapped[str | None] = mapped_column(Text, nullable=True, comment="文本或工具结果摘要")
     tool_name: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="工具名")
+    call_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="模型给的调用标识，用来把结果对回自己的调用"
+    )
     skill_key: Mapped[str | None] = mapped_column(
         String(128), nullable=True, comment="Skill 稳定标识"
     )

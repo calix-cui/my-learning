@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.agent.executor import remove_stale_runs
+from app.agent.hub import assert_single_process
 from app.api import router as api_router
 from app.common.exceptions import (
     BusinessError,
@@ -30,7 +31,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """启动时收掉上一个进程留下的运行，再交给请求处理。"""
+    """启动时先确认是单进程，再收掉上一个进程留下的运行。"""
+    assert_single_process()
     remove_stale_runs()
     yield
 

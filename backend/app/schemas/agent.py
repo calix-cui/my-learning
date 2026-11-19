@@ -22,6 +22,7 @@ class AgentStepResponse(BaseModel):
     )
     content: str | None = Field(default=None, description="文本或工具结果")
     tool_name: str | None = Field(default=None, description="工具名")
+    call_id: str | None = Field(default=None, description="模型给的调用标识，同名工具用它配对结果")
     tool_args: dict | None = Field(default=None, description="工具参数")
     skill_key: str | None = Field(default=None, description="Skill 稳定标识")
     skill_name: str | None = Field(default=None, description="Skill 名称")

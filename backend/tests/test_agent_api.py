@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.agent.hub import run_hub
 from app.llm import get_user_llm
 from app.llm.fake import FakeLLM, final_reply, tool_reply
 from app.main import app
@@ -174,6 +175,9 @@ def test_write_tool_stops_at_approval_and_can_be_approved(client: TestClient):
         ]
         approval = events[-1]
         assert approval["tool"] == "rename_conversation"
+        # 模型给的调用标识要一路传下去：结果靠它对回自己的调用，而不是靠名字
+        assert events[1]["call_id"] == "call_1"
+        assert approval["call_id"] == "call_1"
 
         listed = client.get(f"/api/agent/runs/{approval['run_id']}/approvals")
         assert listed.json()["data"]["items"][0]["status"] == "pending"
@@ -190,6 +194,13 @@ def test_write_tool_stops_at_approval_and_can_be_approved(client: TestClient):
         resumed = _read_events(decided)
         assert [event["type"] for event in resumed] == ["tool_result", "run_finished"]
         assert resumed[0]["ok"] is True
+        assert resumed[0]["call_id"] == "call_1"
+
+        steps = client.get(f"/api/agent/runs/{approval['run_id']}/steps").json()["data"]["items"]
+        calls = [step for step in steps if step["kind"] == "tool_call"]
+        results = [step for step in steps if step["kind"] == "tool_result"]
+        assert [step["call_id"] for step in calls] == ["call_1"]
+        assert [step["call_id"] for step in results] == ["call_1"]
         completed = client.get(history_path, params={"message_limit": 1}).json()["data"]
         assert completed["runs"][0]["id"] == approval["run_id"]
         assert completed["runs"][0]["assistant_message_id"] == resumed[-1]["assistant_message_id"]
@@ -496,8 +507,12 @@ def test_stop_refuses_finished_run(client: TestClient):
     assert stopped.json()["message"] == "这次运行已经结束"
 
 
-def test_stop_keeps_generated_text_as_message(client: TestClient, db_session: Session):
+def test_stop_keeps_generated_text_as_message(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
     # 真实断线里这一列由后台线程写；这里直接造出「跑到一半」的样子
+    # 运行归本进程负责但线程刚好收尾：终止走「没有线程可停」的兜底路径
+    monkeypatch.setattr(run_hub, "owns", lambda _run_id: True)
     conversation_id = _conversation(client)
     run = AgentRun(
         conversation_id=conversation_id,
@@ -523,7 +538,54 @@ def test_stop_keeps_generated_text_as_message(client: TestClient, db_session: Se
     ]
 
 
-def test_subscribe_starts_with_snapshot(client: TestClient, db_session: Session):
+def test_stop_refuses_run_owned_by_another_process(client: TestClient, db_session: Session):
+    """多 worker 部署时，另一个进程里的运行不能由这个进程标成取消。"""
+    conversation_id = _conversation(client)
+    run = AgentRun(conversation_id=conversation_id, user_id=_user_id(client), status="running")
+    db_session.add(run)
+    db_session.commit()
+
+    refused = client.post(f"/api/agent/runs/{run.id}/stop")
+    assert refused.status_code == 409
+    assert "另一个进程" in refused.json()["message"]
+
+    db_session.refresh(run)
+    assert run.status == "running"
+
+
+def test_stop_cancels_run_waiting_for_approval_without_a_thread(
+    client: TestClient, db_session: Session
+):
+    """等审批时没有执行线程，终止直接落终态——这不是多进程问题。"""
+    conversation_id = _conversation(client)
+    run = AgentRun(
+        conversation_id=conversation_id, user_id=_user_id(client), status="waiting_approval"
+    )
+    db_session.add(run)
+    db_session.commit()
+
+    stopped = client.post(f"/api/agent/runs/{run.id}/stop")
+    assert stopped.status_code == 200
+    db_session.refresh(run)
+    assert run.status == "cancelled"
+
+
+def test_stream_refuses_run_owned_by_another_process(client: TestClient, db_session: Session):
+    conversation_id = _conversation(client)
+    run = AgentRun(conversation_id=conversation_id, user_id=_user_id(client), status="running")
+    db_session.add(run)
+    db_session.commit()
+
+    refused = client.get(f"/api/agent/runs/{run.id}/stream")
+    assert refused.status_code == 409
+    assert "另一个进程" in refused.json()["message"]
+
+
+def test_subscribe_starts_with_snapshot(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    # 运行归本进程负责、但线程已经收尾：先给快照，后面没有实时事件
+    monkeypatch.setattr(run_hub, "owns", lambda _run_id: True)
     conversation_id = _conversation(client)
     run = AgentRun(
         conversation_id=conversation_id,

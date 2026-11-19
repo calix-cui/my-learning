@@ -51,5 +51,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
     CMD python -c "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).status == 200 else 1)"
 
-# 启动先跑迁移再起服务：容器第一次创建时表结构自动补齐，重复启动是幂等的
+# 启动先跑迁移再起服务：容器第一次创建时表结构自动补齐，重复启动是幂等的。
+# 注意：不要加 --workers N。聊天运行注册表在进程内存里（app/agent/hub.py），
+# 多 worker 会导致订阅不到运行、终止只在一个进程生效；启动自检会直接报错。
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

@@ -35,6 +35,12 @@ from app.schemas.agent import (
 )
 from app.services import chat_service
 
+# 运行在跑却不属于当前进程：只可能是多 worker 部署，两边都以为自己在管这次运行
+FOREIGN_RUN_MESSAGE = (
+    "这次运行由另一个进程负责，当前进程接管不了。请用单进程启动（--workers 1）；"
+    "多进程部署需要先换成任务队列。"
+)
+
 router = APIRouter(prefix="/conversations", tags=["Agent 接口"])
 approvals_router = APIRouter(prefix="/agent", tags=["Agent 审批"])
 
@@ -210,8 +216,11 @@ def stop_agent_run(
         raise BusinessError("运行不存在", code=404)
     if run.status not in {RUN_RUNNING, RUN_WAITING_APPROVAL}:
         raise BusinessError("这次运行已经结束", code=409)
+    if run.status == RUN_RUNNING and not run_hub.owns(run.id):
+        # 正在跑却不在本进程：只可能是多 worker 部署，谁都不该替它收尾
+        raise BusinessError(FOREIGN_RUN_MESSAGE, code=409)
     if not run_hub.stop(run.id):
-        # 进程重启过、或运行不在本进程：没有线程可协作停下，直接落终态
+        # 等待审批时没有执行线程，或线程刚好收尾：直接落终态
         cancel_run(db, run)
     return Response.success(data={"run_id": run.id, "status": RUN_CANCELLED})
 
@@ -285,11 +294,14 @@ def stream_agent_run_events(
     if run is None:
         raise BusinessError("运行不存在", code=404)
 
+    if run.status == RUN_RUNNING and not run_hub.owns(run.id):
+        raise BusinessError(FOREIGN_RUN_MESSAGE, code=409)
+
     def events() -> Iterator[dict]:
         yield _run_snapshot(db, run)
         subscription = run_hub.subscribe(run.id)
         if subscription is None:
-            # 不在本进程（进程重启过或已结束）：快照就是全部内容
+            # 订阅之前刚好收尾：快照就是全部内容
             return
         for event in subscription.events():
             seq = event.get("seq")

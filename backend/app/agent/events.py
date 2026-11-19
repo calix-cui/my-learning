@@ -36,13 +36,25 @@ def assistant_text(seq: int, content: str) -> AgentEvent:
     return {"type": "assistant_text", "seq": seq, "content": content}
 
 
-def tool_call(seq: int, tool: str, args: dict[str, Any] | None) -> AgentEvent:
-    return {"type": "tool_call", "seq": seq, "tool": tool, "args": args}
+def tool_call(
+    seq: int, tool: str, args: dict[str, Any] | None, call_id: str | None = None
+) -> AgentEvent:
+    # call_id 是模型给的调用标识：同名工具接连调用时，结果靠它对回自己的调用，
+    # 不能靠「按名字找最近一条」——那在交错调用时会配错行。
+    return {"type": "tool_call", "seq": seq, "tool": tool, "args": args, "call_id": call_id}
 
 
-def tool_result(seq: int, tool: str, ok: bool, content: str, duration_ms: int) -> AgentEvent:
+def tool_result(
+    seq: int,
+    tool: str,
+    ok: bool,
+    content: str,
+    duration_ms: int,
+    call_id: str | None = None,
+) -> AgentEvent:
     return {
         "type": "tool_result",
+        "call_id": call_id,
         "seq": seq,
         "tool": tool,
         "ok": ok,
@@ -79,6 +91,7 @@ def approval_required(
     tool: str,
     args: dict[str, Any] | None,
     reason: str,
+    call_id: str | None = None,
 ) -> AgentEvent:
     """运行暂停，等用户批准/拒绝。前端据此渲染审批卡片，流到此结束。"""
     return {
@@ -89,6 +102,7 @@ def approval_required(
         "tool": tool,
         "args": args,
         "reason": reason,
+        "call_id": call_id,
     }
 
 

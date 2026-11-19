@@ -17,7 +17,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import queue
+import re
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -57,6 +59,29 @@ RUN_ORPHAN_TIMEOUT_SECONDS = 600
 ORPHAN_SWEEP_SECONDS = 30
 
 _END: Any = None
+
+
+WORKER_ENV_VARS = ("WEB_CONCURRENCY", "UVICORN_WORKERS", "GUNICORN_CMD_ARGS")
+
+
+def assert_single_process() -> None:
+    """运行注册表在进程内存里，多进程会让订阅、终止和启动清理各说各话。
+
+    这个配置错误不会抛异常，只会表现为「刷新后空白」「终止只在一个进程生效」——
+    等到线上发现就晚了，所以在启动时就快速失败。
+    """
+    for name in WORKER_ENV_VARS:
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            continue
+        match = re.search(r"(?:--workers[= ]|workers[= ])(\d+)", raw)
+        count = int(match.group(1)) if match else (int(raw) if raw.isdigit() else 1)
+        if count > 1:
+            raise RuntimeError(
+                f"检测到 {name}={raw}：聊天运行注册表只存在于进程内存里，多 worker 会导致"
+                "订阅不到运行、终止只在一个进程生效。请用单进程启动（--workers 1）；"
+                "跨进程部署需要先换成任务队列（技术债 T-30）。"
+            )
 
 
 class Subscription:
@@ -272,6 +297,11 @@ class RunHub:
         with self._lock:
             channel = self._channels.get(run_id)
         return channel.subscribe() if channel is not None else None
+
+    def owns(self, run_id: int) -> bool:
+        """这次运行是否由本进程负责执行。不在本进程时调用方不能替它收尾。"""
+        with self._lock:
+            return run_id in self._channels
 
     def stop(self, run_id: int, reason: str = "user_cancelled") -> bool:
         """请求停止；运行不在本进程时返回 False，由调用方直接落终态。"""

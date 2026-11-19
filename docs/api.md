@@ -442,8 +442,8 @@ data: {"type":"run_finished","run_id":1,"assistant_message_id":43,"content":"3 �
         "error_message": null,
         "steps": [
           { "seq": 1, "kind": "user_message", "content": "用工具算 3 的 5 次方…" },
-          { "seq": 2, "kind": "tool_call", "tool_name": "calculator", "tool_args": { "expression": "3**5" } },
-          { "seq": 3, "kind": "tool_result", "tool_name": "calculator", "ok": true, "content": "243", "duration_ms": 0 },
+          { "seq": 2, "kind": "tool_call", "tool_name": "calculator", "call_id": "call_1", "tool_args": { "expression": "3**5" } },
+          { "seq": 3, "kind": "tool_result", "tool_name": "calculator", "call_id": "call_1", "ok": true, "content": "243", "duration_ms": 0 },
           { "seq": 4, "kind": "final_answer", "content": "3 的 5 次方等于 243。" }
         ]
       }
@@ -666,6 +666,7 @@ agent_steps
   kind         varchar(20)    user_message | assistant_text | tool_call | tool_result | final_answer
   content      text           nullable
   tool_name    varchar(64)    nullable
+  call_id      varchar(64)    nullable；模型给的调用标识，结果靠它配对而不是靠名字
   tool_args    json           nullable
   ok           tinyint(1)     nullable（仅工具步骤有值）
   duration_ms  int            nullable

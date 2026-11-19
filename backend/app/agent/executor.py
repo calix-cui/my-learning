@@ -384,8 +384,10 @@ def resume_run(
         state.rounds = checkpoint["round"]
         state.evidence = checkpoint.get("evidence", [])
 
+    # 优先用落库的调用标识：没开推理时没有 checkpoint，按 seq 拼出来的 id
+    # 和当初那次 tool_call 的 id 对不上，前端时间线会把结果挂成孤立的一行。
     call: ToolCall = {
-        "id": checkpoint["call_id"] if checkpoint else f"call_{pending.seq}",
+        "id": pending.call_id or (checkpoint["call_id"] if checkpoint else f"call_{pending.seq}"),
         "name": approval.tool_name,
         "arguments": json.dumps(approval.tool_args or {}, ensure_ascii=False),
     }
@@ -447,6 +449,7 @@ def resume_run(
         tool_args=result["args"],
         ok=result["ok"],
         duration_ms=result["duration_ms"],
+        call_id=call["id"],
     )
     messages.append(LLMMessage(role="tool", content=result["content"], tool_call_id=call["id"]))
     if checkpoint:
@@ -479,6 +482,7 @@ def resume_run(
             result["ok"],
             result["content"][:2000],
             result["duration_ms"],
+            call["id"],
         )
 
         if result.get("error") == "timeout_uncertain":
@@ -739,9 +743,10 @@ def _run_loop(
                         kind=STEP_TOOL_CALL,
                         tool_name=call["name"],
                         tool_args=args,
+                        call_id=call["id"],
                     )
                     db.commit()
-                    yield events.tool_call(state.seq, call["name"], args)
+                    yield events.tool_call(state.seq, call["name"], args, call["id"])
                     deferred = "本轮同时请求 Skill 指引或资源，此工具未执行；请读取后重新规划"
                     state.seq += 1
                     _add_step(
@@ -754,9 +759,12 @@ def _run_loop(
                         tool_args=args,
                         ok=False,
                         duration_ms=0,
+                        call_id=call["id"],
                     )
                     db.commit()
-                    yield events.tool_result(state.seq, call["name"], False, deferred, 0)
+                    yield events.tool_result(
+                        state.seq, call["name"], False, deferred, 0, call["id"]
+                    )
                     messages.append(
                         LLMMessage(role="tool", content=deferred, tool_call_id=call["id"])
                     )
@@ -773,9 +781,12 @@ def _run_loop(
                     content=None,
                     # 参数在这里先落一份（模型给的原始 JSON），前端时间线可以「先看到要调什么」
                     tool_args=_safe_json(call["arguments"]),
+                    call_id=call["id"],
                 )
                 db.commit()
-                yield events.tool_call(state.seq, call["name"], _safe_json(call["arguments"]))
+                yield events.tool_call(
+                    state.seq, call["name"], _safe_json(call["arguments"]), call["id"]
+                )
 
                 # 模型提出请求，后端决定放行、拒绝或等待用户审批。
                 decision = policy.check(call["name"], _safe_json(call["arguments"]))
@@ -821,6 +832,7 @@ def _run_loop(
                         call["name"],
                         _safe_json(call["arguments"]),
                         decision.reason,
+                        call["id"],
                     )
                     return
 
@@ -854,6 +866,7 @@ def _run_loop(
                     tool_args=result["args"],
                     ok=result["ok"],
                     duration_ms=result["duration_ms"],
+                    call_id=call["id"],
                 )
                 db.commit()
                 trace(
@@ -874,6 +887,7 @@ def _run_loop(
                     result["ok"],
                     result["content"][:2000],
                     result["duration_ms"],
+                    call["id"],
                 )
 
                 if result.get("error") == "timeout_uncertain":
@@ -1630,11 +1644,13 @@ def _add_step(
     skill_version: str | None = None,
     ok: bool | None = None,
     duration_ms: int | None = None,
+    call_id: str | None = None,
 ) -> AgentStep:
     step = AgentStep(
         run_id=run.id,
         seq=seq,
         kind=kind,
+        call_id=call_id,
         content=content,
         tool_name=tool_name,
         tool_args=tool_args,
