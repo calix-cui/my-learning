@@ -19,11 +19,18 @@
 | T-18 | 数据 | `create_time` 用 naive `datetime.now`，没有时区语义（容器 UTC / 本机 CST 混用） | P2 | S |
 | T-27 | 前端 | `styles/index.css` 的兜底 token 与 `theme/themes/pine.ts` 有细微不一致（success/warn），靠人工同步 | P2 | S |
 | T-28 | 后端 | MCP 连接池是**进程内**的：多 worker（`uvicorn --workers N`）部署时每个进程各连一份，stdio 服务器子进程数会翻 N 倍 | P2 | M |
+| T-30 | 后端 | 启动清理僵尸运行假设单进程部署，多 worker 下会误杀别的 worker 的运行 | P3 | S |
 | T-29 | 后端 | 断线后运行直接失败，不能「接着生成」；用户只能重新提交，已花的 token 白费 | P2 | L |
 
 已随模块归档或已在实现中解决的条目（T-01/02/03/05/07/09/12/13/14/16/19/20/22/24/25）不再列出。
 
 ## 1. 后端与数据
+
+### T-30 僵尸运行清理假设单进程（P3 · S）
+
+`executor.remove_stale_runs()` 在服务启动时把所有 `running` 的运行标成失败，依据是「运行只在服务进程的请求线程里」。单进程 uvicorn（当前开发与部署方式）成立；一旦上多 worker 或多实例，启动一个 worker 会误杀其他 worker 上仍在跑的运行。
+
+要做对得给运行加进程心跳（或让运行由后台任务执行并在启动时按 owner 核对），属于「真续跑」（T-29）那套改造的一部分。
 
 ### T-29 断线后无法真续跑（P2 · L）
 - **现状**：运行与请求线程是同一件事——连接断开时 `backend/app/agent/executor.py` 的 `_finish_interrupted_run` 立刻 `_fail(db, run, "运行被中断")`（测试 `backend/tests/test_agent_executor.py` 已锁定）。前端能做到的只是「认出这次提交、读回终态」（ADR-0018），不能让它继续生成。

@@ -65,3 +65,11 @@ ADR-0016 把断流处理定成「不猜、只读核对」，但当时的契约�
 - 真实模型联调（真实 DeepSeek + 真实 MySQL，2026-11-18）：`backend/scripts/check_reconnect_live.py` 20 项全过（断流被记成失败、失败原因来自服务端、按 `request_id` 认领、404 文案、详情、增量读、完整流式跑通）；`frontend/scripts/chat-live-acceptance.mjs` 14 项全过（真实 Chrome 里发消息→刷新断流→恢复提示→核对后显示「运行被中断」且不重发）。
 - **联调发现并修掉一个真 bug**：断流时请求依赖已关闭 Session，生成器 `finally` 里的 `_finish_interrupted_run` 读 `run.status` 抛 `DetachedInstanceError` 并被静默吞掉，收尾被跳过，运行永久停在 `running`（同一会话再发消息被 409 锁死）。修复：`LoopState` 记 `run_id`，收尾失败时回落到独立 Session 的 `_mark_interrupted(run_id)`。单测 `test_stream_closed_after_session_teardown_still_marks_failed` 锁定；未打补丁时该用例报 `ObjectDereferencedError`。
 - 实测：后端全量 356 passed（失败项均为沙箱起不了 MCP echo 子进程）；前端 144 项（23 文件）、ESLint、`vue-tsc`、生产构建通过；三组浏览器验收 20 / 10 / 11 项全通过。
+
+## 2026-11-19 补充：手动联调暴露的三处问题
+
+真实模型手动联调（用户自己操作）又发现三种「核对也无解」的情况，逐条补上：
+
+1. **进程重启留下的运行**。运行只存在于服务进程的请求线程里；进程一重启（改代码热重载、容器重启），`running` 行就再没人推进，会话被永久挡住。现在服务启动时把仍是 `running` 的运行标成失败（`executor.remove_stale_runs()`，文案「服务重启，这次运行已中断」），`waiting_approval` 不动——那是活着但暂停。**已知假设：单进程部署**，多 worker 要改成按进程心跳判断（记技术债）。
+2. **轮询跑满仍不终态**。只读轮询 20 次（约 30 秒）后服务端还报 `running` 时，界面给出「不再等待」：只把本地判定改成失败并解锁发送，不发请求、不动服务端。服务端真跑完时下一次读历史照常显示正文——这条路径不追求「猜对」，只保证会话不会永久锁死。
+3. **上游把错误写进 SSE 帧**。DeepSeek 等上游在 HTTP 200 的流里返回 `{"error": {...}}` 时，原来只会得到「模型返回格式无法解析」，看不出是模型不支持工具调用还是额度用尽。现在识别这种帧并把上游原话（截断 120 字）作为 502 文案，同时记 warning 日志；`_stream_tool_round` 的宽泛 `except ValueError` 也不会再吞掉这类业务错误（`BusinessError` 继承 `ValueError`）。
