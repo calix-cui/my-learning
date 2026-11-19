@@ -19,23 +19,17 @@
 | T-18 | 数据 | `create_time` 用 naive `datetime.now`，没有时区语义（容器 UTC / 本机 CST 混用） | P2 | S |
 | T-27 | 前端 | `styles/index.css` 的兜底 token 与 `theme/themes/pine.ts` 有细微不一致（success/warn），靠人工同步 | P2 | S |
 | T-28 | 后端 | MCP 连接池是**进程内**的：多 worker（`uvicorn --workers N`）部署时每个进程各连一份，stdio 服务器子进程数会翻 N 倍 | P2 | M |
-| T-30 | 后端 | 启动清理僵尸运行假设单进程部署，多 worker 下会误杀别的 worker 的运行 | P3 | S |
-| T-29 | 后端 | 断线后运行直接失败，不能「接着生成」；用户只能重新提交，已花的 token 白费 | P2 | L |
+| T-30 | 后端 | 运行只在单进程内存里：多 worker 下不能跨进程订阅，重启即丢正在跑的运行 | P2 | M |
 
 已随模块归档或已在实现中解决的条目（T-01/02/03/05/07/09/12/13/14/16/19/20/22/24/25）不再列出。
 
 ## 1. 后端与数据
 
-### T-30 僵尸运行清理假设单进程（P3 · S）
+### T-30 运行只在单进程内存里（P2 · M）
 
-`executor.remove_stale_runs()` 在服务启动时把所有 `running` 的运行标成失败，依据是「运行只在服务进程的请求线程里」。单进程 uvicorn（当前开发与部署方式）成立；一旦上多 worker 或多实例，启动一个 worker 会误杀其他 worker 上仍在跑的运行。
-
-要做对得给运行加进程心跳（或让运行由后台任务执行并在启动时按 owner 核对），属于「真续跑」（T-29）那套改造的一部分。
-
-### T-29 断线后无法真续跑（P2 · L）
-- **现状**：运行与请求线程是同一件事——连接断开时 `backend/app/agent/executor.py` 的 `_finish_interrupted_run` 立刻 `_fail(db, run, "运行被中断")`（测试 `backend/tests/test_agent_executor.py` 已锁定）。前端能做到的只是「认出这次提交、读回终态」（ADR-0018），不能让它继续生成。
-- **为什么不顺手做**：想续跑就得把执行从请求线程里拿出来（后台任务 + 消费者 + 取消信号），并解决「续跑期间用户又改主意」的冲突；已经花掉的 token 会再花一遍，模型上下文也可能已经变了（提示词、Skill 版本、工具定义都可能不同），需要指纹校验兜底。
-- **建议**：等执行模型整体改造（后台任务化）时一起做，届时用 `POST /api/agent/runs/{id}/resume` 暴露给前端，并把「断线但仍可续」与「已终态」分开表达。在那之前维持 ADR-0018 的只读契约，不要在前端伪造成「继续生成」。
+- **现状**：ADR-0019 把执行搬到后台线程，但注册表 `backend/app/agent/hub.py` 的 `run_hub` 是**进程内**的：`GET /runs/{id}/stream` 只有落在同一进程才订阅得到，其他进程返回 `None`（只发快照）。启动清理 `executor.remove_stale_runs()` 同样假设「所有 `running` 都是本进程上次留下的」，多 worker 时一个 worker 重启会误杀别的 worker 上还在跑的运行。
+- **为什么会这样**：这一版的目标是「刷新/断线不影响执行」，进程内存是最短的路径；跨进程要么加 Redis 广播，要么把运行交给独立 worker。
+- **建议**：部署上先明确 `uvicorn --workers 1`；要做多实例时，把 `RunHub` 换成「数据库或 Redis 存事件、任意进程都能订阅」，启动清理改成按 owner 心跳核对。属于基础设施改造，不要顺手做。
 
 ### T-04 MySQL 方言没有测试覆盖（P1 · M）
 - **证据**：`backend/tests/conftest.py` 的 `db_session` 用内存 SQLite；`app/models/*.py` 里的 `server_default=text("('[]')")`、`JSON` 列、`utf8mb4` 索引长度只有真 MySQL 才验得到。

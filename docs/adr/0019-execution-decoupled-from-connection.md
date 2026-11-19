@@ -90,6 +90,18 @@
 
 ## 验证
 
-- `backend/tests/test_run_hub.py`：订阅晚到能补历史、订阅者离开后执行继续、读太慢的订阅者被踢掉、`inline` 模式同步跑完。
-- `backend/tests/test_agent_api.py`：既有 18 项覆盖创建、审批、回放、断线核对的契约不变。
-- `frontend/scripts/chat-live-acceptance.mjs`：真实模型下刷新页面后正文继续增长（第 4 条决定的可观测证据）。
+单元与接口层（`backend/tests/test_run_hub.py` 9 项、`backend/tests/test_agent_api.py` 23 项）：
+
+- 订阅晚到能补历史、订阅者离开后执行继续、读太慢的订阅者被踢掉、`inline` 模式同步跑完。
+- 正文快照攒够 200 字才写库，`run_finished` 后清空。
+- 终止：协作式取消在下一个事件边界生效，已生成正文保留成消息、状态 `cancelled`、`stop_reason=user_cancelled`；已结束的运行再终止返回 409。
+- 重新生成：删掉旧的一问一答、旧运行不再占用消息 id（否则新消息 id 复用会撞唯一约束）、运行未结束时返回 409。
+- 无人接收：有人看时不扫、空窗超过 10 分钟才停且 `stop_reason=abandoned`、心跳以 `: ping` 注释帧发出。
+
+真实模型联调（`frontend/scripts/chat-live-acceptance.mjs`，真 Chrome + 真后端 + 真 DeepSeek，22 项全过）：
+
+- **刷新页面之后回答继续生成**：运行中发送键变停止 → 刷新 → 页面立刻有内容（首帧 105 字符）、不出现「连接已中断」的终态 → 服务端 `completed`、无 `error_message` → 正文继续长出来且答案完整，全程只有 1 次提交。
+- **只有点停止才停**：生成中点停止 → 服务端 `cancelled` + `stop_reason=user_cancelled` + 已生成正文保留 → 页面标注「您终止了此次会话」。
+- **重新生成**：点「重新生成」→ 旧标记消失、只调一次接口、多出一次新运行。
+
+联调过程中修掉的一个真实缺陷：`openConversation` 只读历史、不会自动订阅，所以刷新后仍停在「请重新核对状态」——补上 `attachRunning`，打开会话时若服务端还在跑就直接挂回。这也是这条 ADR 里「读取可重复、可中途加入」第一次真正被端到端验证。

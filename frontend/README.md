@@ -112,8 +112,8 @@ pnpm test:watch    # 监听模式，开发时用
 单测边界：组件测**行为**（渲染出什么、点击后 emit / store 怎么变），不写快照、不断言 class 名与 DOM 结构；页面级完整流程（登录拦截、流式对话）交给 E2E 与人工验收。
 
 > 端到端脚本（都要前后端在跑）：`pnpm acceptance:chat`（对话流 10 项）、`pnpm acceptance:agent`（深度回答与工具时间线，10 项）、`pnpm acceptance:auth`（注册→登录→刷新→退出→再登录，13 项）、`pnpm acceptance:settings`（模型接入→测试连接→改显示名→设备→导出→注销→主题同步，15 项）、`pnpm acceptance:tools`（设置窗口可点→工具启停→每日上限→审批拒绝→审批批准→刷新无残留，9 项）。
-> `pnpm acceptance:scroll`（打开会话贴底→滚到顶部翻两页→正在读的那条不跳位→入口收起，10 项）、`pnpm acceptance:route`（深链→刷新→侧栏切换→后退/前进→设置浮层共存→非法路径回落，11 项）与 `pnpm acceptance:recovery`（断流后提示与锁定→只读核对→恢复正文；连 `run_started` 都没收到时按 `request_id` 认领，20 项）不需要后端：它自己拦截 `/api` 返回模拟数据与断开的 SSE，只要一个 dev server 在跑（`pnpm dev --port 5199`）。
-> `pnpm acceptance:live` 是唯一打真实模型的一组：真实 Chrome + 真实后端 + 真实 DeepSeek，14 项，需要后端 8000 在跑且 `.env` 配好模型。
+> `pnpm acceptance:scroll`（打开会话贴底→滚到顶部翻两页→正在读的那条不跳位→入口收起，10 项）、`pnpm acceptance:route`（深链→刷新→侧栏切换→后退/前进→设置浮层共存→非法路径回落，11 项）与 `pnpm acceptance:recovery`（断流后提示与锁定→只读核对→恢复正文；连 `run_started` 都没收到时按 `request_id` 认领；终止与重新生成，32 项）不需要后端：它自己拦截 `/api` 返回模拟数据与断开的 SSE，只要一个 dev server 在跑（`pnpm dev --port 5199`）。
+> `pnpm acceptance:live` 是唯一打真实模型的一组：真实 Chrome + 真实后端 + 真实 DeepSeek，22 项，需要后端 8000 在跑且 `.env` 配好模型。它验的是「执行与连接解耦」之后的三件事：刷新页面后回答继续生成且答案完整（全程只有 1 次提交）、点停止才终止且已生成正文保留（`stop_reason=user_cancelled`）、重新生成删掉旧回答并只调一次接口。
 > 对话 E2E 跑前跑后都会清空会话。它默认打 5173 的 dev server；如果你刚改过前端代码（HMR 可能中途整页重载），改用 `pnpm build && pnpm preview` 后 `BASE=http://127.0.0.1:4173 pnpm acceptance:chat`，结果更稳定。
 
 ## 与后端联调

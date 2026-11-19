@@ -478,7 +478,31 @@ data: {"type":"run_finished","run_id":1,"assistant_message_id":43,"content":"3 �
 }
 ```
 
-`items` 只含 `seq > since_seq` 的可见步骤；`status` / `visible_step_count` 描述整次运行，所以「还在跑吗」和「有没有新步骤」一次请求就能回答。前端断流后按 1.5 秒、最多 20 次轮询这个接口，跑到终态再刷新一次正文；轮询不做重发。
+`items` 只含 `seq > since_seq` 的可见步骤；`status` / `visible_step_count` 描述整次运行，所以「还在跑吗」和「有没有新步骤」一次请求就能回答。历史页的 `runs[]` 摘要还带 `stop_reason`（`user_cancelled` 表示用户主动终止），用来区分「我停的」和「自己失败的」。
+
+### 6.2.2 挂回正在跑的运行 `GET /api/agent/runs/{run_id}/stream?since_seq=<n>`
+
+执行在服务端继续进行，与发起它的那条连接无关，所以「刷新页面之后回答还在生成」是默认行为，不是特例。这条接口是一个纯读取的 SSE 订阅：
+
+1. 先发一帧 `run_snapshot`，带上当前状态与已经生成的正文（`draft_content`）、可见步骤数、失败原因、终止原因、结束时间——页面一打开就有内容，不用等下一片 token。
+2. 运行还没结束就继续推实时事件（`assistant_delta`、步骤、审批、终态），与发送时那条流是同一套事件。
+3. 每 15 秒写一行注释心跳 `: ping`：拔网线或合上电脑不会触发断开通知，只有写失败才知道对面还在不在。
+
+```json
+{"type":"run_snapshot","run_id":52,"conversation_id":336,"status":"running",
+ "draft_content":"雨水打在窗上","visible_step_count":2,
+ "error_message":null,"stop_reason":null,"finished_time":null}
+```
+
+`since_seq` 用于跳过已读过的步骤事件。多个页面（两个标签页、手机 + 电脑）可以同时订阅同一次运行，彼此不影响。
+
+### 6.2.3 终止与重新生成
+
+`POST /api/agent/runs/{run_id}/stop`：只有用户点「停止」才该调它。运行已结束返回 409「这次运行已经结束」；成功返回 `{"run_id": 52, "status": "cancelled"}`。已经生成的部分会落成一条正常的助手消息（不是半截草稿），`status=cancelled`、`stop_reason=user_cancelled`，所以刷新、换设备都能看到它停在哪里。
+
+`POST /api/agent/runs/{run_id}/regenerate`：用**同一条提问**重跑，流式响应。旧的问答会被删掉（用户要求「直接删除旧回答，完全开始新回答」），然后把 `run_snapshot` 与实时事件按上面那套格式推回来。运行还没结束返回 409「这次运行还没结束，先终止再重新生成」。
+
+断开连接、关标签页、刷新页面都**不会**终止运行；无人订阅满 10 分钟后服务端才自行停止，并记 `stop_reason=abandoned`、`error_message="长时间没有客户端接收，已停止"`。
 
 ### 6.3 内置工具（只读）
 
