@@ -266,8 +266,12 @@ const check = (name, ok, detailText = '') => {
 }
 
 const text = () => page.evaluate(() => document.body.innerText)
-const sendDisabled = () =>
-  page.$eval('button[aria-label="发送"]', (button) => button.disabled)
+// 运行还活着时输入区那个位置是「停止」，发送键根本不存在——也算发不出去
+const sendDisabled = async () => {
+  const button = await page.$('button[aria-label="发送"]')
+  if (!button) return true
+  return page.$eval('button[aria-label="发送"]', (node) => node.disabled)
+}
 
 try {
   await page.goto(`${BASE}/chat/1`, { waitUntil: 'networkidle2' })
