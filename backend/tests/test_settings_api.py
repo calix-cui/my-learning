@@ -296,3 +296,34 @@ def test_tools_list_does_not_connect_to_mcp_servers(db_session, client, monkeypa
     names = [item["name"] for item in response.json()["data"]["items"]]
     assert "calculator" in names
     assert not [name for name in names if name.startswith("mcp__")]
+
+
+def test_parallel_first_write_does_not_collide(client, db_session, monkeypatch):
+    """首屏会并发读写设置：两条请求同时「建行」时不能有一条 500。
+
+    `user_settings.user_id` 上有唯一索引，后插入的那次会撞键；
+    撞了要回滚重查，而不是把 IntegrityError 抛成 500。
+    """
+    from app.models.user_settings import UserSettings
+    from app.services import settings_service
+
+    real = settings_service.get_settings_row
+    state = {"first": True}
+
+    def fake(db, user_id):
+        # 第一次假装「还没有这一行」，让服务走插入分支
+        if state["first"]:
+            state["first"] = False
+            return None
+        return real(db, user_id)
+
+    monkeypatch.setattr(settings_service, "get_settings_row", fake)
+    # 另一个请求抢先建好了行
+    db_session.add(UserSettings(user_id=1))
+    db_session.commit()
+
+    response = client.put("/api/settings/appearance", json={"theme_id": "graphite"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["theme_id"] == "graphite"
+    assert db_session.query(UserSettings).filter_by(user_id=1).count() == 1

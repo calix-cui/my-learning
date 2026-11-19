@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common import crypto
@@ -48,12 +49,25 @@ def get_settings_row(db: Session, user_id: int) -> UserSettings | None:
 
 
 def _get_or_create(db: Session, user_id: int) -> UserSettings:
+    """取用户设置行，没有就建一行。
+
+    首屏会并发发几次读写（主题、模型、工具各一次），都可能走到这里；
+    `user_id` 上有唯一索引，两边同时判定「没有」时后插入的那次会撞键。
+    撞了就回滚重查——另一条请求已经把这行建好了，直接用它。
+    """
     row = get_settings_row(db, user_id)
     if row is not None:
         return row
     row = UserSettings(user_id=user_id)
     db.add(row)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        existing = get_settings_row(db, user_id)
+        if existing is None:
+            raise
+        return existing
     return row
 
 
