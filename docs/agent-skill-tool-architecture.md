@@ -329,7 +329,7 @@ Skill 加载和 Tool 调用都消耗统一的 run step/turn budget；另外分�
 
 界面保留当前 Skill 选择器并增加运行模式概念：`auto`（模型可按需发现）、`manual`（加载用户选定项）、`off`。交互上默认行为要在确认设计时决定；建议先让用户显式打开 `auto`，避免自定义 Skill 在旧对话里突然开始介入。第一阶段只让**深度回答 Agent 路径**使用自动 Skill/Tool；普通 `/messages/stream` 不悄悄改语义。
 
-工具市场继续管理 MCP server 的添加、试连、启停和来源展示；Tool Settings 管本地工具的开关/预算；Skill Settings 管用户自建 Skill。三个设置面板共享同一组运行状态事实，但概念不合并。
+工具市场继续管理 MCP server 的添加、试连、启停和来源展示；Tool Settings 管本地工具的开关/预算；Skill Settings 只读展示账号目录里发现的 Skill（数据库自建来源已于 2026-11-19 删除）。三个设置面板共享同一组运行状态事实，但概念不合并。
 
 ## 9. 数据持久化
 
@@ -350,7 +350,7 @@ Skill 加载和 Tool 调用都消耗统一的 run step/turn budget；另外分�
 
 - Provider 隔离错误：某个目录格式错误只将该 Skill 标记为不可用，不让整个 FastAPI 进程因用户 Skill 内容损坏而启动失败。
 - frontmatter 解析使用安全 YAML；限制正文和资源大小、编码、目录深度；`resolve()` 后验证资源仍在 Skill 根目录内，拒绝 `..`、绝对路径和逃逸符号链接。
-- 所有用户自建/第三方 Skill 都是**不可信指引**。UI 标记来源；提示组装中与固定系统策略分层；模型要求不能覆盖 Policy、安全规则或用户授权。不能用 Skill frontmatter 设白名单豁免审批。
+- 所有账号私有/第三方 Skill 都是**不可信指引**。UI 标记来源；提示组装中与固定系统策略分层；模型要求不能覆盖 Policy、安全规则或用户授权。不能用 Skill frontmatter 设白名单豁免审批。
 - 用户内容不得放入共享全局缓存；Cache Key 含 source/owner/version；跨用户发现、加载和资源读取都按 `user_id` 再校验。
 
 ### Tool / MCP
