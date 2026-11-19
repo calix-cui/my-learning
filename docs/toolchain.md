@@ -143,7 +143,7 @@ flowchart LR
 | 端到端 | `frontend/scripts/chat-scroll-acceptance.mjs` | 10 项 | `pnpm acceptance:scroll` | 否（拦截 `/api`） | 打开会话停在底部、滚到顶部后入口完整可见、翻页时正在读的那条不跳位（198.25 → 198.25）、补回新增高度、连续翻页仍稳定、最后一页入口收起、每次只多读一页、无页面运行错误 |
 | 端到端 | `frontend/scripts/chat-route-acceptance.mjs` | 11 项 | `pnpm acceptance:route` | 否（拦截 `/api`） | 深链打开会话、刷新保持、点侧栏换地址、后退/前进回到对应会话、新建会话回 `/chat`、`?settings=1` 与对话页共存且地址不变、非数字路径落到 `/chat`、无页面运行错误 |
 | 端到端 | `frontend/scripts/chat-recovery-acceptance.mjs` | 32 项 | `pnpm acceptance:recovery` | 否（拦截 `/api`，模拟断开的 SSE） | 断流后出现恢复提示且锁住发送、不凭空出现正文、只发过 1 次 POST；点「重新核对状态」后只多一次历史查询、恢复正式正文、清空已发出的草稿、输入框恢复可用；连 `run_started` 都没收到时按 `request_id` 认领且不重复提交；点「终止」只调一次 `/stop`、正文保留并出现「您终止了此次会话」；点「重新生成」只调一次 `/regenerate` 且不重新提交消息；无页面运行错误 |
-| `pnpm acceptance:live` | 真实 Chrome + 真实后端 + 真实模型 | 23 | 是（需后端 8000 与 DeepSeek 配置） | 刷新页面后回答继续生成且答案完整、全程只提交一次；点停止才终止并保留已生成正文、`stop_reason=user_cancelled`；重新生成删掉旧回答只调一次接口 |
+| `pnpm acceptance:live` | 真实 Chrome + 真实后端 + 真实模型 | 30 | 是（需后端 8000 与 DeepSeek 配置） | 刷新页面后回答继续生成且答案完整、全程只提交一次；点停止才终止并保留已生成正文、`stop_reason=user_cancelled`；重新生成删掉旧回答只调一次接口；写操作弹审批卡片、批准后真的执行并按 `call_id` 配对结果 |
 
 门禁口径：后端 `--cov-fail-under=80`（当前 204 passed / 93.22%）；前端不设覆盖率门槛，只要求 `lint`/`test`/`build` 全绿。决策与代价见 `docs/adr/0005-testing-baseline.md`。
 
