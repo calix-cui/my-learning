@@ -224,6 +224,8 @@ async function main() {
     await page.waitForSelector('.chat__execution-stopped', { timeout: 20000 })
     const stopped = await page.$eval('.chat__execution-stopped', (node) => node.innerText)
     check('停止后标注「您终止了此次会话」', stopped.includes('您终止了此次会话'), stopped)
+    const draft = await page.$eval('textarea[aria-label="消息内容"]', (node) => node.value)
+    check('终止之后输入框不再留着这句话', draft === '', JSON.stringify(draft))
 
     const afterStop = await request(
       'GET',

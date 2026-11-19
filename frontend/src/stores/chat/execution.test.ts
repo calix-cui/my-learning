@@ -640,6 +640,18 @@ it('终止：调服务端的终止接口，再把已生成的部分读回来', a
   await result
 })
 
+it('终止之后清掉已经发出去的草稿，避免同一句话再发一遍', async () => {
+  const chat = useChatStore()
+  const { result } = start()
+  // 点发送时那句话还留在输入框里（正常收尾成功才清）
+  chat.composerText = '问题'
+  vi.mocked(getConversation).mockResolvedValue(history('cancelled'))
+  expect(await chat.stopExecution()).toBe(true)
+  expect(chat.composerText).toBe('')
+  stream.resolve()
+  await result
+})
+
 it('重新生成：删掉旧的运行项，用同一条提问开一次新运行', async () => {
   const chat = useChatStore()
   const { result: first } = start()

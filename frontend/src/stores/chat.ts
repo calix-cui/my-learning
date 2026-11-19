@@ -165,6 +165,19 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
+   * 已经确认落库的提问，不应该还留在输入框里——否则用户会把它当成没发出去、再发一遍。
+   *
+   * 只清「内容就是这句话」的草稿：用户在等待期间改了内容，说明那段文字是他正要发的下一条。
+   */
+  function consumeSentDraft(thread: ChatThread, execution: Execution | null | undefined) {
+    if (!execution || execution.userMessageId === null) return
+    const sent = thread.messages.find(
+      (message) => message.id === execution.userMessageId && message.role === 'user',
+    )
+    if (sent && sent.content.trim() === thread.draftText.trim()) thread.draftText = ''
+  }
+
+  /**
    * 挂回一次仍在跑的运行：先拿 `run_snapshot` 补上已有正文，再跟实时分片。
    *
    * 这是「刷新页面」的默认动作——执行在后台继续，页面只是重新当一次订阅者。
@@ -205,13 +218,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       await history.refreshThread(id, thread)
       // 核对确认这条消息已经落进历史，草稿就已经发出去了：再留着会被当成新消息发第二遍。
-      const sent =
-        execution && execution.userMessageId !== null
-          ? thread.messages.find(
-              (message) => message.id === execution.userMessageId && message.role === 'user',
-            )
-          : undefined
-      if (sent && sent.content.trim() === thread.draftText.trim()) thread.draftText = ''
+      consumeSentDraft(thread, execution)
       // 服务端还在跑：直接挂回这次运行的流。执行不由这条连接负责，
       // 所以再断一次也只是少一个订阅者，不影响后台。
       if (execution) attachRunning(id, thread)
@@ -244,6 +251,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     // 服务端已经把已生成的部分落成消息：读一次历史，正文与终态一起回来
     await history.refreshThread(id, thread)
+    consumeSentDraft(thread, execution)
     return true
   }
 
