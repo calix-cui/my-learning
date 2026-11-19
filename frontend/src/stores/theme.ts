@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { fetchAppearance, saveAppearance } from '@/api/settings'
-import { applyThemeToDocument, COLOR_KEYS } from '@/theme/apply'
+import { applyThemeToDocument } from '@/theme/apply'
 import { defaultThemeId, findTheme, themes } from '@/theme/themes'
 import type { ThemeColors, ThemeDefinition, ThemeMode, ThemeModeSetting } from '@/theme/types'
 
@@ -172,10 +172,3 @@ export const useThemeStore = defineStore('theme', () => {
   }
 })
 
-/**
- * 校验一套颜色是否给全：新增主题时若漏字段，这里会直接报出来，
- * 而不是等界面上出现空白区域再排查。
- */
-export function missingColorKeys(colors: ThemeColors): string[] {
-  return COLOR_KEYS.filter((key) => !colors[key])
-}

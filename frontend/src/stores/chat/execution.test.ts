@@ -31,7 +31,6 @@ vi.mock('@/api/agent', async (original) => ({
   listApprovals: vi.fn(),
   getAgentSteps: vi.fn(),
   findRunByRequestId: vi.fn(),
-  getAgentRun: vi.fn(),
   subscribeAgentRun: vi.fn(),
   stopAgentRun: vi.fn(),
   regenerateAgentRun: vi.fn(),

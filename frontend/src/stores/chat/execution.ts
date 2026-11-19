@@ -24,8 +24,6 @@ export interface Execution {
   preview: string
   approval: PendingApproval | null
   error: string | null
-  /** 只读轮询跑满次数服务端还在 running：可能已卡住，交给用户决定是否继续等 */
-  gaveUp: boolean
 }
 
 export const VISIBLE_STEP_KINDS = new Set([
@@ -60,7 +58,6 @@ export function createExecution(key: string): Execution {
     preview: '',
     approval: null,
     error: null,
-    gaveUp: false,
   }
 }
 
