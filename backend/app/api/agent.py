@@ -11,15 +11,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.agent.executor import (
-    build_policy,
-    decide_approval,
-    prepare_run,
-    registry_for,
-    resume_run,
-    stream_run,
-)
-from app.agent.tools import ToolRegistry
+from app.agent.executor import decide_approval, prepare_run
+from app.agent.hub import run_hub
 from app.api.sse import SSE_HEADERS, encode_sse
 from app.auth.dependencies import CurrentUser
 from app.common.exceptions import BusinessError
@@ -82,7 +75,7 @@ def agent_stream_response(
     skill_catalog_version: str | None = None,
 ) -> StreamingResponse:
     # 先同步做校验与落库：404/400/409 仍是普通 JSON，只有真正开始循环后才进 SSE
-    conversation, run, messages, is_first = prepare_run(
+    _conversation, run, _messages, _is_first = prepare_run(
         db,
         user_id=user_id,
         conversation_id=conversation_id,
@@ -93,25 +86,10 @@ def agent_stream_response(
         skill_keys=skill_keys,
         skill_catalog_version=skill_catalog_version,
     )
-    # 按当前用户和会话装配工具，再将注册表与执行策略交给 Agent 循环。
-    registry = (
-        registry_for(db, user_id, conversation.id)
-        if getattr(llm, "supports_tool_calls", True)
-        else ToolRegistry([])
-    )
-    events = stream_run(
-        db,
-        run=run,
-        conversation=conversation,
-        messages=messages,
-        llm=llm,
-        is_first_message=is_first,
-        user_id=user_id,
-        registry=registry,
-        policy=build_policy(db, user_id=user_id, registry=registry, run=run),
-    )
+    # 执行交给运行中心：这次响应只是订阅者，客户端断开不会停掉循环。
+    subscription = run_hub.start_new_run(db=db, run_id=run.id, user_id=user_id, llm=llm)
     return StreamingResponse(
-        encode_sse(events), media_type="text/event-stream", headers=SSE_HEADERS
+        encode_sse(subscription.events()), media_type="text/event-stream", headers=SSE_HEADERS
     )
 
 
@@ -258,18 +236,15 @@ def decide(
         approved=payload.decision == "approve",
         note=payload.note,
     )
-    # 审批续跑按当前账号工具设置重新核对工具和权限。
-    registry = registry_for(db, user.id, run.conversation_id)
-    events = resume_run(
-        db,
-        run=run,
-        approval=approval,
-        llm=llm,
+    # 续跑同样交给运行中心：审批决定已经落库，客户端断开也能继续跑完。
+    subscription = run_hub.start_resume(
+        db=db,
+        run_id=run.id,
         user_id=user.id,
+        approval_id=approval.id,
         note=payload.note,
-        registry=registry,
-        policy=build_policy(db, user_id=user.id, registry=registry, run=run),
+        llm=llm,
     )
     return StreamingResponse(
-        encode_sse(events), media_type="text/event-stream", headers=SSE_HEADERS
+        encode_sse(subscription.events()), media_type="text/event-stream", headers=SSE_HEADERS
     )

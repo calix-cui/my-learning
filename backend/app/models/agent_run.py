@@ -10,7 +10,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -100,6 +100,13 @@ class AgentRun(Base):
     )
     error_message: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="失败原因（可展示给用户）"
+    )
+    # 正在生成的这一轮正文：连接断了也还在涨，重连时先看它
+    draft_content: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="当前轮已生成、尚未落成消息的正文快照"
+    )
+    draft_updated_time: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="正文快照的最后写入时间"
     )
 
     steps: Mapped[list["AgentStep"]] = relationship(

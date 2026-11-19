@@ -38,6 +38,18 @@ from app.main import app
 from app.models import User
 
 
+@pytest.fixture(autouse=True)
+def _inline_agent_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """接口测试里让 agent 运行同步跑完。
+
+    生产环境执行在后台线程、事件走订阅队列；测试里那样就需要第二条数据库连接，
+    而且事件时序不确定。`inline` 用当前请求会话同步执行，事件顺序与改造前一致。
+    """
+    from app.agent import hub as hub_module
+
+    monkeypatch.setattr(hub_module.run_hub, "inline", True)
+
+
 @pytest.fixture()
 def db_session() -> Session:
     """内存 SQLite 会话：服务层测试不依赖 MySQL，跑完即丢。
