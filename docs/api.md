@@ -506,6 +506,8 @@ data: {"type":"run_finished","run_id":1,"assistant_message_id":43,"content":"3 �
 
 关掉的工具仍在清单里（`enabled=false`），只是注册表不再向模型暴露、也执行不了——这样用户还能再打开。
 
+**这个接口不建立 MCP 连接**：远端 MCP 服务器（HTTP/SSE）握手常常几秒起步，打开设置页不该等它。展示路径只复用进程里已经建立的连接（`registry_for(..., connect=False)`），没连过的服务器这次就不出现，`last_status` 也不改；要探测请用 MCP 页的「测试连接」，或者等一次对话跑起来。`PUT` 校验未知工具名时，上一进程留下的禁用名单也算已知，避免连不上时保存被挡。
+
 `PUT /api/settings/tools`：`{ "disabled": ["calculator"], "daily_tool_budget": 300 }`，未知工具名返回 400。
 
 `GET /api/settings/tools/stats?days=7`：`{ "days": 7, "items": [{"tool_name":"calculator","calls":12,"failures":0}], "total": 12 }`。
