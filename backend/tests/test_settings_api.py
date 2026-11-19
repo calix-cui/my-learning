@@ -265,3 +265,34 @@ def test_tool_stats_returns_shape(client: TestClient):
     assert data["days"] == 3
     assert data["total"] == 0
     assert data["items"] == []
+
+
+def test_tools_list_does_not_connect_to_mcp_servers(db_session, client, monkeypatch):
+    """设置页只做展示：远端 MCP 服务器握手要几秒，打开工具页不该等它。"""
+    from app.mcp import manager as manager_module
+    from app.models.mcp_server import McpServer
+
+    user_id = client.get("/api/auth/me").json()["data"]["id"]
+    db_session.add(
+        McpServer(
+            user_id=user_id,
+            slug="exa",
+            display_name="网页搜索",
+            transport="http",
+            url="https://mcp.example.com/mcp",
+            enabled=True,
+        )
+    )
+    db_session.commit()
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("展示工具清单时不应建立 MCP 连接")
+
+    monkeypatch.setattr(manager_module.McpManager, "source_for", fail)
+
+    response = client.get("/api/settings/tools")
+
+    assert response.status_code == 200
+    names = [item["name"] for item in response.json()["data"]["items"]]
+    assert "calculator" in names
+    assert not [name for name in names if name.startswith("mcp__")]

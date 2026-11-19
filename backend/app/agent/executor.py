@@ -1311,11 +1311,15 @@ def registry_for(
     db: Session,
     user_id: int,
     conversation_id: int | None = None,
+    *,
+    connect: bool = True,
 ) -> ToolRegistry:
     """按账号设置装配注册表：内置工具 + 用户启用的 MCP 服务器。
 
     MCP 连不上**不能**让整次对话失败：记一行 last_status/last_error、跳过这台服务器，
     模型继续用剩下的工具回答。用户下次在设置页能看到失败原因。
+
+    `connect=False` 用于展示：只用已经建立的连接，绝不为了列工具去连一次远端服务器。
     """
     row = db.scalar(select(UserSettings).where(UserSettings.user_id == user_id))
     disabled = tuple(row.tools_disabled or []) if row is not None else ()
@@ -1327,6 +1331,12 @@ def registry_for(
         select(McpServer).where(McpServer.user_id == user_id, McpServer.enabled.is_(True))
     )
     for server in servers:
+        if not connect:
+            # 展示路径：复用已有连接，没连过就不出现，也不改 last_status。
+            cached = manager.cached_source(server)
+            if cached is not None:
+                sources.append(cached)
+            continue
         try:
             spec = mcp_service.spec_of_row(server)
             source = manager.source_for(server, env=spec.env)

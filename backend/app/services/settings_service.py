@@ -264,7 +264,8 @@ def read_tool_settings(db: Session, user_id: int) -> ToolSettingsResponse:
         if row is not None and row.daily_tool_budget
         else DEFAULT_DAILY_TOOL_BUDGET
     )
-    registry = registry_for(db, user_id)
+    # 展示页不建立连接：远端 MCP 服务器握手要几秒，打开设置不该等它。
+    registry = registry_for(db, user_id, connect=False)
     counts = _today_tool_counts(db, user_id)
 
     items = [
@@ -294,7 +295,10 @@ def update_tool_settings(
 ) -> ToolSettingsResponse:
     from app.agent.executor import registry_for
 
-    known = {meta.name for meta in registry_for(db, user_id).metas()}
+    known = {meta.name for meta in registry_for(db, user_id, connect=False).metas()}
+    # 上一进程探测到、这次还没连上的 MCP 工具名仍然算数，否则用户点保存就会被挡。
+    saved = get_settings_row(db, user_id)
+    known.update((saved.tools_disabled if saved is not None else None) or [])
     unknown = [name for name in payload.disabled if name not in known]
     if unknown:
         raise BusinessError(f"没有这些工具：{'、'.join(unknown)}")

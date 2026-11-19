@@ -104,6 +104,24 @@ class McpManager:
                 tools=list(conn.tools),
             )
 
+    def cached_source(self, server: McpServer) -> McpSource | None:
+        """拿已建立的连接拼 source；没连过就返回 None。
+
+        设置页这类「只看状态」的地方必须走这条路径：它不该为了列一次工具去连一台
+        远端 server（HTTP/SSE 服务器握手常常几秒起步）。
+        """
+        with self._lock:
+            conn = self._connections.get(server.id or -1)
+            if conn is None or not conn.client.connected or not conn.tools:
+                return None
+            spec = McpServerSpec(**server.spec_payload)
+            return McpSource(
+                conn.client,
+                slug=spec.slug,
+                server_name=spec.display_name,
+                tools=list(conn.tools),
+            )
+
     def cached_tools(self, server_id: int) -> list[McpToolInfo]:
         """已连接时的工具清单；不为了展示去连一次服务器。"""
         with self._lock:
