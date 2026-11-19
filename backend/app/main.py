@@ -1,3 +1,6 @@
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
@@ -9,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.agent.executor import remove_stale_runs
 from app.api import router as api_router
 from app.common.exceptions import (
     BusinessError,
@@ -21,7 +25,20 @@ from app.common.exceptions import (
 from app.common.response import Response
 from app.dependencies import get_db
 
-app = FastAPI(responses={422: {"model": Response, "description": "请求参数校验失败"}})
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """启动时收掉上一个进程留下的运行，再交给请求处理。"""
+    remove_stale_runs()
+    yield
+
+
+app = FastAPI(
+    responses={422: {"model": Response, "description": "请求参数校验失败"}},
+    lifespan=lifespan,
+)
 
 # 允许跨域的前端来源：Vite 开发服务器（5173）与 Vite 预览服务器（4173），
 # localhost 与 127.0.0.1 两种写法都列出，避免前端用哪个地址访问都能连上后端。

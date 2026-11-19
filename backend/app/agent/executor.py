@@ -33,8 +33,8 @@ from app.agent import policy as policy_module
 from app.agent.evidence import EvidenceRef, append_web_sources, collect_web_evidence
 from app.agent.tools import BuiltinSource, ToolRegistry, ToolSource
 from app.common.dev_trace import trace, trace_context, trace_enabled
-from app.database import SessionLocal
 from app.common.exceptions import BusinessError
+from app.database import SessionLocal
 from app.llm import LLMClient, LLMError
 from app.llm.base import LLMMessage, ReasoningEffort, ToolCall, ToolCallReply, ToolSpec
 from app.mcp.errors import McpError
@@ -1686,6 +1686,29 @@ def _fail(db: Session, run: AgentRun, message: str) -> None:
         db.rollback()
 
 
+STALE_RUN_MESSAGE = "服务重启，这次运行已中断"
+
+
+def remove_stale_runs() -> int:
+    """启动时收掉上一个进程留下的运行。
+
+    运行只存在于服务进程的请求线程里：进程一重启，这些 running 行就再也不会
+    有人推进，而它们仍会挡住会话（重复提交 409）。单进程部署下这是安全的，
+    多 worker 需要改成按进程心跳判断。
+    """
+    try:
+        with SessionLocal() as fresh:
+            stale = list(fresh.scalars(select(AgentRun).where(AgentRun.status == RUN_RUNNING)))
+            for run in stale:
+                _fail(fresh, run, STALE_RUN_MESSAGE)
+            if stale:
+                logger.warning("启动时收掉 %d 个没有进程在推进的运行", len(stale))
+            return len(stale)
+    except Exception:
+        logger.exception("启动时清理残留运行失败")
+        return 0
+
+
 def _safe_json(raw: str) -> dict | None:
     try:
         value = json.loads(raw or "{}")
@@ -1699,6 +1722,7 @@ __all__ = [
     "MAX_STEPS",
     "TOOL_TIMEOUT_SECONDS",
     "build_policy",
+    "remove_stale_runs",
     "decide_approval",
     "prepare_run",
     "registry_for",
