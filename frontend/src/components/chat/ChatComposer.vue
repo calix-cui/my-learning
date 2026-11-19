@@ -6,6 +6,8 @@ import AppIcon from '@/components/ui/AppIcon.vue'
 const props = defineProps<{
   modelValue: string
   sending: boolean
+  /** 运行还活着（在跑或在等审批）：此时按钮是「停止」而不是「发送」 */
+  running?: boolean
   disabled: boolean
   maxLength: number
   agentMode: boolean
@@ -16,6 +18,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   send: []
+  stop: []
   'toggle-agent-mode': []
   'toggle-auto-skills': []
 }>()
@@ -100,7 +103,18 @@ defineExpose({ focus })
           </button>
         </div>
 
+        <!-- 跑着的时候同一个位置是「停止」：这是用户唯一能主动结束运行的地方 -->
         <el-button
+          v-if="running"
+          circle
+          class="composer__send composer__send--stop"
+          aria-label="停止"
+          @click="emit('stop')"
+        >
+          <span class="composer__stop-square" aria-hidden="true" />
+        </el-button>
+        <el-button
+          v-else
           type="primary"
           circle
           class="composer__send"
@@ -208,6 +222,19 @@ defineExpose({ focus })
 .chat__mode:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.composer__stop-square {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: currentColor;
+}
+
+.composer__send--stop {
+  border: 1px solid var(--ma-color-line);
+  background: transparent;
+  color: var(--ma-color-text);
 }
 
 .composer__send {

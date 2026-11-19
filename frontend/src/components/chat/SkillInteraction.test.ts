@@ -124,3 +124,22 @@ it('工具和结果合并为一条可展开记录，普通思考只显示跳动�
   expect(wrapper.find('.timeline').exists()).toBe(false)
   wrapper.unmount()
 })
+
+it('运行中同一个位置变成停止按钮，点一下交给上层终止', async () => {
+  const wrapper = mount(ChatComposer, {
+    props: {
+      modelValue: '',
+      sending: true,
+      running: true,
+      disabled: true,
+      maxLength: 4000,
+      agentMode: false,
+      autoSkills: false,
+    },
+    global: { stubs: { AppIcon: true, 'el-button': true } },
+  })
+  expect(wrapper.find('[aria-label="发送"]').exists()).toBe(false)
+  await wrapper.get('[aria-label="停止"]').trigger('click')
+  expect(wrapper.emitted('stop')).toHaveLength(1)
+  wrapper.unmount()
+})

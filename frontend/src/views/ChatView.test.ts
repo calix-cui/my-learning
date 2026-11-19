@@ -657,6 +657,14 @@ it('断流后显示核对入口并禁止重发，查询完成后恢复正文和�
   wrapper.unmount()
 })
 
+it('输入区的停止按钮交给商店去终止这次运行', async () => {
+  const { wrapper, chat } = await setup('/chat/1')
+  wrapper.findComponent(ChatComposer).vm.$emit('stop')
+  await nextTick()
+  expect(chat.stopExecution).toHaveBeenCalled()
+  wrapper.unmount()
+})
+
 it('恢复提示位于消息区与输入区之间，可以收起但不改变状态', async () => {
   const { wrapper, handlers, disconnect, chat } = await setupStream()
   handlers.onEvent?.({ type: 'run_started', run_id: 41, conversation_id: 1, user_message_id: 11 })

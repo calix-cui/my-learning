@@ -1,11 +1,13 @@
 /**
- * 第五步「断线核对」真实联调：真实 Chrome + 真实后端 + 真实模型。
+ * 执行与连接解耦的真实联调：真实 Chrome + 真实后端 + 真实模型。
  *
  * 跑法：BASE=http://127.0.0.1:5199 pnpm acceptance:live
- * 前置：后端跑在 8000（含真实 DeepSeek 配置），vite dev 在 5199 且代理 /api → 8000。
+ * 前置：后端跑在 8000（含真实模型配置），vite dev 在 5199 且代理 /api → 8000。
  *
- * 与前两个验收脚本的区别：这里不拦任何请求，模型调用、落库、断流都是真的。
- * 验证的是用户真正会遇到的那件事——网断了以后，能不能知道那条消息怎么了。
+ * 与前几个验收脚本的区别：这里不拦任何请求，模型调用、落库、断流都是真的。
+ * 验证的是两件用户真正会遇到的事：
+ * A. 刷新页面之后，后端那条回复**继续生成**，回来还能接着看（以前会被直接掐死）；
+ * B. 用户点「停止」才停，已生成的部分留下、标注被终止，并能一键重新生成。
  */
 import http from 'node:http'
 import fs from 'node:fs/promises'
@@ -21,6 +23,7 @@ const STAMP = Date.now()
 const EMAIL = `live-${STAMP}@example.com`
 const PASSWORD = 'live-check-123'
 const QUESTION = '用计算器算出 3 的 5 次方，然后一句话告诉我结果'
+const LONG_QUESTION = '请写一篇 1500 字左右的短篇小说开头，只输出正文。'
 
 const checks = []
 function check(name, passed, detail = '') {
@@ -52,7 +55,7 @@ function request(method, path, { body, cookie } = {}) {
           } catch {
             // 非 JSON 响应（例如健康检查）按 null 处理
           }
-          resolve({ status: res.statusCode, body: parsed, raw: text, headers: res.headers })
+          resolve({ status: res.statusCode, body: parsed, raw: text })
         })
       },
     )
@@ -63,6 +66,40 @@ function request(method, path, { body, cookie } = {}) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** 等某个条件成立，超时就带着页面现场报错 */
+async function waitFor(page, fn, timeout, label) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if (await page.evaluate(fn)) return true
+    await sleep(500)
+  }
+  const dump = await page.evaluate(() => document.body.innerText.slice(0, 600))
+  throw new Error(`等待「${label}」超时，当前页面：\n${dump}`)
+}
+
+/** 输入并发送：先等输入区可交互，再等发送键真的能点（技能目录没加载完时它是禁用的） */
+async function send(page, text) {
+  await page.waitForSelector('textarea[aria-label="消息内容"]:not([disabled])', { timeout: 30000 })
+  await page.click('textarea[aria-label="消息内容"]')
+  await page.type('textarea[aria-label="消息内容"]', text)
+  await page.waitForSelector('button[aria-label="发送"]:not([disabled])', { timeout: 30000 })
+  await page.click('button[aria-label="发送"]')
+}
+
+/** 等这次运行真的在页面上跑起来：停止键或流式气泡出现 */
+async function waitRunning(page, timeout) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    const state = await page.evaluate(() => ({
+      stop: Boolean(document.querySelector('button[aria-label="停止"]')),
+      streaming: Boolean(document.querySelector('.chat__bubble--streaming')),
+    }))
+    if (state.stop || state.streaming) return state
+    await sleep(300)
+  }
+  return { stop: false, streaming: false }
+}
 
 async function main() {
   await fs.mkdir(OUT, { recursive: true })
@@ -80,19 +117,23 @@ async function main() {
   const page = await browser.newPage()
   await page.setViewport({ width: 1440, height: 900 })
 
-  // 登录前探测 /auth/me 必然 401，那是正常的；只收集真正的未捕获异常与 5xx
   const pageErrors = []
   page.on('pageerror', (error) => pageErrors.push(String(error)))
-
   const httpErrors = []
-  page.on('response', (res) => {
-    const status = res.status()
-    if (status >= 400) httpErrors.push(`${status} ${res.request().method()} ${res.url()}`)
+  const serverErrors = []
+  page.on('response', async (res) => {
+    if (res.status() >= 400) httpErrors.push(`${res.status()} ${res.url()}`)
+    if (res.status() >= 500) {
+      // 5xx 要留下响应体，否则只能看到「有个 500」而不知道是哪一步炸的
+      const body = await res.text().catch(() => '')
+      serverErrors.push(`${res.status()} ${res.url()} ${body.slice(0, 200)}`)
+    }
   })
-
-  const streams = []
+  const requests = []
   page.on('request', (req) => {
-    if (req.method() === 'POST' && req.url().includes('/messages/stream')) streams.push(req.url())
+    if (req.method() === 'POST' && req.url().includes('/messages/stream')) requests.push('stream')
+    if (req.method() === 'POST' && req.url().includes('/regenerate')) requests.push('regenerate')
+    if (req.method() === 'POST' && req.url().includes('/stop')) requests.push('stop')
   })
 
   try {
@@ -106,52 +147,36 @@ async function main() {
     ])
     check('真实账号登录成功，进入对话页', true, page.url())
 
-    await page.type('textarea[aria-label="消息内容"]', QUESTION)
-    await page.click('button[aria-label="发送"]')
-
-    // 等流真的开起来，再刷新页面：这是用户最常做的事，也真的会掐断 SSE
-    await page.waitForFunction(
-      () =>
-        Boolean(
-          document.querySelector(
-            '.chat__scroll .chat__row, .chat__scroll details.timeline, .chat__bubble--streaming',
-          ),
-        ),
-      { timeout: 20000 },
-    )
-    await sleep(800)
-    await page.reload({ waitUntil: 'domcontentloaded' })
-    check('刷新页面掐断 SSE（用户最常见的断流动作）', true)
-
-    try {
-      await page.waitForFunction(
-        () => {
-          const banner = document.querySelector('.chat__recovery')
-          return banner && banner.textContent.includes('连接已中断')
-        },
-        { timeout: 30000 },
-      )
-    } catch (error) {
-      const dump = await page.evaluate(() => document.body.innerText)
-      console.log('--- 页面正文 ---\n' + dump.slice(0, 800))
-      throw error
-    }
-    const bannerText = await page.$eval('.chat__recovery', (el) => el.textContent.trim())
-    check('断流后出现恢复提示', bannerText.includes('连接已中断'), bannerText.slice(0, 40))
-
-    const locked = await page.$eval('button[aria-label="发送"]', (el) => el.disabled)
-    check('断流后锁住发送', locked)
-    check('只发过 1 次提交', streams.length === 1, `${streams.length} 次`)
-
-    // 从浏览器拿会话 cookie，直接查后端：真实链路里运行最终会是什么状态
     const cookies = await page.cookies()
     const cookie = cookies.map((item) => `${item.name}=${item.value}`).join('; ')
+
+    // ---- 场景 A：跑到一半刷新页面，后端继续跑 ----
+    await send(page, QUESTION)
+    const running = await waitRunning(page, 20000)
+    check('运行中发送键变成停止', running.stop, JSON.stringify(running))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    check('刷新页面（用户最常见的断流动作）', true)
+
+    const seen = []
+    for (let index = 0; index < 8; index += 1) {
+      await sleep(700)
+      const snapshot = await page.evaluate(() => ({
+        text: document.body.innerText,
+        streaming: document.body.innerText.includes('停止'),
+      }))
+      seen.push(snapshot.text.length)
+      if (snapshot.streaming === false && snapshot.text.length > 0 && index > 1) break
+    }
+    check('刷新后界面立刻有内容，不是一片空白', seen[0] > 0, `首帧 ${seen[0]} 字符`)
+    check(
+      '刷新后没有把运行判死（不出现「执行尚未结束，连接已中断」的终态）',
+      !(await page.evaluate(() => document.body.innerText.includes('执行尚未结束'))),
+    )
+
     const conversations = await request('GET', '/api/conversations?page=1&page_size=10', { cookie })
     const conversationId = conversations.body?.data?.items?.[0]?.id
-    check('能读到会话', Boolean(conversationId), `id=${conversationId}`)
-
     let run = null
-    const deadline = Date.now() + 150000
+    const deadline = Date.now() + 180000
     while (Date.now() < deadline) {
       const detail = await request(
         'GET',
@@ -162,50 +187,92 @@ async function main() {
       if (run && run.status !== 'running') break
       await sleep(2000)
     }
-    check('服务端把断掉的运行收尾成终态', run?.status !== 'running', `status=${run?.status}`)
+    check('服务端把这次运行跑完，不是被中断', run?.status === 'completed', `status=${run?.status}`)
+    check('没有失败原因', !run?.error_message, String(run?.error_message ?? ''))
+
+    await waitFor(
+      page,
+      () => document.body.innerText.includes('243'),
+      60000,
+      '正文里出现答案',
+    )
+    check('刷新后正文继续长出来，答案完整', true)
+    check('只提交过一次', requests.filter((item) => item === 'stream').length === 1)
     check(
-      '服务端记下了失败原因',
-      run?.error_message === '运行被中断',
-      String(run?.error_message),
+      '刷新没有再触发一次提交',
+      requests.filter((item) => item === 'stream').length === 1,
+      requests.join(','),
     )
+    await page.screenshot({ path: `${OUT}/live-resumed.png` })
 
-    await page.setOfflineMode(false)
-    await page.click('.chat__recovery button')
-    await page.waitForFunction(
-      () => {
-        const banner = document.querySelector('.chat__recovery')
-        return banner && banner.textContent.includes('运行被中断')
-      },
-      { timeout: 30000 },
-    )
-    const afterText = await page.$eval('.chat__recovery', (el) => el.textContent.trim())
-    check('核对后把服务端原因显示出来', afterText.includes('运行被中断'), afterText.slice(0, 60))
-
-    // 草稿已在核对时清空，输入框本身应可用；打一个字再看发送键
-    await page.type('textarea[aria-label="消息内容"]', '还能再发吗')
-    const unlocked = await page.$eval('button[aria-label="发送"]', (el) => !el.disabled)
-    await page.$eval('textarea[aria-label="消息内容"]', (el) => {
-      el.value = ''
-      el.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    if (!unlocked) {
-      const dump = await page.evaluate(() => ({
-        banner: document.querySelector('.chat__recovery')?.textContent?.trim() ?? null,
-        textareaDisabled:
-          document.querySelector('textarea[aria-label="消息内容"]')?.disabled ?? null,
-        rows: document.querySelectorAll('.chat__scroll .chat__row').length,
-        text: document.body.innerText.slice(0, 400),
-      }))
-      console.log('--- 仍未解锁时的页面状态 ---\n' + JSON.stringify(dump, null, 2))
+    // ---- 场景 B：用户主动停止，已生成的部分留下 ----
+    await send(page, LONG_QUESTION)
+    const stopping = await waitRunning(page, 20000)
+    check('生成过程中能点到停止', stopping.stop, JSON.stringify(stopping))
+    // 停止键会在「发送 → 停止」之间被 Vue 重渲染替换掉，用 Puppeteer 的
+    // 元素句柄点容易点到已经换下来的旧节点，所以每轮重新查一次，直到请求真的发出。
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await page.evaluate(() => {
+        const button = document.querySelector('button[aria-label="停止"]')
+        if (button instanceof HTMLElement) button.click()
+      })
+      await sleep(300)
+      if (requests.includes('stop')) break
     }
-    check('核对后发送恢复可用', unlocked)
-    check('核对不重发（仍只有 1 次提交）', streams.length === 1, `${streams.length} 次`)
-    const serverErrors = httpErrors.filter((item) => !item.startsWith('401'))
+    check('点了停止之后请求真的发出去了', requests.includes('stop'), requests.join(','))
+    await sleep(2000)
+    await page.waitForSelector('.chat__execution-stopped', { timeout: 20000 })
+    const stopped = await page.$eval('.chat__execution-stopped', (node) => node.innerText)
+    check('停止后标注「您终止了此次会话」', stopped.includes('您终止了此次会话'), stopped)
+
+    const afterStop = await request(
+      'GET',
+      `/api/conversations/${conversationId}?message_limit=50`,
+      { cookie },
+    )
+    const cancelled = (afterStop.body?.data?.runs ?? []).find((item) => item.status === 'cancelled')
+    check('服务端记成 cancelled', Boolean(cancelled), `status=${cancelled?.status}`)
+    check(
+      '终止原因记成 user_cancelled',
+      cancelled?.stop_reason === 'user_cancelled',
+      String(cancelled?.stop_reason),
+    )
+    const kept = (afterStop.body?.data?.messages ?? []).filter(
+      (message) => message.role === 'assistant',
+    )
+    check('已生成的部分没有丢', kept.length >= 1, `助手消息 ${kept.length} 条`)
+    await page.screenshot({ path: `${OUT}/live-stopped.png` })
+
+    // ---- 场景 C：重新生成 ----
+    await page.evaluate(() => {
+      const button = [...document.querySelectorAll('.chat__execution-stopped button')].find(
+        (item) => item.textContent?.includes('重新生成'),
+      )
+      button?.click()
+    })
+    await waitFor(
+      page,
+      () => !document.body.innerText.includes('您终止了此次会话'),
+      30000,
+      '旧回答被换掉',
+    )
+    check('重新生成后旧的终止标记消失', true)
+    check(
+      '重新生成只调一次接口',
+      requests.filter((item) => item === 'regenerate').length === 1,
+      requests.join(','),
+    )
+
+    const finalDetail = await request(
+      'GET',
+      `/api/conversations/${conversationId}?message_limit=50`,
+      { cookie },
+    )
+    const finalRuns = finalDetail.body?.data?.runs ?? []
+    check('重新生成开了一次新运行', finalRuns.length >= 2, `runs=${finalRuns.length}`)
+
     check('页面没有未捕获异常', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
     check('没有 5xx 响应', serverErrors.length === 0, serverErrors.slice(0, 2).join(' | '))
-    console.log('--- 4xx/5xx 请求 ---\n' + (httpErrors.join('\n') || '（无）'))
-
-    await page.screenshot({ path: `${OUT}/live-interrupted.png` })
   } finally {
     await browser.close()
   }
@@ -213,11 +280,7 @@ async function main() {
   const failed = checks.filter((item) => !item.passed)
   await fs.writeFile(
     `${OUT}/live-report.json`,
-    JSON.stringify(
-      { base: BASE, api: API, email: EMAIL, conversationId: null, checks, failed: failed.length },
-      null,
-      2,
-    ),
+    JSON.stringify({ base: BASE, api: API, email: EMAIL, checks, failed: failed.length }, null, 2),
   )
   console.log(`\n${checks.length - failed.length}/${checks.length} 项通过（真实模型）`)
   if (failed.length) process.exitCode = 1

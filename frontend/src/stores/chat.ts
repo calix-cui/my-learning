@@ -153,12 +153,33 @@ export const useChatStore = defineStore('chat', () => {
     if (thread.executions.some(isTransferring)) return
     try {
       await history.refreshThread(id, thread)
+      // 打开会话时服务端还在跑（典型场景：刷新页面）：直接挂回去看它跑完，
+      // 不要等用户去点「重新核对状态」——执行本来就还在继续。
+      if (request === conversationRequest) attachRunning(id, thread)
     } catch (error) {
       if (threadState.threads.get(id) !== thread) return
       thread.historyError = error instanceof Error ? error.message : '读取会话失败，请重试'
     } finally {
       if (request === conversationRequest) conversations.loadingMessages.value = false
     }
+  }
+
+  /**
+   * 挂回一次仍在跑的运行：先拿 `run_snapshot` 补上已有正文，再跟实时分片。
+   *
+   * 这是「刷新页面」的默认动作——执行在后台继续，页面只是重新当一次订阅者。
+   */
+  function attachRunning(id: number, thread: ChatThread): boolean {
+    const execution = currentExecution(thread)
+    if (!execution || execution.runId === null) return false
+    // 只挂「正在跑」的：等审批时下一步由用户决定，页面不该主动去跟一条不会动的流
+    if (execution.status !== 'running') return false
+    if (thread.executions.some(isTransferring)) return false
+    const runId = execution.runId
+    void performExecution(id, thread, execution, (handlers, signal) =>
+      subscribeAgentRun(runId, handlers, signal),
+    )
+    return true
   }
 
   /** 断流后的「重新核对状态」：只读服务端，不重发 */
@@ -193,12 +214,7 @@ export const useChatStore = defineStore('chat', () => {
       if (sent && sent.content.trim() === thread.draftText.trim()) thread.draftText = ''
       // 服务端还在跑：直接挂回这次运行的流。执行不由这条连接负责，
       // 所以再断一次也只是少一个订阅者，不影响后台。
-      if (execution && execution.status === 'running' && execution.runId !== null) {
-        const runId = execution.runId
-        void performExecution(id, thread, execution, (handlers, signal) =>
-          subscribeAgentRun(runId, handlers, signal),
-        )
-      }
+      if (execution) attachRunning(id, thread)
       return (
         threadState.threads.get(id) === thread &&
         !thread.executions.some((item) => item.transport === 'disconnected')
@@ -515,6 +531,7 @@ export const useChatStore = defineStore('chat', () => {
     canSend,
     recoveryMessage,
     recoverExecution,
+    attachRunning,
     stopExecution,
     regenerate,
     agentMode,

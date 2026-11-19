@@ -201,6 +201,7 @@ useChatRoute({
       ref="composer"
       v-model="chat.composerText"
       :sending="chat.sending"
+      :running="chat.agentRunning"
       :disabled="
         chat.loadingMessages ||
         !chat.canSend ||
@@ -212,6 +213,7 @@ useChatRoute({
       :supports-reasoning="settings.model?.supports_reasoning_effort"
       :auto-skills="autoSkills"
       @send="handleSend"
+      @stop="chat.stopExecution()"
       @toggle-agent-mode="chat.toggleAgentMode(!chat.agentMode)"
       @toggle-auto-skills="autoSkills = !autoSkills"
     />
