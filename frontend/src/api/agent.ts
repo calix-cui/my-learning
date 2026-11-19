@@ -1,10 +1,23 @@
-import type { AgentRunDetail, AgentStepsPage, ChatMessage } from '@/types/api'
+import type { AgentRunDetail, AgentRunSummary, AgentStepsPage, ChatMessage } from '@/types/api'
 
 export type ReasoningEffort = 'none' | 'high'
 export type AgentSkillMode = 'off' | 'manual' | 'auto'
 
 /** agent 流式事件（与后端 SSE 负载一一对应） */
+export interface AgentRunSnapshot {
+  type: 'run_snapshot'
+  run_id: number
+  conversation_id: number
+  status: AgentRunSummary['status']
+  draft_content: string | null
+  visible_step_count: number
+  error_message: string | null
+  stop_reason: string | null
+  finished_time: string | null
+}
+
 export type AgentStreamEvent =
+  | AgentRunSnapshot
   | { type: 'run_started'; run_id: number; conversation_id: number; user_message_id: number | null }
   | { type: 'step_started'; seq: number; kind: string }
   | { type: 'assistant_text'; seq: number; content: string }
@@ -136,6 +149,14 @@ async function consume(
           })
         }
         handlers.onEvent?.(event)
+        if (event.type === 'run_snapshot') {
+          // 订阅的第一帧：运行已经结束时不必再等，读一次历史就够了
+          if (event.status !== 'running' && event.status !== 'waiting_approval') {
+            complete = true
+            return
+          }
+          continue
+        }
         if (event.type === 'run_finished') {
           complete = true
           handlers.onFinished(event)
@@ -216,6 +237,54 @@ export async function decideApprovalStream(
     signal,
   })
   await consume(response, handlers, runId)
+}
+
+/**
+ * 挂到一次正在跑的运行上（刷新、重连、换设备都用它）。
+ *
+ * 第一帧是 `run_snapshot`（状态 + 已生成正文），之后才是实时事件；
+ * 运行已经结束时只发快照，这里直接读完返回，不当作断线。
+ */
+export async function subscribeAgentRun(
+  runId: number,
+  handlers: AgentStreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`/api/agent/runs/${runId}/stream`, {
+    headers: { Accept: 'text/event-stream' },
+    credentials: 'same-origin',
+    signal,
+  })
+  await consume(response, handlers, runId)
+}
+
+/** 终止一次运行：只有用户点这个按钮才会停，断线不算 */
+export async function stopAgentRun(runId: number, signal?: AbortSignal): Promise<void> {
+  const response = await fetch(`/api/agent/runs/${runId}/stop`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    credentials: 'same-origin',
+    signal,
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { message?: string } | null
+    throw new AgentHttpError(response.status, body?.message ?? '终止失败，请重试')
+  }
+}
+
+/** 按同一条提问重新生成：服务端删掉旧的问答，再开一次新运行 */
+export async function regenerateAgentRun(
+  runId: number,
+  handlers: AgentStreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`/api/agent/runs/${runId}/regenerate`, {
+    method: 'POST',
+    headers: { Accept: 'text/event-stream' },
+    credentials: 'same-origin',
+    signal,
+  })
+  await consume(response, handlers)
 }
 
 /** 取某次运行的审批（刷新后把待决定的卡片复原） */

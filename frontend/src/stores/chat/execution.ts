@@ -151,6 +151,15 @@ export async function runExecution(
     execution.transport = boundary && execution.status === 'completed' ? 'idle' : 'disconnected'
   }
   if (!operation.current()) return false
+  // 服务端已经给了终态就不算断线：被终止、失败、完成都是「结束了」，
+  // 不能因为连接没收到终态事件，就让发送一直锁着。
+  if (
+    execution.status === 'completed' ||
+    execution.status === 'failed' ||
+    execution.status === 'cancelled'
+  ) {
+    execution.transport = 'idle'
+  }
   if (
     !boundary &&
     operation.previousApprovalId !== undefined &&

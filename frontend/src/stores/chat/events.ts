@@ -23,7 +23,12 @@ export function applyExecutionEvent(execution: Execution, event: AgentStreamEven
     duration_ms: null,
     create_time: new Date().toISOString(),
   }
-  if (event.type === 'assistant_delta') {
+  if (event.type === 'run_snapshot') {
+    // 订阅到的第一帧：先把服务端已经生成的部分画出来，再跟后面的实时分片
+    execution.status = event.status
+    execution.preview = event.draft_content ?? ''
+    if (event.error_message) execution.error = event.error_message
+  } else if (event.type === 'assistant_delta') {
     execution.preview += event.content
   } else if (event.type === 'assistant_preview_reset') {
     execution.preview = ''

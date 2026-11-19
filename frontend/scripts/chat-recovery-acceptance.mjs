@@ -34,6 +34,9 @@ const ASSISTANT_MESSAGE = {
   model: 'fake',
   create_time: '2026-11-18 19:40:03',
 }
+/** 终止时服务端保留下来的、已经生成的那部分 */
+const PARTIAL = '正在查询天气'
+const NEW_ANSWER = '明天晴，最高 25 度。'
 
 /**
  * 断流验收的状态机：
@@ -48,6 +51,8 @@ const state = {
   streamPosts: 0,
   historyReads: 0,
   lookupReads: 0,
+  stopPosts: 0,
+  regeneratePosts: 0,
   requestId: null,
   loseStartedEvent: false,
 }
@@ -74,6 +79,45 @@ const detail = () => {
   // 场景 B：断流后才刚建运行，历史页这一刻还读不到（这正是需要 request_id 认领的时候）
   if (state.loseStartedEvent && state.phase !== 'completed') {
     return { ...conversation, messages: [], next_before_message_id: null, runs: [] }
+  }
+  if (state.phase === 'regenerated') {
+    // 重新生成后：旧问答被删掉，历史里只剩一问一答（新答案）
+    return {
+      ...conversation,
+      messages: [USER_MESSAGE, { ...ASSISTANT_MESSAGE, content: NEW_ANSWER }],
+      next_before_message_id: null,
+      runs: [
+        {
+          id: 8,
+          user_message_id: USER_MESSAGE.id,
+          assistant_message_id: ASSISTANT_MESSAGE.id,
+          status: 'completed',
+          visible_step_count: 0,
+          request_id: 'regenerated-request',
+          error_message: null,
+          finished_time: '2026-11-18 19:41:00',
+        },
+      ],
+    }
+  }
+  if (state.phase === 'cancelled') {
+    return {
+      ...conversation,
+      messages: [USER_MESSAGE, { ...ASSISTANT_MESSAGE, content: PARTIAL }],
+      next_before_message_id: null,
+      runs: [
+        {
+          id: RUN_ID,
+          user_message_id: USER_MESSAGE.id,
+          assistant_message_id: ASSISTANT_MESSAGE.id,
+          status: 'cancelled',
+          visible_step_count: 0,
+          request_id: state.requestId,
+          error_message: null,
+          finished_time: '2026-11-18 19:40:30',
+        },
+      ],
+    }
   }
   const runs =
     state.phase === 'idle'
@@ -172,6 +216,28 @@ page.on('request', async (request) => {
     state.requestId = url.searchParams.get('request_id') ?? state.requestId
     const run = detail().runs[0]
     return request.respond(reply({ items: run ? [run] : [] }))
+  }
+  if (/^\/api\/agent\/runs\/\d+\/stop$/.test(path) && method === 'POST') {
+    state.stopPosts += 1
+    // 服务端把已生成的正文落成消息，状态记成 cancelled
+    state.phase = 'cancelled'
+    return request.respond(reply({ run_id: RUN_ID, status: 'cancelled' }))
+  }
+  if (/^\/api\/agent\/runs\/\d+\/regenerate$/.test(path) && method === 'POST') {
+    state.regeneratePosts += 1
+    state.phase = 'regenerated'
+    const frames = [
+      `data: ${JSON.stringify({ type: 'run_started', run_id: 8, conversation_id: 1, user_message_id: USER_MESSAGE.id })}`,
+      `data: ${JSON.stringify({ type: 'assistant_delta', content: NEW_ANSWER })}`,
+      `data: ${JSON.stringify({ type: 'run_finished', run_id: 8, assistant_message_id: ASSISTANT_MESSAGE.id, content: NEW_ANSWER, model: null, steps: 0 })}`,
+      '',
+    ]
+    return request.respond({
+      status: 200,
+      contentType: 'text/event-stream',
+      headers: { 'cache-control': 'no-cache', 'access-control-allow-origin': '*' },
+      body: frames.join('\n\n'),
+    })
   }
   if (path.endsWith('/steps')) {
     return request.respond(
@@ -276,12 +342,67 @@ try {
   check('整轮页面没有运行时报错', errors.length === 0, errors.join(' | '))
 
   await page.screenshot({ path: `${OUT}/recovery-adopted.png`, fullPage: false })
+
+  // 场景 C：用户不想等了，点「终止」
+  state.phase = 'idle'
+  state.loseStartedEvent = false
+  state.streamPosts = 0
+  state.historyReads = 0
+  state.lookupReads = 0
+  state.stopPosts = 0
+  state.regeneratePosts = 0
+  state.requestId = null
+  await page.reload({ waitUntil: 'networkidle2' })
+  await page.waitForSelector('textarea[aria-label="消息内容"]')
+
+  await page.type('textarea[aria-label="消息内容"]', '帮我看一下明天的天气')
+  await page.click('button[aria-label="发送"]')
+  await page.waitForSelector('.chat__recovery', { visible: true })
+  check('终止前进不去：流断了但运行还在跑', await sendDisabled())
+
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll('.chat__recovery button')].find((item) =>
+      item.textContent?.includes('终止'),
+    )
+    button?.click()
+  })
+  await page.waitForSelector('.chat__execution-stopped', { visible: true, timeout: 5000 })
+  const stopped = await page.$eval('.chat__execution-stopped', (node) => node.innerText)
+  check('终止后标注「您终止了此次会话」', stopped.includes('您终止了此次会话'), stopped)
+  check('终止后给出「重新生成」', stopped.includes('重新生成'), stopped)
+  check('终止只调一次服务端接口', state.stopPosts === 1, `POST /stop ${state.stopPosts} 次`)
+  check('终止后发送恢复可用', !(await sendDisabled()))
+  check('终止没有重新提交消息', state.streamPosts === 1, `POST stream ${state.streamPosts} 次`)
+  await page.screenshot({ path: `${OUT}/recovery-stopped.png`, fullPage: false })
+
+  // 场景 D：点「重新生成」，旧回答删掉、换成新回答
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll('.chat__execution-stopped button')].find((item) =>
+      item.textContent?.includes('重新生成'),
+    )
+    button?.click()
+  })
+  await page.waitForFunction(
+    (expected) => document.body.innerText.includes(expected),
+    { timeout: 5000 },
+    NEW_ANSWER,
+  )
+  check('重新生成后显示新回答', (await text()).includes(NEW_ANSWER))
+  check('重新生成把旧回答换掉了', !(await text()).includes(PARTIAL))
+  const userBubbles = await page.$$eval('.chat__row--user', (nodes) => nodes.length)
+  check('重新生成没有多留一条提问', userBubbles === 1, `用户消息 ${userBubbles} 条`)
+  check('重新生成只调一次接口', state.regeneratePosts === 1, `POST /regenerate ${state.regeneratePosts} 次`)
+  check('重新生成没有重新提交消息', state.streamPosts === 1, `POST stream ${state.streamPosts} 次`)
+  check('终止与重新生成这一轮没有运行时报错', errors.length === 0, errors.join(' | '))
+  await page.screenshot({ path: `${OUT}/recovery-regenerated.png`, fullPage: false })
 } catch (error) {
   await fs.mkdir(OUT, { recursive: true })
   console.error('[验收失败] URL:', page.url())
   console.error('[验收失败] 页面文本:', (await text()).slice(0, 900))
   console.error('[验收失败] 控制台错误:', errors.join('\n---\n').slice(0, 2000))
   console.error('[验收失败] /api 请求:', requests.join('\n'))
+  const app = await page.evaluate(() => document.querySelector('#app')?.innerHTML ?? '(no app)')
+  console.error('[验收失败] #app tail:', app.slice(-1600))
   await page.screenshot({ path: `${OUT}/recovery-failure.png` }).catch(() => undefined)
   throw error
 } finally {

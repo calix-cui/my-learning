@@ -14,6 +14,10 @@ export interface ExecutionItem {
   loadStatus?: 'loading' | 'loaded' | 'error'
   /** 这次运行为什么没有回话（服务端给的原因）；中断的运行不会再补正文 */
   error: string | null
+  /** 终态：用来决定要不要显示「重新生成」 */
+  status: Execution['status']
+  /** 用户主动终止的运行：页脚要给一条可以重来的路 */
+  cancelled: boolean
   approval: PendingApproval | null
   approvalBlocked: boolean
 }
@@ -71,6 +75,8 @@ export function buildChatFeed(source: FeedSource, conversationKey: number): Chat
         lazy: !live && execution.visibleStepCount > 0,
         loadStatus: execution.detailStatus,
         error: execution.error,
+        status: execution.status,
+        cancelled: execution.status === 'cancelled',
         approval: execution.approval,
         approvalBlocked:
           execution.status !== 'waiting_approval' ||

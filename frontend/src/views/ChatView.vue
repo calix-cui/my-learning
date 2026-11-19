@@ -161,6 +161,7 @@ useChatRoute({
           :busy="chat.sending"
           @request-steps="chat.loadExecutionSteps"
           @decide="handleApproval"
+          @regenerate="chat.regenerate"
         />
       </div>
     </div>
@@ -178,12 +179,12 @@ useChatRoute({
           重新核对状态
         </button>
         <button
-          v-if="hasConversation && chat.waitingTooLong"
+          v-if="hasConversation && chat.agentRunning"
           type="button"
           class="u-text-action"
-          @click="chat.abandonExecution"
+          @click="chat.stopExecution"
         >
-          不再等待
+          终止
         </button>
         <button
           type="button"

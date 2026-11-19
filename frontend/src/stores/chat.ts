@@ -22,21 +22,16 @@ import {
   AgentHttpError,
   decideApprovalStream,
   findRunByRequestId,
-  getAgentSteps,
+  regenerateAgentRun,
   sendAgentStream,
+  stopAgentRun,
+  subscribeAgentRun,
   type AgentSkillMode,
   type AgentStreamEvent,
   type ReasoningEffort,
 } from '@/api/agent'
 
 const AGENT_MODE_KEY = 'my-agent.agent-mode'
-/** 断线后核对的轮询间隔与上限：30 秒内没收敛就交还给用户手动再点 */
-const POLL_INTERVAL_MS = 1500
-const POLL_MAX_ATTEMPTS = 20
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 /** 读回上次的「深度回答」开关；读不到就当关（省 token 是默认值） */
 function readAgentMode(): boolean {
@@ -94,10 +89,16 @@ export const useChatStore = defineStore('chat', () => {
     () => !activeThread.value.historyError && !activeThread.value.executions.some(blocksSending),
   )
   const pendingApproval = computed(() => activeExecution.value?.approval ?? null)
+  /**
+   * 运行还活着（在跑或在等审批）。
+   *
+   * 不看 `transport`：连接断了但运行还在跑的时候，恰恰是用户最想终止的时候，
+   * 用「连接是否还在」判断会让终止按钮在该出现的时刻消失。
+   */
   const agentRunning = computed(
     () =>
-      activeExecution.value?.transport === 'streaming' &&
-      activeExecution.value.status === 'running',
+      activeExecution.value?.status === 'running' ||
+      activeExecution.value?.status === 'waiting_approval',
   )
   const recoveryMessage = computed(
     () =>
@@ -107,9 +108,6 @@ export const useChatStore = defineStore('chat', () => {
         ?.error ??
       null,
   )
-
-  /** 轮询跑满次数仍未终态：界面要给出「不再等待」这条路 */
-  const waitingTooLong = computed(() => activeExecution.value?.gaveUp === true)
 
   let localSequence = 0
 
@@ -193,9 +191,14 @@ export const useChatStore = defineStore('chat', () => {
             )
           : undefined
       if (sent && sent.content.trim() === thread.draftText.trim()) thread.draftText = ''
-      // 服务端还在跑：后台只读轮询增量步骤，跑到终态再刷新一次正文。
-      // 不 await：核对按钮不该替用户等满 30 秒，轮询失败也只是停在断开态。
-      if (execution && execution.status === 'running') void pollExecution(id, thread, execution)
+      // 服务端还在跑：直接挂回这次运行的流。执行不由这条连接负责，
+      // 所以再断一次也只是少一个订阅者，不影响后台。
+      if (execution && execution.status === 'running' && execution.runId !== null) {
+        const runId = execution.runId
+        void performExecution(id, thread, execution, (handlers, signal) =>
+          subscribeAgentRun(runId, handlers, signal),
+        )
+      }
       return (
         threadState.threads.get(id) === thread &&
         !thread.executions.some((item) => item.transport === 'disconnected')
@@ -208,65 +211,52 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /**
-   * 服务端仍在执行时的只读增量轮询。
-   *
-   * 只读：不发消息、不重跑、不改草稿。只在当前会话实例上继续，
-   * 切会话或卸载后立即放弃；跑够上限就停，交给用户再点「重新核对状态」。
-   */
-  async function pollExecution(id: number, thread: ChatThread, execution: Execution) {
-    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
-      if (execution.status !== 'running' || execution.runId === null) return
-      await sleep(POLL_INTERVAL_MS)
-      if (threadState.threads.get(id) !== thread) return
-      if (execution.status !== 'running' || execution.runId === null) return
-      let page
-      try {
-        page = await getAgentSteps(execution.runId, lastStepSeq(execution))
-      } catch {
-        return
-      }
-      if (threadState.threads.get(id) !== thread) return
-      const merged = new Map(execution.steps.map((step) => [step.seq, step]))
-      for (const step of page.items) merged.set(step.seq, step)
-      execution.steps = [...merged.values()].sort((a, b) => a.seq - b.seq)
-      history.applyServerStatus(
-        execution,
-        page.status,
-        page.visible_step_count,
-        page.error_message,
-      )
-      if (page.status !== 'running') {
-        // 终态后读回正文与审批，轮询本身不改展示顺序
-        await history.refreshThread(id, thread)
-        return
-      }
-    }
-    // 跑满上限仍停在 running：标出来，让用户自己决定继续等还是不等
-    if (threadState.threads.get(id) === thread && execution.status === 'running')
-      execution.gaveUp = true
-  }
-
-  /**
-   * 停止等待一次服务端仍显示在跑的运行。
-   *
-   * 只改本地判定：不动服务端、不发请求。服务端真跑完时下一次读历史会照常
-   * 显示正文；这里只是把「一直等不到终态」的会话解放出来，避免永久锁死。
-   */
-  function abandonExecution() {
+  /** 终止一次运行：只有用户点这个按钮才会停，断线不算 */
+  async function stopExecution(): Promise<boolean> {
+    const id = conversations.activeId.value
     const thread = activeThread.value
     const execution = currentExecution(thread)
-    if (conversations.activeId.value === null || !execution || execution.status !== 'running')
+    if (id === null || !execution || execution.runId === null) return false
+    if (execution.status !== 'running' && execution.status !== 'waiting_approval') return false
+    execution.transport = 'reconciling'
+    try {
+      await stopAgentRun(execution.runId)
+    } catch (error) {
+      execution.transport = 'idle'
+      execution.error = error instanceof Error ? error.message : '终止失败，请重试'
       return false
-    execution.status = 'failed'
-    execution.transport = 'idle'
-    execution.gaveUp = false
-    execution.error = '已停止等待，服务端仍显示这次运行在跑；刷新可再核对'
+    }
+    // 服务端已经把已生成的部分落成消息：读一次历史，正文与终态一起回来
+    await history.refreshThread(id, thread)
     return true
   }
 
-  function lastStepSeq(execution: Execution) {
-    return execution.steps.reduce((max, step) => Math.max(max, step.seq), 0)
+  /**
+   * 按同一条提问重新生成：服务端会删掉旧的一问一答，这里换成一次新运行。
+   *
+   * 旧运行对象立刻从会话里移除——它对应的消息马上就不存在了，
+   * 留着只会让时间线指向一条已经删掉的消息。
+   */
+  async function regenerate(runId: number): Promise<boolean> {
+    const id = conversations.activeId.value
+    const thread = activeThread.value
+    if (id === null) return false
+    if (thread.executions.some((item) => isTransferring(item))) return false
+    thread.executions = thread.executions.filter((item) => item.runId !== runId)
+    if (!thread.executions.some((item) => item.key === thread.activeExecutionKey))
+      thread.activeExecutionKey = null
+    const execution = reactive(createExecution(`regenerate:${runId}`))
+    execution.transport = 'preparing'
+    thread.executions.push(execution)
+    thread.activeExecutionKey = execution.key
+    const ok = await performExecution(id, thread, execution, (handlers, signal) =>
+      regenerateAgentRun(runId, handlers, signal),
+    )
+    if (!ok && threadState.threads.get(id) === thread) {
+      // 服务端已经删掉旧问答：读一次，把界面对齐到真实状态
+      await history.refreshThread(id, thread)
+    }
+    return ok
   }
 
   async function loadOlderMessages() {
@@ -524,9 +514,9 @@ export const useChatStore = defineStore('chat', () => {
     feedItems,
     canSend,
     recoveryMessage,
-    waitingTooLong,
     recoverExecution,
-    abandonExecution,
+    stopExecution,
+    regenerate,
     agentMode,
     agentRunning,
     pendingApproval,

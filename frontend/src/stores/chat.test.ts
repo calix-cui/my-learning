@@ -245,7 +245,9 @@ describe('chat store · 工具审批', () => {
       tool: 'rename_conversation',
       reason: '写操作需要确认',
     })
-    expect(chat.agentRunning).toBe(false)
+    // 这条连接上的流已经结束，但运行还在等审批：可以终止，不能当成已经跑完
+    expect(chat.sending).toBe(false)
+    expect(chat.agentRunning).toBe(true)
 
     // 批准：服务端接着跑完这次运行
     const deciding = chat.approveApproval()

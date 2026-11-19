@@ -115,9 +115,7 @@ export function createHistory(deps: HistoryDeps) {
         execution.error =
           execution.status === 'failed'
             ? (execution.error ?? '执行失败，可重新发送')
-            : execution.status === 'cancelled'
-              ? '执行已取消'
-              : null
+            : null
         execution.preview = ''
       }
       if (

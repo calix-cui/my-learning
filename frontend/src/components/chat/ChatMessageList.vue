@@ -7,6 +7,7 @@ defineProps<{ items: ChatFeedItem[]; preview: string; busy: boolean }>()
 const emit = defineEmits<{
   requestSteps: [runId: number]
   decide: [decision: 'approve' | 'reject', note?: string]
+  regenerate: [runId: number]
 }>()
 </script>
 
@@ -20,6 +21,7 @@ const emit = defineEmits<{
       :busy="busy"
       @request-steps="emit('requestSteps', $event)"
       @decide="(decision, note) => emit('decide', decision, note)"
+      @regenerate="emit('regenerate', $event)"
     />
   </template>
 </template>
