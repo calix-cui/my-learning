@@ -1,6 +1,6 @@
 # 对话功能设计（阶段 4 · LLM 接入与基础对话）
 
-> 当前聊天整理方案见第 9 节（2026-11-18，已确认，前三步已完成）；此前各节保留阶段实施背景。
+> 聊天状态与展示的来龙去脉见[第 9 节](#9-聊天状态与展示一条时间线2026-11-18--11-19)：六步的时间线、已被推翻或没采纳的方案、当前边界与验收口径；最终形态是「执行与连接解耦」（[ADR-0019](adr/0019-execution-decoupled-from-connection.md)）。前面各节保留阶段实施背景，第 1–6 节仍是阶段 4 的原始设计。
 
 > 阶段 4 的实施方案。**先设计、后实施**（AGENTS.md §2.3）；确认后按第 8 节的任务顺序逐个交付。
 > 阶段依据：[`playbooks/05-development-plan-and-mvp-tasks.md`](playbooks/05-development-plan-and-mvp-tasks.md) 阶段 4。
@@ -180,7 +180,7 @@ class LLMClient(Protocol):
 
 **验收标准**（阶段 4 完成）：本地 `make run` + `pnpm dev` 后，能新建会话、发消息（`FakeLLM` 回复）、刷新后仍在、重命名与删除生效；切 `LLM_PROVIDER=openai` 并配 key 后同流程返回真实模型输出；`make check` 与前端三件套全绿；CI 双 job 绿。
 
-## 9. 风险与取舍
+## 附录 A. 阶段 4 的风险与取舍（历史）
 
 | 风险 | 处理 |
 |---|---|
@@ -190,7 +190,7 @@ class LLMClient(Protocol):
 | 开发机没 key 就无法联调 | 默认 `fake`，CI 永远不依赖外部网络 |
 | 消息表增长快 | 现在不分区不归档；数据量成为问题在阶段 11 处理 |
 
-## 7. 前端「新会话」是草稿态（2026-11-11 补充）
+## 附录 B. 前端「新会话」是草稿态（2026-11-11）
 
 后端接口不变，但前端不再「点新建就落库」：
 
@@ -199,9 +199,9 @@ class LLMClient(Protocol):
 - 删掉当前正在看的会话、或刷新后没有任何会话，都回到这个草稿态，而不是「空页面」。
 - 因此「有一个打开的会话」不再等于「后端有一行记录」：判断界面状态看 `chat.draft` / `chat.activeId`（`draft` 为真时 `activeId` 必为 null）。
 
-## 8. 会话运行时状态按会话隔离（2026-11-11 修订）
+## 附录 C. 会话运行时状态按会话隔离（2026-11-11）
 
-### 8.1 修复的 bug
+### C.1 修复的 bug
 
 「发出一条问题后立刻切到别的会话，切过去的新会话会被上一个会话的回答占据」。
 
@@ -221,7 +221,7 @@ const streamingText = ref('')
 
 所以是**架构问题**：会话状态是单例，而「一次请求」的生命周期可以比「当前选中的会话」更长。
 
-### 8.2 方案：per-thread state + run 绑定
+### C.2 方案：per-thread state + run 绑定
 
 参考 ChatGPT/Claude 的 Web 端、Vercel AI SDK 的 `useChat`、assistant-ui 的 runtime 设计，共识是两条：
 
@@ -244,6 +244,8 @@ const threads = reactive(new Map<number, ChatThread>())  // 草稿态用 key 0
 const activeKey = computed(() => activeId.value ?? 0)
 ```
 
+> 2026-11-19 注：上面的接口是当时的样子，`streamingText` / `steps` / `sending` / `runningAgent` 后来搬进了单个 `Execution`（一次运行一份），`ChatThread` 只留 `messages`、`executions`、`draftText`、分页游标与加载状态。原因是一次会话可以有多条运行，运行态跟着会话走就会串。
+
 - `messages` / `streamingText` / `agentSteps` / `sending` / `agentRunning` 全部改成由 `activeKey` 派生的 `computed`，视图代码不变；
 - `send()` 与 `sendWithAgent()` 入口处 `const thread = threadOf(conversationId)`，**整段流程（包括 `onDone` 收尾的 `getConversation`）只写这个 thread**；
 - 切会话只是改 `activeId`，旧流继续跑完并落到它自己的 thread，切回去能看到完整回答（不需要重拉）；
@@ -252,12 +254,12 @@ const activeKey = computed(() => activeId.value ?? 0)
   「点新建时清空输入框」的补丁；
 - 侧栏可用 `chat.isBusy(id)` 显示「生成中」，不再依赖全局 `sending`。
 
-### 8.3 两条容易踩的实现细节
+### C.3 两条容易踩的实现细节
 
 1. **reactive Map 的代理**：`threads.set(key, obj)` 存的是原始对象，`get()` 才拿到代理。`threadOf()` 必须把 `get()` 的结果返回，直接改原始对象不会触发视图更新。
 2. **不要用「当前会话」推断回调归属**：回调里一律用入口处捕获的 `conversationId`，禁止读 `activeId`。
 
-### 8.4 回归测试
+### C.4 回归测试
 
 `frontend/src/stores/chat.test.ts`（3 例，`sendMessageStream` 用可控 deferred 模拟未完成的流）：
 
@@ -266,40 +268,20 @@ const activeKey = computed(() => activeId.value ?? 0)
 - 输入框草稿按会话隔离（写一半切走再切回，文字还在；另一个会话仍是空的）；
 - 删掉当前会话回到草稿态并清掉缓存。
 
-## 9. 聊天状态与展示整理方案（已确认，2026-11-18）
+## 9. 聊天状态与展示：一条时间线（2026-11-18 → 11-19）
 
-本节基于当前工作区源码评估，包括已有未提交改动；方案已确认，第 1–3 步已完成；第 4–5 步尚未开始。使用 CodeGraph `codegraph_explore` 查询 ChatView、chat Store、AgentTimeline、发送/审批函数、后端历史查询及事件构造，再补读索引省略的计算属性、接口与测试。
+> 编号说明：本文件曾出现重复的 7/8/9 编号，已把三段历史记录移到文末「附录 A/B/C」。本节是唯一的第九节。
+>
+> 这一节按发生顺序记录「聊天状态与展示」怎么一路改成今天的样子。每段写明**触发问题 → 决定 → 落地 → 验收 → 后来被什么改写**；9.3 集中列出**已被推翻或没采纳的方案**，9.4 是**仍然成立的边界**。想直接照着做事，读 9.1 和 9.4 就够；想理解为什么变成这样，按 9.2 往下读。
 
-### 9.1 整理前的问题与证据
+### 9.1 今天的样子
 
-| 问题 | 当前实现 | 影响 |
-| --- | --- | --- |
-| 时间线完成后跳到正文下方 | `ChatView.vue` 先输出 ChatMessage 再输出时间线；`chat.ts` 的 runsByMessage 优先 assistant_message_id，实时则用 activeUserMessageId | 运行时位于用户消息后，完成后位于助手消息后；这是展示锚点变化，不是 CSS 问题 |
-| 同一次执行有两套过程状态 | ChatThread 同时维护 steps、runs、replayDetails；appendAssistantMessage 把实时步骤复制到回放缓存并清空活动锚点 | 页面需要自己判断实时/历史分支，组件可能重建、丢失展开状态 |
-| Store 职责集中 | chat.ts 包含会话列表、分页合并、发送、事件转换、审批恢复、弹窗、提示和草稿 | 一个异常路径需要同时理解多个业务域；仅缩短 return 列表不能解决 |
-| 页面承担底层协调 | ChatView 只剩 Skill 参数与提交参数；动画帧、滚动、分页锚点交给 `useChatScroll`，地址同步交给 `useChatRoute` | 页面模板直接依赖内部缓存结构 |
-| 状态语义混杂 | sending/runningAgent/approval 加上后端 run.status | 请求结束与运行结束不同，等待审批与断线容易被当作空闲 |
-| 新会话发送存在竞态窗口 | send 在 await ensureConversation 后才设置 sending | 创建会话期间再次发送可能重复建会话；需受控延迟测试验证 |
-| 错误被当作空数据 | listApprovals 对非成功响应返回 []；审批续跑加载步骤失败回退 [] | 无法区分没有审批/步骤与读取失败 |
-
-原 ChatView.test.ts 曾断言历史时间线前一个元素是助手回复。第一步已更新该断言；第二步补充临时 ID 到正式 ID、完成及历史核对期间保持组件、两层详情节点身份和正文唯一性的回归测试。
-
-### 9.2 统一展示规则
-
-固定顺序为：用户消息 → 执行过程 → 审批卡片（如有）→ 助手正文。零工具/Skill 的已完成回复不显示空过程入口；失败、取消和待审批仍保留所属运行及其可见过程。
-
-第一步最小修复：已完成运行仍按 assistant_message_id 查找，但将过程渲染在该助手正文之前；无助手消息的运行仍置于用户消息之后。不要简单把所有历史运行改挂用户消息，因为当前后端按助手消息所在页返回已完成摘要，分页可能只包含助手消息。
-
-第二步已统一为消息流投影：原始消息、运行及临时正文转换成有序的 MessageItem / ExecutionItem。ExecutionItem 包含过程、审批与正式或流式正文。已被该项消费的助手消息不再单独输出，普通历史消息照常保留。此投影是纯计算结果，不再保存一份可写消息副本。
-
-ExecutionItem 的 key 在一次运行生命周期内保持稳定。当前发送前建立本地展示 key 和独立 request_id，run_started 后在同一个 Execution 上补充 runId，收到助手消息 ID 时仅填充正文，不替换本地 key。刷新后可用 runId 构造 key。只加载到助手消息的一页也能生成执行项；翻出用户消息后不重复输出运行。同一输入存在多个运行时按运行 ID 升序分别展示。展示 key 与网络请求的 request_id 独立，均由一次发送持有；审批继续使用已有运行，不重新创建请求或运行。刷新会重新创建组件，不承诺跨页面刷新保存展开状态。决策见 [ADR-0015](adr/0015-chat-feed-projection.md)。
-
-### 9.3 职责与状态归属
+执行和连接是两件事。运行跑在后端后台线程里（`backend/app/agent/hub.py` 的 `run_hub`），SSE 只是订阅它的一个读端：刷新、关标签页、断网都不改变运行状态，只有 `POST /api/agent/runs/{id}/stop` 会停它。正文每 200 字或 0.5 秒快照进 `agent_runs.draft_content`，所以任何时刻重新订阅，都能先补上已经生成的部分，再接实时分片。
 
 ```mermaid
 flowchart TD
-    API[后端消息历史 / 执行事件 / 审批] --> Transport[前端 API：请求与 SSE 解析]
-    Transport --> Execution[执行模块：发送、审批、事件归并]
+    API[后端消息历史 / 运行订阅 / 审批] --> Transport[前端 API：请求与 SSE 解析]
+    Transport --> Execution[执行模块：发送、订阅挂回、终止、重新生成、事件归并]
     Transport --> History[历史模块：分页、缓存核对、步骤加载]
     Execution --> State[会话内 messages 与 executions]
     History --> State
@@ -307,76 +289,151 @@ flowchart TD
     Projection --> Feed[ChatMessageList / ChatExecutionItem]
     Feed --> Parts[AgentTimeline / ApprovalCard / ChatMessage]
     Page[ChatView：页面组合] --> Feed
-    Page --> Composer[输入框与 Skill 选择]
+    Page --> Composer[输入框、Skill 选择、停止按钮]
 ```
 
-继续复用 Vue、Pinia、现有 Markdown、时间线、审批组件和后端 Runtime，不引入新状态机框架、聊天 SDK 或表结构。
-
-| 边界 | 所有权与建议文件 |
+| 边界 | 所有权 |
 | --- | --- |
-| chat Store | 只做组合根：选择当前会话、串发送与审批、派生视图值。拥有模块实例生命周期，不重复创建 |
-| 会话目录 | `stores/chat/conversations.ts`（已提取）：列表行、`activeId`/`draft`、账号代次、创建/改名/删除 |
-| 会话状态容器 | `stores/chat/threads.ts`（已提取）：`threads` Map、取消句柄、步骤与建会话的请求去重、释放 |
-| 消息历史 | `stores/chat/history.ts`（已提取）：分页游标、刷新对齐、摘要合并、步骤懒加载与错误状态 |
-| 执行流程 | `stores/chat/execution.ts`：发送、审批续跑、恢复核对；`events.ts`：事件到运行状态的转换 |
-| 展示投影 | `stores/chat/feed.ts`：关联消息与运行、排序、临时正文交接；不发请求 |
+| chat Store（`stores/chat.ts`） | 只做组合根：选择当前会话、串发送/订阅/终止/重新生成、派生视图值。拥有模块实例生命周期，不重复创建 |
+| 会话目录（`stores/chat/conversations.ts`） | 列表行、`activeId`/`draft`、账号代次、创建/改名/删除 |
+| 会话状态容器（`stores/chat/threads.ts`） | `threads` Map、取消句柄、步骤与建会话的请求去重、释放 |
+| 消息历史（`stores/chat/history.ts`） | 分页游标、刷新对齐、摘要合并、步骤懒加载与错误状态 |
+| 执行流程（`stores/chat/execution.ts`） | 一次运行的状态机：发送、订阅、终止、重新生成、审批续跑、事件归并 |
+| 展示投影（`stores/chat/feed.ts`） | 关联消息与运行、排序、临时正文交接；不发请求 |
 | 消息区域 | `ChatMessageList.vue` 与 `ChatExecutionItem.vue`：空态、加载更多、运行展示与详情请求事件 |
-| DOM 与滚动 | `composables/useChatScroll.ts`（已提取）：帧合并、贴底跟随、往上加载时的锚点补偿、卸载清理 |
-| 路由 | `composables/useChatRoute.ts`（已提取）：`/chat/:id` 与草稿态双向同步、建库后改写地址、删除或打不开时退回草稿 |
+| DOM 与滚动（`composables/useChatScroll.ts`） | 帧合并、贴底跟随、往上加载时的锚点补偿、卸载清理 |
+| 路由（`composables/useChatRoute.ts`） | `/chat/:id` 与草稿态双向同步、建库后改写地址、删除或打不开时退回草稿 |
 
-这些模块按阶段提取，不一次建立全部空壳。ChatView 只读取展示项和必要的输入状态，不直接读取 replayDetails/runsByMessage；侧栏保留列表及 isBusy 等明确接口。不要只把几十个字段塞进一个大对象来隐藏复杂度。模块用 `createX(deps)` 工厂注入依赖而不是各建一个 Pinia store，读函数显式接收 `(id, thread)` 而不读「当前会话」，边界与取舍见 [ADR-0017](adr/0017-chat-store-module-boundaries.md)。
+### 9.2 时间线
 
-滚动策略分三种来源，不能混成一个 `scrollToBottom()`：切换会话时才无条件贴底；流式分片、步骤到达、新消息只对「仍在底部」的用户跟随，用户往上翻历史时不改变 `scrollTop`（阈值 80px，往回滚到底部自动恢复跟随）；往上翻页由 `keepAnchor` 先记高度、插入后把差值补进 `scrollTop`，让正在读的那一行留在原位。自己发消息和审批出结果例外：无条件贴回底部，因为那是用户自己的动作。
+#### 11-18 · 第一步：修时间线跳位
 
-每个 Execution 独立持有 runId、消息关联、服务端状态、步骤、详情加载状态、临时正文及待审批信息；实时步骤与回放使用同一份步骤集合，持久步骤按运行与 seq 去重。详情请求捕获版本，避免较旧历史响应覆盖新到达事件。
+**问题** 同一个运行，跑的时候显示在用户消息下面，跑完却跳到助手回复下面。根因不是 CSS：模板先输出消息、后输出时间线，完成时运行改挂到助手消息，锚点一变顺序就翻。
 
-服务端状态保留 running / waiting_approval / completed / failed / cancelled；客户端另记 preparing / streaming / reconciling / disconnected 等传输状态。二者不可混为一个布尔值。canSend、isBusy 等由两者派生：等待审批或服务端仍运行时禁止另发；断线表示结果未知，先查询持久化状态，不自动重新执行工具。
+**决定** 固定顺序「用户消息 → 执行过程 → 审批卡片 → 助手正文」，已完成运行按 `assistant_message_id` 找，但过程渲染在该正文之前；无助手消息的运行留在用户消息之后。明确不采用「把所有历史运行改挂用户消息」——后端按助手消息所在页返回摘要，分页可能只拿到助手消息。
 
-创建会话前锁定本次发送，并为创建请求去重；请求上下文捕获账号代次、会话实例、requestId 和 runId。切换会话继续更新原会话；删除会话或退出账号使旧回调失效并释放本地读取资源。取消浏览器读取不等于取消后端运行，不能据此把服务端标成 cancelled。
+**验收** 运行、完成、刷新三种状态下过程都在正文前；只有助手消息的一页、无助手的失败/审批记录位置正确；零工具调用不显示空过程入口。
 
-### 9.4 后端配合边界
+**后来被改写** 「在 ChatView 里就地调顺序」这段实现被第二步的投影整体替换，只留下顺序规则本身。
 
-**修跳位及前端职责拆分不依赖后端改动。** 当前 user_message_id、assistant_message_id、run.id、分页摘要和步骤接口已经可用。保留按消息游标分页，不为了组件布局增加 turn 表或强制整轮分页。
+#### 11-18 · 第二步：消息流投影
 
-后续若要减少恢复分支和完成后的整页重拉，建议后端增量配合：
+**问题** 同一次执行有两套过程状态（`steps` 实时写、`replayDetails` 回放缓存），页面要自己判断实时/历史分支，组件重建就丢展开状态。
 
-1. 扩展 run_finished：返回标准助手 MessageResponse、运行摘要及会话更新信息，前端不再拼本地时间、猜 message_count + 2。完整契约实现时写入 api.md；字段应在事务提交后发出。
-2. 在恢复查询中提供当前运行及待审批摘要，或复用现有接口组合为一个前端恢复入口。先保证错误与空结果可区分，再按实际请求成本决定是否聚合后端接口。
-3. 工具步骤提供稳定调用关联（例如 tool_call_id），同时覆盖 SSE 和历史响应。当前 AgentTimeline 按工具名配对，顺序调用可工作，但不足以可靠表达同名多调用交错；历史缺失关联的记录保留顺序兼容规则。是否需要迁移取决于现有持久字段能否提供关联。
-4. request_id 由前端一次发送流程创建并持有，当前 API 每次调用临时生成 UUID。后端已检查重复请求；如要支持不确定结果后的恢复，再补“重复请求如何返回原运行”的契约，不能把去重误当成 SSE 断点续传。
+**决定** 把原始消息、运行、临时正文投影成有序的 `MessageItem` / `ExecutionItem`；被展示项消费的助手消息不再单独输出。投影是纯计算结果，不再保存可写副本。展示 key 在一次运行生命周期内保持稳定：发送前建立本地 key 与 `request_id`，`run_started` 后往同一个 Execution 上补 `runId`，收到助手消息 ID 只填正文、不换 key。
 
-本轮不做自动断点续传、并行工具执行或模型适配器重写。失败与恢复先复用持久化查询，避免扩大范围。
+**落地** `stores/chat/feed.ts`、`ChatMessageList.vue`、`ChatExecutionItem.vue`。决策见 [ADR-0015](adr/0015-chat-feed-projection.md)。
 
-### 9.5 分步交付与验收
+**验收** 完成时不重复正文、不重置已展开过程；临时 ID 转正式 ID、分页、切会话、刷新后位置一致；同一输入多次运行按运行 ID 升序分别展示。
 
-| 顺序 | 前置条件与实施范围 | 独立验收 |
+#### 11-18 · 第三步：统一执行状态
+
+**问题** 「请求结束了」和「运行结束了」被混成一个布尔值：等待审批、断流、真正空闲看起来一样，于是出现重复提交窗口。
+
+**决定** 服务端状态（`running` / `waiting_approval` / `completed` / `failed` / `cancelled`）与连接状态（`preparing` / `streaming` / `reconciling` / `disconnected` / `idle`）分开存，`canSend`、`isBusy` 由两者派生；发送前先锁、创建请求去重（`creations` WeakMap）；错误不再降级成空数组；步骤按 `seq` 去重、详情请求复用并按版本丢弃过期响应。
+
+**落地** `stores/chat/execution.ts`、`stores/chat/events.ts`，`chat.ts` 重写成组合根。决策见 [ADR-0016](adr/0016-chat-execution-state-and-recovery.md)。
+
+**验收** 双击首发只建一会话一运行；审批批准/拒绝/再审批、断流恢复、重复事件、旧历史响应、删除与退出后的回调都覆盖；前端 125 项测试。
+
+**后续清理** 三个只在测试里用到的派生出口（`activeUserMessageId` / `runsByMessage` / `replayDetails`）同日删除，测试改为断言展示项。
+
+#### 11-18 · 第四步：拆 Store、滚动与路由
+
+**问题** `chat.ts` 830 行，会话目录、历史、执行、投影都挤在一处；`ChatView.vue` 同时管动画帧、滚动锚点、地址同步。
+
+**决定** 按「谁拥有状态」拆模块，用 `createX(deps)` 工厂注入而不是各建一个 Pinia store；读函数显式接收 `(id, thread)`，不读「当前会话」。滚动与地址都从页面里拿出来，页面只留组合。
+
+**落地** `stores/chat/threads.ts`、`conversations.ts`、`history.ts`（`chat.ts` 835 → 475 行，对外接口不变）；`composables/useChatScroll.ts` 与 `composables/useChatRoute.ts`（`ChatView.vue` 315 → 233 行）。决策见 [ADR-0017](adr/0017-chat-store-module-boundaries.md)。
+
+**验收** 单测 142 项；浏览器验收滚动 10 项（帧合并、上翻不跟随、翻页锚点、卸载清理）、地址 11 项（深链、刷新、后退/前进、`/chat/abc` 回落、`?settings=1` 共存）。
+
+#### 11-18 · 第五步：断线核对契约
+
+**问题** 断线后前端只能猜：「我这条发出去了吗、为什么没答复」答不出来，409 也无从解释。
+
+**决定** 补只读契约：摘要带 `request_id` / `error_message` / `finished_time`；新增 `GET /api/agent/runs/{id}`、按 `request_id` 认领的查询（查不到才 404 并提示可重发）、步骤接口 `?since_seq=` 增量读并带回运行状态。前端据此只读续查，绝不自动重发。
+
+**落地** `backend/app/api/agent.py`、`schemas/agent.py`、`services/chat_service.py`。决策见 [ADR-0018](adr/0018-reconnect-contract-and-read-only-polling.md)。
+
+**验收** 18 项后端用例；模拟浏览器验收 20 项（含「连 `run_started` 都没收到」的场景）。
+
+**当天联调暴露两个真缺陷**
+
+1. 断流后运行永远停在 `running`：请求依赖先把 Session 关了，生成器 `finally` 里 `_finish_interrupted_run` 读 `run.status` 抛 `DetachedInstanceError`，异常被静默吞掉，收尾整个跳过——会话被僵尸运行锁死（后续发消息 409）。修法是记下 `run_id`，回落到独立 Session 收尾；补了顺序正确的回归用例（先关 Session、再关流）。
+2. 「只读续查」这条路本身是绕路：它默认「断线 = 运行也停了」，只能事后核对，回答早就没了。
+
+#### 11-19 · 第六步：执行与连接解耦
+
+**问题** 只要助手回复没加载完就刷新页面，这条回复直接消失，用户只能重发、token 白花。根因在执行模型：请求线程就是执行线程，`http.disconnect` → 生成器关闭 → `_fail("运行被中断")`；模型文本只活在局部变量里，中途没有任何 commit。
+
+**决定**（[ADR-0019](adr/0019-execution-decoupled-from-connection.md)，取代 ADR-0018「不做真续跑」的结论）
+
+- 执行搬到后台线程，用自己的 Session，与连接无关；
+- 正文按快照落库（200 字或 0.5 秒一次），重新订阅先补快照再跟实时；
+- SSE 降级为纯读端 `GET /api/agent/runs/{id}/stream?since_seq=`，可多处订阅、可中途加入；
+- 断连不等于取消：只有 `POST /runs/{id}/stop` 才停，协作式在事件边界生效；
+- 终止的正文落成正常助手消息 + `stop_reason=user_cancelled`，原位标「您终止了此次会话」并给「重新生成」（删旧回答、同一条提问重跑）；
+- 无人订阅满 10 分钟自行停止（`stop_reason=abandoned`），靠 15 秒一行注释心跳 `: ping` 判断对面还在不在；
+- 运行注册表在进程内存，部署必须 `--workers 1`（技术债 T-30）。
+
+**落地** `backend/app/agent/hub.py`（`run_hub`、`Subscription`、`_Channel`、`_DraftWriter`、`cancel_run`）、`agent_runs` 三个新列（迁移 `c8f1a4d2e907`）、`GET /runs/{id}/stream`、`POST /runs/{id}/stop`、`POST /runs/{id}/regenerate`；前端 `subscribeAgentRun` / `stopAgentRun` / `regenerateAgentRun`、`attachRunning`、输入区停止按钮、终端页脚与「重新生成」。
+
+**联调又暴露两个前端缺陷**
+
+1. `openConversation` 只读历史、从不订阅——刷新后页面永远停在「执行尚未结束，连接已中断」，而后端其实已经答完。修法：打开会话时若服务端仍在跑，直接挂回（`attachRunning`）。
+2. 终止后输入框还留着那句已经发出去的话，发送键已解锁，很容易再点一次。修法：把「确认落库就不留草稿」抽成 `consumeSentDraft`，核对与终止共用；内容被改过就不动。
+
+**验收** 后端 `test_run_hub.py` 9 项、`test_agent_api.py` 23 项；前端 151 项 / 23 文件；模拟验收 recovery 32、scroll 10、route 11；真实模型验收 `pnpm acceptance:live` 23 项（真 Chrome + 真后端 + 真 DeepSeek）。
+
+#### 11-19 · 期间的小修（不改变架构）
+
+- 运行失败的原因写在「本该出现回复」的位置，取服务端 `error_message`；顶部横幅只表示**当前需要处理**的状态（断流、核对中、正在接收）。
+- 恢复提示移到消息区与输入区之间，用 flex 挤压消息区而不遮挡，可点 `×` 收起；收起只影响显示，锁定与提示来源不变，内容变化会重新出现。
+- 服务重启时把上一生命周期遗留的 `running` 运行标成「服务重启，这次运行已中断」（`lifespan` 里启动清理）。
+- 上游 `{"error": {...}}` 错误帧不再被吞成「模型返回格式无法解析」，而是透出上游原话。
+- 设置页列工具不再真连 MCP 服务器（`/api/settings/tools` 曾经因为对 exa 握手而 pending 数秒）。
+
+### 9.3 已被推翻、替换或没采纳的方案
+
+这一节是给读者的防误读清单：文档旧版本里出现过、但**现在不该照着做**的说法。
+
+| 旧说法 / 旧方案 | 现在的做法 | 为什么改 |
 | --- | --- | --- |
-| 1. 修复时间线跳位（已完成） | 确认固定展示顺序；修改 ChatView.vue 及视图测试，同步 DESIGN.md 展示规则 | 运行、完成、刷新后过程均在正文前；仅助手消息的一页、无助手的失败/审批记录位置正确；零调用无空入口 |
-| 2. 统一消息流投影（已完成） | 第一步通过；增加 feed.ts、ChatMessageList、ChatExecutionItem，页面改为消费展示项 | 完成时不重复正文、不重置已展开过程；临时 ID 转正式 ID、分页、切会话与刷新位置一致 |
-| 3. 统一执行状态（已完成） | 第二步通过；按运行合并实时与历史步骤，提取 execution/events；先锁发送再创建会话，保留 requestId，错误不降级为空数据 | 双击首发只建一会话一运行；审批批准/拒绝/再审批、断流恢复、重复事件、旧历史响应、删除及退出后的回调均有验证 |
-| 4. 收拢历史和页面职责（已完成） | 已提取 `conversations` / `history` / `threads`（Store 835 → 475 行，对外接口不变）、`composables/useChatScroll.ts` 与 `composables/useChatRoute.ts`，`ChatView.vue` 315 → 233 行，只剩 Skill 参数与提交参数 | 草稿隔离、改名/删除、分页、断流核对（142 项单测）；浏览器验收：断流恢复 12 项、滚动 10 项、地址 11 项（深链、刷新、后退/前进、设置浮层共存、非数字路径回落） |
-| 5. 断线核对契约（已完成） | 摘要补 `request_id` / `error_message` / `stop_reason` / `finished_time`；新增 `GET /api/agent/runs/{id}`、按 `request_id` 认领的查询、`/stream` 订阅、`/stop` 与 `/regenerate`；步骤接口支持 `since_seq` 并带回运行状态 | 只知 `request_id` 也能回答「发出去了吗、为什么没答复」；查不到才提示可重发；刷新后直接挂回仍在跑的运行、正文继续长出来；只有点停止才停，终止的正文与重新生成都在原位 |
+| 断流即运行失败（`_fail(db, run, "运行被中断")` 是唯一收尾） | 断连不改状态；只有停止、无人订阅超时、进程重启才结束运行 | 连接是读端不是生命线；断线就判死会让回答白丢（ADR-0019） |
+| 「只读续查」：每 1.5 秒轮询 `/runs/{id}/steps`，最多 20 次 | 订阅 `/runs/{id}/stream`，先 `run_snapshot` 再跟实时 | 轮询只能看已落库的步骤，看不到正在生成的正文；`pollExecution` / `gaveUp` 已删除 |
+| 等待过久 → 「不再等待」（`abandonExecution`，本地假装失败） | 「停止」：真的调服务端停，正文保留并可重新生成 | 本地改状态会让前后端不一致：服务端还在跑、还烧 token，界面却已解锁 |
+| 仍运行则保持提示与锁定，用户可再次点「核对」 | 打开会话/刷新自动挂回，无需再点 | 「让用户点一下」是把系统该做的事推给人（002ff3f） |
+| 「本轮不做自动断点续传」 | 连接断开不再中断执行；但进程重启后接着跑仍然不做 | 解耦解决的是「连接断了」，不是「进程没了」；后者需要任务队列（T-30） |
+| 第一步：在 `ChatView` 里把过程挪到正文前 | 由 `feed.ts` 投影统一决定顺序 | 页面拼顺序会随数据来源分叉，规则只该有一处 |
+| 保留 `activeUserMessageId` / `runsByMessage` / `replayDetails` 作为对外派生出口 | 已删除，测试改为断言展示项 | 只有测试引用、无组件使用，留着就是两套模型 |
+| `ChatThread` 持有 `streamingText` / `steps` / `sending` / `runningAgent`（附录 C.2 的接口） | 这些都在单个 `Execution` 上，`ChatThread` 只留消息、运行数组与草稿等 | 同一次运行的状态必须跟着运行走，否则切会话、多运行就串 |
+| 原「后端配合边界」建议 1：扩展 `run_finished` 返回完整 `MessageResponse` | **未采纳**：`run_finished` 仍只带 `content`/`model`/`steps`/`assistant_message_id`，正文与元信息由历史刷新补齐 | 快照 + 历史已经能给出正文；把完整消息塞进事件会让两条真相 |
+| 原「后端配合边界」建议 2：为恢复提供一个聚合入口 | **部分采纳**：加了 `GET /runs/{id}` 与 `?request_id=` 认领，没做聚合 | 两个只读接口已经够用，聚合会让契约更难演进 |
+| 原「后端配合边界」建议 3：工具步骤补 `tool_call_id` 稳定关联 | **未采纳**：`tool_call` / `tool_result` 仍按工具名配对 | 同名多调用交错时确实不够，但改动涉及持久字段与前端时间线，留给独立任务 |
+| 原「后端配合边界」建议 4：`request_id` 由前端持有，并补「重复请求如何返回原运行」 | **已按此实现**：前端生成并持有，后端唯一约束去重，`?request_id=` 可认领原运行 | 这条是唯一被完整采纳的建议 |
 
-每步先补对应的行为测试，再改实现，运行相关 Vitest、类型检查、ESLint 和构建；修改后端时增加接口/事务与授权测试。涉及布局的步骤用可控工具流在浏览器验证运行→完成→刷新，并检查展开态和分页。模拟验收与真实模型联调分别报告，不将静态推断写成已验证行为。
+### 9.4 仍然成立的边界
 
-实施时同步当前架构说明、API（如变）、DESIGN（如变）和项目状态；架构方案获确认落地时记录 ADR。前三步已完成。当前每个 Execution 持有唯一的步骤、审批、预览、服务端状态和连接状态；`agentSteps` 等视图实际使用的只读接口由它派生，`runsByMessage` / `replayDetails` / `activeUserMessageId` 三个无人使用的派生出口已删除（测试改断言展示项）。发送与审批共用 runExecution，读取历史和步骤有版本及会话实例校验。第四步已把会话目录、会话状态容器与历史读路径拆到 `conversations.ts` / `threads.ts` / `history.ts`（见 ADR-0017），`stores/chat.ts` 835 → 475 行且对外接口不变；滚动与帧合并收进 `composables/useChatScroll.ts`，地址与状态双向同步收进 `composables/useChatRoute.ts`（`ChatView.vue` 315 → 233 行，只剩 Skill 参数与提交参数）。第五步补上了断线核对契约：摘要透出 `request_id` / `error_message` / `finished_time`，新增单点运行详情与按 `request_id` 认领的查询，步骤接口支持增量并带回运行状态；前端据此只读续查（绝不重发），仍不做真续跑（见 ADR-0018 与技术债 T-29）。实际验证结果见 PROJECT_STATUS.md。
+- 展示顺序固定「用户消息 → 执行过程 → 审批卡片 → 助手正文」；零工具调用的已完成回复不显示空过程入口；失败、终止、待审批仍保留所属运行与可见过程。
+- 展示 key 在一次运行生命周期内稳定；同一输入多次运行按运行 ID 升序分别展示；刷新会重建组件，不承诺保存展开状态。
+- 服务端状态与连接状态分开存，不合并成一个布尔值。`canSend` 由两者派生；断线不等于可控，仍在跑时输入区显示停止按钮。
+- 每个 `Execution` 独立持有 `runId`、消息关联、服务端状态、步骤、详情加载状态、临时正文与待审批信息；实时步骤与回放共用同一份集合，按 `seq` 去重。
+- 创建会话前锁本次发送，创建请求去重；切换会话继续写回原会话；删除会话或退出账号使旧回调失效并释放本地读取资源。
+- 草稿只在「确认这条提问已经落库」时才清（核对成功、终止成功），结果未知时保留——否则用户会把它当没发出去再发一遍。
+- 失败原因写在正文原位（一行 muted 文字），顶部横幅只表示当前需要处理的状态且可收起。
+- 部署必须单进程（`--workers 1`）：运行注册表在 `run_hub` 进程内存里，跨进程要换任务队列（技术债 T-30）；进程重启会中断在途运行，启动清理会把它标成失败。
 
+### 9.5 验收口径
 
-### 9.6 第三步的恢复与错误边界
+| 层 | 命令 | 当前项数 |
+| --- | --- | --- |
+| 前端单测 | `cd frontend && pnpm test` | 151 项 / 23 文件 |
+| 前端静态与构建 | `pnpm lint`、`pnpm type-check`、`pnpm build` | 全绿 |
+| 断流与恢复（模拟 API/SSE） | `pnpm acceptance:recovery` | 32 项 |
+| 滚动跟随与翻页锚点 | `pnpm acceptance:scroll` | 10 项 |
+| 会话地址双向同步 | `pnpm acceptance:route` | 11 项 |
+| 真实模型（需后端 8000 + DeepSeek 配置） | `pnpm acceptance:live` | 23 项 |
+| 后端 | `cd backend && ./.venv/bin/pytest` | 全量除 MCP echo 子进程相关用例外全绿 |
 
-- 创建前将本次发送标为 preparing，同一草稿的创建请求复用；创建失败保留输入并解锁。创建期间退出账号或新建草稿，迟到的创建响应不得启动原发送或跳转页面。
-- 连接用 preparing / streaming / reconciling / disconnected / idle 表达，服务端状态单独使用 running / waiting_approval / completed / failed / cancelled。等待审批或结果未知不能因 HTTP 结束而解锁发送。
-- 已知运行断流时先查历史。已完成则恢复正式消息；等待审批则读取当前审批；仍运行则保持提示与锁定，用户可再次核对。不会自动重新 POST 消息或审批。
-- 已收到 run_finished 时，随后的历史查询失败不抹掉已提交的最终回复。审批操作返回不确定结果时，若查询仍是原审批，不能声称决定成功，也不能恢复成空闲；提示核对后再操作。
-- 步骤与审批的 HTTP 失败、业务错误或响应结构异常均报错。历史明确报告 waiting_approval 却没有 pending 审批时也视为未恢复。步骤失败保留已有步骤与重试入口；审批预加载步骤失败不提交决定。
-- 步骤按运行内 seq 去重；异步详情请求复用，版本落后的结果不覆盖新事件。实时完成、历史核对仍沿用第二步的稳定 key 和两层展开节点。
-- 删除会话、退出账号时取消本地流读取，并使旧事件和查询结果失效；仅切换会话时原运行继续写回自己的会话。
-- 核对到这条消息已经落进历史时清空已发出的草稿，否则同一句话会被当成新消息再发一遍；结果未知时草稿仍然保留。
-- 若 run_started 未收到，不把后来发现的某个运行猜作本次提交，而是用提交时生成的 `request_id` 去认领：认领到就采用它的运行号再核对，认领不到（404「这次提交还没有落库，可以重新发送」）才提示可以重发。
-- 执行已经搬到后台线程，和发起它的连接无关（ADR-0019）：打开会话或刷新页面时，如果服务端还在跑，前端直接 `GET /api/agent/runs/{id}/stream` 挂回去——先拿 `run_snapshot` 补上已经生成的正文，再跟实时分片，不需要用户点「重新核对状态」。多个页面可以同时订阅同一次运行。
-- 连接断开不改变运行状态：只有用户点「停止」才 `POST /runs/{id}/stop`。终止后已生成的部分落成正常助手消息，正文下方标注「您终止了此次会话」并给「重新生成」——点它删掉旧回答、用同一条提问重跑。
-- 真的没人看也不会无限烧 token：无人订阅满 10 分钟服务端自行停止，记 `stop_reason=abandoned`。服务重启时，上一次生命周期的 `running` 运行在启动清理里被标成「服务重启，这次运行已中断」。
-
-- 失败运行的原因写在「本该出现回复」的位置（一行 muted 文字，取服务端 `error_message`），而不是顶部横幅：横幅只表示当前需要处理的状态（断流、核对中、等待过久），历史失败不该每次打开会话都弹出来。
-- 恢复提示现在位于消息区与输入区之间，用 flex 挤压消息区高度而不遮挡内容，可点 `×` 收起；收起只是不再显示，锁定状态与提示来源都不变，提示内容变化后会重新出现。
-详见 [ADR-0016](adr/0016-chat-execution-state-and-recovery.md)。浏览器验收用 `pnpm acceptance:recovery`（`frontend/scripts/chat-recovery-acceptance.mjs`）跑模拟 API/SSE；不将其视为真实模型验收。
+模拟验收与真实模型联调分别报告，不把静态推断写成已验证行为；真实模型那一组是唯一能证明「刷新后回答继续生成」的验收。

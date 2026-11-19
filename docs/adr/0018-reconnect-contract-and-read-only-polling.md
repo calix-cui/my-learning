@@ -1,7 +1,9 @@
 # ADR-0018 断线核对契约：按 request_id 认领、只读续查、不做真续跑
 
-- 状态：已接受
+- 状态：已接受（2026-11-19 部分被 [ADR-0019](0019-execution-decoupled-from-connection.md) 取代）
 - 日期：2026-11-18
+- 仍然有效：摘要的三项字段、按 `request_id` 认领、`GET /runs/{id}`、步骤接口的 `since_seq` 与状态回带
+- 已被取代：「断连后只能只读核对、不做真续跑」——现在执行搬到后台线程，断连不再中断运行
 - 关联：[ADR-0016](0016-chat-execution-state-and-recovery.md)（断流后的执行状态）、[ADR-0017](0017-chat-store-module-boundaries.md)（Store 边界）
 
 ## 背景
