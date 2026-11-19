@@ -340,6 +340,7 @@ it('直达或刷新后从每条助手回复打开对应详情，切换会话不�
         seq: 2,
         kind: 'tool_result',
         tool_name: 'calculator',
+        call_id: null,
         tool_args: { expression: String(runId) },
         content: `工具结果 ${runId}`,
         ok: true,
@@ -392,7 +393,7 @@ it('模型开始调用工具时清除该轮临时文本，随后流式展示正�
   await paint()
   expect(wrapper.get('.markdown-content').text()).toBe('中间说明')
   handlers.onEvent?.({ type: 'assistant_preview_reset' })
-  handlers.onEvent?.({ type: 'tool_call', seq: 2, tool: 'now', args: { timezone: 'UTC' } })
+  handlers.onEvent?.({ type: 'tool_call', seq: 2, tool: 'now', args: { timezone: 'UTC' }, call_id: null })
   await paint()
   expect(wrapper.find('.markdown-content').exists()).toBe(false)
   delta('**当前时间**')
@@ -554,7 +555,7 @@ it('临时消息转正式 ID、完成及历史核对后保留两层展开，正�
   const { wrapper, handlers, delta, paint, complete, chat } = await setupStream()
   const execution = wrapper.findComponent({ name: 'ChatExecutionItem' }).vm.$
   handlers.onEvent?.({ type: 'run_started', run_id: 41, conversation_id: 1, user_message_id: 11 })
-  handlers.onEvent?.({ type: 'tool_call', seq: 2, tool: 'now', args: { timezone: 'UTC' } })
+  handlers.onEvent?.({ type: 'tool_call', seq: 2, tool: 'now', args: { timezone: 'UTC' }, call_id: null })
   await paint()
   expect(wrapper.findComponent({ name: 'ChatExecutionItem' }).vm.$).toBe(execution)
   const timeline = wrapper.get<HTMLDetailsElement>('details.timeline')
@@ -565,6 +566,7 @@ it('临时消息转正式 ID、完成及历史核对后保留两层展开，正�
   await entry.trigger('toggle')
   handlers.onEvent?.({
     type: 'tool_result',
+    call_id: null,
     seq: 3,
     tool: 'now',
     ok: true,

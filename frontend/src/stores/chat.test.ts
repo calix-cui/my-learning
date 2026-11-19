@@ -214,6 +214,7 @@ describe('chat store · 工具审批', () => {
     // 服务端先回一个 tool_call，再挂起等审批
     agentHandlers.onEvent?.({
       type: 'tool_call',
+      call_id: null,
       seq: 1,
       tool: 'rename_conversation',
       args: { title: '周报' },
@@ -254,6 +255,7 @@ describe('chat store · 工具审批', () => {
     await vi.waitFor(() => expect(decideApprovalStream).toHaveBeenCalled())
     agentHandlers.onEvent?.({
       type: 'tool_result',
+      call_id: null,
       seq: 3,
       tool: 'rename_conversation',
       ok: true,
@@ -282,6 +284,7 @@ describe('chat store · 工具审批', () => {
     expect(rendered.steps.at(-1)).toMatchObject({
       kind: 'tool_result',
       tool_name: 'rename_conversation',
+      call_id: null,
       ok: true,
     })
   })
@@ -423,6 +426,7 @@ it('刷新、切换会话和分页后分别从对应运行加载执行过程', a
         kind: 'tool_result',
         content: `结果 ${runId}`,
         tool_name: 'calculator',
+        call_id: null,
         tool_args: null,
         skill_key: null,
         skill_name: null,

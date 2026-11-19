@@ -106,13 +106,14 @@ const approval = (id = 9) => ({
   run_id: 7,
   seq: 3,
   tool_name: 'rename_conversation',
+  call_id: null,
   tool_args: {},
   status: 'pending' as const,
   note: '确认',
   create_time: '',
   decided_time: null,
 })
-const call = { type: 'tool_call' as const, seq: 2, tool: 'now', args: {} }
+const call = { type: 'tool_call' as const, seq: 2, tool: 'now', args: {}, call_id: 'c1' }
 let handlers: AgentStreamHandlers
 let stream: ReturnType<typeof deferred<void>>
 /** 挂回运行（订阅）用的那条连接：每次订阅新开一条 */
@@ -421,6 +422,7 @@ it('重复步骤和重复终态不会重复保存，旧连接关闭后事件不�
   await result
   handlers.onEvent?.({
     type: 'tool_result',
+    call_id: null,
     seq: 3,
     tool: 'now',
     content: '迟到',

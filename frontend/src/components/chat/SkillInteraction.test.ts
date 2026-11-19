@@ -37,6 +37,7 @@ it('时间线展示技能名称和失败原因，不暴露控制函数或版本�
     kind: 'skill_loaded',
     content: null,
     tool_name: '__runtime_request_skill_load',
+    call_id: null,
     tool_args: null,
     skill_key: 'builtin:meeting',
     skill_name: '会议纪要',
@@ -83,6 +84,7 @@ it('工具和结果合并为一条可展开记录，普通思考只显示跳动�
     kind: 'assistant_text',
     content: '中间说明',
     tool_name: null,
+    call_id: null,
     tool_args: null,
     skill_key: null,
     skill_name: null,
@@ -102,6 +104,7 @@ it('工具和结果合并为一条可展开记录，普通思考只显示跳动�
     seq: 2,
     kind: 'tool_call',
     tool_name: 'calculator',
+    call_id: null,
     tool_args: { expression: '3^5' },
   }
   await wrapper.setProps({ steps: [step, call] })
@@ -141,5 +144,42 @@ it('运行中同一个位置变成停止按钮，点一下交给上层终止', a
   expect(wrapper.find('[aria-label="发送"]').exists()).toBe(false)
   await wrapper.get('[aria-label="停止"]').trigger('click')
   expect(wrapper.emitted('stop')).toHaveLength(1)
+  wrapper.unmount()
+})
+
+
+it('同名工具接连调用时按 call_id 把结果对回各自的调用', () => {
+  const base: AgentStep = {
+    seq: 1,
+    kind: 'tool_call',
+    content: null,
+    tool_name: 'now',
+    call_id: null,
+    tool_args: null,
+    skill_key: null,
+    skill_name: null,
+    skill_source: null,
+    skill_version: null,
+    ok: null,
+    duration_ms: null,
+    create_time: '',
+  }
+  const wrapper = mount(AgentTimeline, {
+    props: {
+      running: false,
+      steps: [
+        { ...base, seq: 1, call_id: 'a', tool_args: { tz: 'UTC' } },
+        { ...base, seq: 2, call_id: 'b', tool_args: { tz: 'Asia/Shanghai' } },
+        { ...base, seq: 3, kind: 'tool_result', call_id: 'b', ok: true, content: '上海的结果' },
+        { ...base, seq: 4, kind: 'tool_result', call_id: 'a', ok: true, content: 'UTC 的结果' },
+      ],
+    },
+  })
+  const rows = wrapper.findAll('.timeline__entry')
+  expect(rows).toHaveLength(2)
+  expect(rows[0].text()).toContain('UTC 的结果')
+  expect(rows[0].text()).toContain('UTC')
+  expect(rows[1].text()).toContain('上海的结果')
+  expect(rows[1].text()).toContain('Asia/Shanghai')
   wrapper.unmount()
 })

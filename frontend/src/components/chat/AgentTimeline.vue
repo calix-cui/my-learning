@@ -19,20 +19,28 @@ function handleToggle(event: Event) {
 
 type TimelineEntry = { step: AgentStep; result?: AgentStep }
 
+/**
+ * 配对用的键：优先模型给的 call_id，老数据没有它时退回工具名。
+ * 同名工具接连调用时（例如同一轮里两次 search），按名字配对会把结果挂错行。
+ */
+function pairingKey(step: AgentStep) {
+  return step.call_id ?? `tool:${step.tool_name}`
+}
+
 /** 历史回放和实时事件使用相同的配对规则，调用和结果合并为一行。 */
 const entries = computed(() => {
   const rows: TimelineEntry[] = []
-  const pending = new Map<string | null, TimelineEntry>()
+  const pending = new Map<string, TimelineEntry>()
   for (const step of props.steps) {
     if (step.kind === 'tool_call') {
       const entry = { step }
       rows.push(entry)
-      pending.set(step.tool_name, entry)
+      pending.set(pairingKey(step), entry)
     } else if (step.kind === 'tool_result') {
-      const entry = pending.get(step.tool_name)
+      const entry = pending.get(pairingKey(step))
       if (entry) {
         entry.result = step
-        pending.delete(step.tool_name)
+        pending.delete(pairingKey(step))
       } else {
         rows.push({ step, result: step })
       }

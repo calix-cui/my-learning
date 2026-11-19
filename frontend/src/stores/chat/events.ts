@@ -14,6 +14,7 @@ export function applyExecutionEvent(execution: Execution, event: AgentStreamEven
     seq: 0,
     content: null,
     tool_name: null,
+    call_id: null,
     tool_args: null,
     skill_key: null,
     skill_name: null,
@@ -40,6 +41,7 @@ export function applyExecutionEvent(execution: Execution, event: AgentStreamEven
         seq: event.seq,
         kind: 'tool_call',
         tool_name: event.tool,
+        call_id: event.call_id,
         tool_args: event.args,
       },
     ]
@@ -51,6 +53,7 @@ export function applyExecutionEvent(execution: Execution, event: AgentStreamEven
         seq: event.seq,
         kind: 'tool_result',
         tool_name: event.tool,
+        call_id: event.call_id,
         content: event.content,
         ok: event.ok,
         duration_ms: event.duration_ms,

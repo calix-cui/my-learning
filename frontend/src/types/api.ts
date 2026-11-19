@@ -134,6 +134,8 @@ export interface AgentStep {
   kind: string
   content: string | null
   tool_name: string | null
+  /** 模型给的调用标识：同名工具接连调用时用它配对结果 */
+  call_id: string | null
   tool_args: Record<string, unknown> | null
   skill_key: string | null
   skill_name: string | null

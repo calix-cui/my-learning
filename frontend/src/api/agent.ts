@@ -47,7 +47,13 @@ export type AgentStreamEvent =
       ok: boolean
       message: string
     }
-  | { type: 'tool_call'; seq: number; tool: string; args: Record<string, unknown> | null }
+  | {
+      type: 'tool_call'
+      seq: number
+      tool: string
+      args: Record<string, unknown> | null
+      call_id: string | null
+    }
   | {
       type: 'tool_result'
       seq: number
@@ -55,6 +61,7 @@ export type AgentStreamEvent =
       ok: boolean
       content: string
       duration_ms: number
+      call_id: string | null
     }
   | {
       type: 'approval_required'
