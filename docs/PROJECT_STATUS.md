@@ -1,7 +1,9 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-19 · 执行与连接解耦：刷新页面不再掐断回答
+> 最近更新：2026-11-20 · 新增 Agent 全链路追踪图（断点 + 思维导图）
+
+- **新增 [Agent 全链路追踪图](agent-trace-map.md)（2026-11-20）**：把「入口 → prepare_run → RunHub → _run_loop → LLM → ToolUse → Skill → 审批恢复」整理成断点表，并配 [交互版思维导图](agent-trace-map.html)。行号基准为主工作树 `codex/skill-tool-system @ 13b5701`；`.agents/worktrees/dsh-*` 的旧快照不可用于对照。本次只新增两份文档，未改代码、未跑测试。
 
 - **清理收尾（2026-11-19 晚）**：开发库只剩真实账号一个（`@example.com` 的联调/验收账号及其会话 35、消息 80、run 49 全部删除，删前备份在 `/tmp/dbbackup/before-purge.sql`），没有停在 `running`/`waiting_approval` 的僵尸运行；清理用现成的 `backend/scripts/cleanup_demo_accounts.py --yes`（先写了个同类脚本，发现重复后删掉）。前端删掉三处无人引用：`Execution.gaveUp`、`getAgentRun()`、`missingColorKeys()`。随后按同一原则下线了旧版数据库 Skill：删掉 `DatabaseSkillProvider`、`skills` 表（迁移 `d39c4a07e1f2`）、`/api/skills` 的列表/详情/写接口与 `/skills/legacy/export`、`skill_service` 的 CRUD、前端的旧版导出面板与 `legacy_count`；技能只剩本地目录一种来源。
 

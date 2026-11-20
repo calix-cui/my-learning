@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent 全链路 · 断点地图</title>
+<style>
+  :root{
+    --paper:#f6f4ef; --ink:#1d1c19; --muted:#6f6b63; --line:#d9d4c9;
+    --card:#fffdf9; --border:rgba(29,28,25,.10);
+    --entry:#2f6b5e; --ctx:#3c5a86; --llm:#8a5a2b; --tool:#9a3f3f;
+    --skill:#6b4c86; --resume:#5d6b32; --state:#575450;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--paper); color:var(--ink);
+    font:13px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    display:flex; align-items:center; gap:18px; padding:18px 24px 14px;
+    border-bottom:1px solid var(--line); background:rgba(246,244,239,.92);
+    position:sticky; top:0; z-index:20; backdrop-filter:blur(8px);
+  }
+  .brand{display:flex; flex-direction:column; gap:2px; min-width:0}
+  h1{
+    margin:0; font:600 19px/1.2 "Songti SC",Georgia,"Times New Roman",serif;
+    letter-spacing:.01em; white-space:nowrap;
+  }
+  .sub{color:var(--muted); font-size:11.5px; letter-spacing:.02em; white-space:nowrap}
+  .sub code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px}
+  .tools{margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .search{
+    display:flex; align-items:center; gap:8px; background:var(--card);
+    border:1px solid var(--border); border-radius:8px; padding:0 10px; height:32px;
+  }
+  .search input{
+    border:0; outline:0; background:transparent; width:190px; font:inherit; color:inherit;
+  }
+  .search input::placeholder{color:#a29d94}
+  button{
+    font:inherit; font-size:12px; color:var(--ink); background:var(--card);
+    border:1px solid var(--border); border-radius:8px; height:32px; padding:0 11px;
+    cursor:pointer; transition:background .15s,border-color .15s;
+  }
+  button:hover{background:#fff; border-color:rgba(29,28,25,.22)}
+  button:active{transform:translateY(1px)}
+
+  main{display:flex; height:calc(100% - 69px); align-items:stretch}
+  #canvas{position:relative; flex:1; overflow:auto; min-width:0}
+  #world{position:relative; transform-origin:0 0}
+  #wires{position:absolute; inset:0; overflow:visible; pointer-events:none}
+  #wires path{fill:none; stroke:#cfc9bd; stroke-width:1.2}
+  #wires path.hot{stroke:#9d9484}
+
+  .node{
+    position:absolute; width:236px; height:44px; background:var(--card);
+    border:1px solid var(--border); border-left:2px solid var(--ac,var(--state));
+    border-radius:9px; padding:6px 26px 6px 10px; cursor:pointer;
+    box-shadow:0 1px 2px rgba(29,28,25,.04);
+    transition:box-shadow .15s, border-color .15s, transform .15s;
+    display:flex; flex-direction:column; justify-content:center; gap:1px;
+  }
+  .node:hover{box-shadow:0 3px 10px rgba(29,28,25,.09); transform:translateY(-1px)}
+  .node.sel{border-color:var(--ac,var(--state)); box-shadow:0 0 0 3px color-mix(in srgb, var(--ac,var(--state)) 16%, transparent)}
+  .node.dim{opacity:.38}
+  .node.hit{background:#fff8e8; border-color:#c9a24a}
+  .node .t{font-weight:600; font-size:12.5px; letter-spacing:.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .node .s{font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .node.root{width:168px; height:54px; border-left-width:3px}
+  .node.root .t{font-size:13.5px}
+  .toggle{
+    position:absolute; right:-8px; top:50%; transform:translateY(-50%);
+    width:16px; height:16px; border-radius:50%; background:var(--paper);
+    border:1px solid var(--line); color:var(--muted); display:grid; place-items:center;
+    font:10px/1 ui-monospace,monospace; z-index:3;
+  }
+  .node:hover .toggle{background:#fff; color:var(--ink)}
+  .b-entry{--ac:var(--entry)} .b-ctx{--ac:var(--ctx)} .b-llm{--ac:var(--llm)}
+  .b-tool{--ac:var(--tool)} .b-skill{--ac:var(--skill)} .b-resume{--ac:var(--resume)}
+  .b-state{--ac:var(--state)} .b-root{--ac:#1d1c19}
+
+  aside{
+    width:400px; flex:0 0 400px; border-left:1px solid var(--line);
+    background:#fbf9f5; overflow:auto; padding:22px 22px 40px;
+  }
+  .empty{color:var(--muted); margin-top:40px; text-align:center; font-size:12.5px; line-height:1.9}
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px;
+    border-radius:5px; font-size:11px; letter-spacing:.02em; color:#fff; background:var(--ac,var(--state));
+  }
+  aside h2{margin:12px 0 4px; font:600 17px/1.35 "Songti SC",Georgia,serif}
+  .path{
+    display:flex; align-items:center; gap:6px; margin:2px 0 14px;
+    font:11.5px/1.5 ui-monospace,Menlo,monospace; color:var(--muted); word-break:break-all;
+  }
+  .path button{height:22px; padding:0 7px; font-size:10.5px; flex:0 0 auto}
+  aside p.desc{margin:0 0 16px; color:#3b3833; font-size:12.5px}
+  .sec{margin:0 0 15px}
+  .sec h3{
+    margin:0 0 6px; font-size:10.5px; font-weight:600; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--muted);
+  }
+  .bp{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:5px}
+  .bp li{
+    display:flex; gap:8px; align-items:baseline; background:var(--card);
+    border:1px solid var(--border); border-radius:6px; padding:6px 8px;
+    font:11.5px/1.5 ui-monospace,Menlo,monospace;
+  }
+  .bp b{color:var(--ac,var(--state)); font-weight:600; flex:0 0 auto}
+  .bp span{color:#4b4740; font-family:-apple-system,"PingFang SC",sans-serif; font-size:12px}
+  ul.watch{list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:5px}
+  ul.watch li{
+    font:11px/1.4 ui-monospace,Menlo,monospace; color:#3b3833;
+    background:#eee9df; border-radius:4px; padding:3px 7px;
+  }
+  .trace{
+    display:inline-block; font:11px/1.5 ui-monospace,Menlo,monospace;
+    background:#1d1c19; color:#e9e4d9; border-radius:4px; padding:3px 7px;
+  }
+  .rel{display:flex; flex-direction:column; gap:4px; font-size:12px}
+  .rel button{
+    text-align:left; height:auto; padding:5px 8px; font-size:12px; line-height:1.4;
+    display:flex; gap:8px; align-items:baseline;
+  }
+  .rel button i{font:10px ui-monospace,monospace; color:var(--muted); font-style:normal}
+  .hint{color:var(--muted); font-size:11px; margin-top:18px; border-top:1px solid var(--line); padding-top:10px; line-height:1.6}
+
+  @media (max-width:900px){
+    main{flex-direction:column; height:auto}
+    aside{width:auto; flex:auto; border-left:0; border-top:1px solid var(--line)}
+    #canvas{height:60vh}
+    header{flex-wrap:wrap}
+    .tools{margin-left:0; width:100%}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>Agent 全链路 · 断点地图</h1>
+    <div class="sub">My Agent &nbsp;·&nbsp; <code>codex/skill-tool-system @ 13b5701</code></div>
+  </div>
+  <div class="tools">
+    <label class="search">
+      <span style="color:#a29d94">⌕</span>
+      <input id="q" type="search" placeholder="搜环节 / 文件 / 事件，如 policy、skill、" autocomplete="off">
+    </label>
+    <button id="expand">展开全部</button>
+    <button id="collapse">收起分支</button>
+    <button id="fit">适配宽度</button>
+  </div>
+</header>
+
+<main>
+  <div id="canvas">
+    <div id="world">
+      <svg id="wires"></svg>
+      <div id="nodes"></div>
+    </div>
+  </div>
+  <aside id="panel">
+    <div class="empty">
+      点击左侧任意节点<br>
+      查看断点行号、观察变量与对应 trace 事件
+    </div>
+  </aside>
+</main>
+
+<script>
+const BR = {
+  entry:{n:'入口与调度'}, ctx:{n:'上下文组装'}, llm:{n:'LLM 交互'},
+  tool:{n:'ToolUse'}, skill:{n:'Skill'}, resume:{n:'审批与恢复'},
+  state:{n:'持久化与事件'}, root:{n:'总览'}
+};
+
+const TREE = {
+  id:'root', t:'Agent 一次运行', s:'POST /messages/stream', br:'root',
+  d:'一次 Agent 运行的完整生命周期：同步准备 → 守护线程 → 多轮模型/工具循环 → SSE 推送。两条入口路由最终都汇到 agent_stream_response。',
+  f:'backend/app/api/agent.py', l:'72', e:'',
+  c:[
+    { id:'entry', t:'入口与调度', s:'api → hub → executor', br:'entry',
+      d:'请求线程只做校验和落库，真正的循环在 agent-run-* 守护线程里；SSE 只是订阅者，客户端断开不会停掉运行。',
+      f:'backend/app/agent/hub.py', l:'260', e:'agent.start',
+      c:[
+        { id:'fe', t:'前端发起', s:'api/agent.ts:211', br:'entry',
+          d:'对话页发送消息走这个函数，execution 固定为 auto，因此默认进入 Agent 循环而不是单次补全。',
+          f:'frontend/src/api/agent.ts', l:'211',
+          w:['execution', 'skill_mode', 'skill_keys', 'request_id'],
+          d2:'fetch 到 /api/conversations/{id}/messages/stream；同一文件 :216 设置 execution: "auto"。',
+          e:'' },
+        { id:'route', t:'messages/stream 路由', s:'api/chat.py:179', br:'entry',
+          d:'兼容入口：execution=auto 时转给 Agent，否则走普通流式对话。排查「为什么没走 Agent」先看这里。',
+          f:'backend/app/api/chat.py', l:'179',
+          w:['payload.execution', 'payload.skill_keys', 'payload.reasoning_effort'],
+          e:'' },
+        { id:'branch', t:'execution = auto 分支', s:'api/chat.py:186', br:'entry',
+          d:'真正的分岔点：成立则 agent_stream_response，否则 chat_service.prepare_stream + stream_reply。',
+          f:'backend/app/api/chat.py', l:'186',
+          w:['payload.execution == "auto"'],
+          e:'' },
+        { id:'agentroute', t:'Agent 专用路由', s:'api/agent.py:60', br:'entry',
+          d:'POST /conversations/{id}/agent/stream，前端也可直接调用；只透传 skill_mode。',
+          f:'backend/app/api/agent.py', l:'60', w:['payload.skill_mode'], e:'' },
+        { id:'resp', t:'agent_stream_response', s:'api/agent.py:72', br:'entry',
+          d:'同步 run prepare_run，再 start_new_run 拿订阅，最后 StreamingResponse(encode_sse)。',
+          f:'backend/app/api/agent.py', l:'72',
+          w:['run.id', 'subscription'], e:'' },
+        { id:'prep', t:'prepare_run 建运行', s:'executor.py:111', br:'entry',
+          d:'锁会话、校验 skill_mode、request_id 去重、拒绝并发 run、统计是否首条消息、校验显式 Skill key、建 AgentRun、写用户步骤、装配历史上下文。全部同步完成，异常仍是普通 JSON。',
+          f:'backend/app/agent/executor.py', l:'111',
+          w:['is_first_message', 'run.id', 'run.skill_snapshot', 'len(context)'],
+          bp:[['131','request_id 重复 → 409'],['134','会话已有 running/waiting_approval → 409'],['187','AgentRun 的 skill_snapshot 内容'],['219','build_context 返回的消息']],
+          e:'agent.prepare（trace_context）' },
+        { id:'ctx', t:'历史上下文 build_context', s:'chat_service.py:178', br:'entry',
+          d:'system 消息全带，非 system 只取最近 CONTEXT_LIMIT=20 条，按时间正序返回。',
+          f:'backend/app/services/chat_service.py', l:'178',
+          w:['context', 'CONTEXT_LIMIT', 'messages 角色顺序'],
+          e:'chat.context.history（:193）' },
+        { id:'hub', t:'RunHub 守护线程', s:'hub.py:260', br:'entry',
+          d:'start_new_run 建频道并启动线程；_launch 在线程里开独立 Session，_drive_new 组装 registry/policy 后调用 stream_run。',
+          f:'backend/app/agent/hub.py', l:'260',
+          w:['thread.name', 'channel', 'run_id'],
+          bp:[['367','_launch：是否新开线程'],['389','_thread_main：SessionLocal'],['412','_drive_new：registry 与 policy']],
+          e:'' },
+        { id:'stream', t:'stream_run', s:'executor.py:254', br:'entry',
+          d:'恢复/构建循环状态，发 run_started，按会话挂载的 Skill 预加载，然后进入 _run_loop。',
+          f:'backend/app/agent/executor.py', l:'254',
+          w:['tools.names()', 'state.skill_catalog', 'run.status'],
+          bp:[['278','agent.start trace'],['293','预加载显式 Skill'],['298','进入 _run_loop']],
+          e:'agent.start' },
+        { id:'loop', t:'_run_loop 主循环', s:'executor.py:528', br:'entry',
+          d:'最多 MAX_STEPS=8 轮：组消息 → 调模型 → 有 tool_calls 就执行并回灌 → 没有就收尾。所有分支都在这里汇合。',
+          f:'backend/app/agent/executor.py', l:'528',
+          w:['round_number', 'reply.tool_calls', 'state.failures'],
+          bp:[['548','每轮开始'],['637','无 tool_calls 的最终答复分支'],['925','步数预算耗尽']],
+          e:'agent.model.response' },
+        { id:'pump', t:'SSE 推送 _pump', s:'hub.py:477', br:'entry',
+          d:'从频道读事件转成 SSE；assistant_delta 同时写草稿，run_finished 清理；收到 stop_requested 就关流。',
+          f:'backend/app/agent/hub.py', l:'477',
+          w:['event["type"]', 'stop_requested', 'draft'],
+          bp:[['201','_DraftWriter 草稿落库'],['477','事件出队与丢弃逻辑']],
+          e:'' }
+      ]},
+    { id:'ctxb', t:'上下文组装', s:'历史 / Skill / 工具回灌', br:'ctx',
+      d:'发给模型的消息不是一份静态历史，而是每轮动态拼出来的四层结构。',
+      f:'backend/app/agent/executor.py', l:'1297', e:'agent.prompt.compose',
+      c:[
+        { id:'state', t:'LoopState 恢复', s:'executor.py:1017', br:'ctx',
+          d:'从 run.skill_snapshot 恢复 catalog、已加载 Skill、轮次与证据；指引超限会丢弃，避免恢复出超大上下文。',
+          f:'backend/app/agent/executor.py', l:'1017',
+          w:['state.rounds', 'len(state.loaded_skills)', 'state.skill_catalog'],
+          e:'' },
+        { id:'compose', t:'拼 round_messages', s:'executor.py:1297', br:'ctx',
+          d:'auto 且还有未加载 Skill 时，把目录 + 使用说明插到消息最前面；已有加载过的 Skill 才算「用过」。',
+          f:'backend/app/agent/executor.py', l:'1297',
+          w:['round_messages[0].role', 'loaded_keys', 'prompt 是否为 None'],
+          bp:[['1311','agent.prompt.compose trace']],
+          e:'agent.prompt.compose' },
+        { id:'skprompt', t:'Skill 提示词构造', s:'skills/models.py:142', br:'ctx',
+          d:'生成 <skill-instructions> 块、目录 JSON 和工具清单，告诉模型怎么请求加载、怎么读资源。',
+          f:'backend/app/skills/models.py', l:'142',
+          w:['catalog 条数', 'instructions 截断', 'tool_names'],
+          e:'' },
+        { id:'guide', t:'TOOL_USE_GUIDANCE', s:'executor.py:564', br:'ctx',
+          d:'开启推理时，再前置一条 system，要求先说明判断再调工具；常量定义在 :84。',
+          f:'backend/app/agent/executor.py', l:'564',
+          w:['reasoning_effort', 'round_messages[0].content[:40]'],
+          e:'' },
+        { id:'obs', t:'tool observation 回灌', s:'executor.py:900', br:'ctx',
+          d:'工具结果以 role="tool" + tool_call_id 追加；落库展示文本截断 2000，回灌用完整内容。',
+          f:'backend/app/agent/executor.py', l:'900',
+          w:['tool_call_id', 'content 长度', 'messages[-1].role'],
+          e:'agent.context.tool_added（:908）' },
+        { id:'asst', t:'assistant tool_calls 回灌', s:'executor.py:667', br:'ctx',
+          d:'模型的工具请求必须原样带回下一轮（含 reasoning_content），否则上游配对失败。',
+          f:'backend/app/agent/executor.py', l:'667',
+          w:['assistant_call_message.tool_calls', 'reasoning_content'],
+          e:'' }
+      ]},
+    { id:'llmb', t:'LLM 交互', s:'请求 → 流式 → 解析', br:'llm',
+      d:'执行器只依赖 LLMClient 协议；真实模型走 OpenAI 兼容客户端，FakeLLM 用剧本模拟工具调用。',
+      f:'backend/app/agent/executor.py', l:'582', e:'llm.exchange.request',
+      c:[
+        { id:'pick', t:'选模型 build_llm_for', s:'llm/__init__.py:96', br:'llm',
+          d:'provider 不是 openai 就用 FakeLLM；缺 base_url/model/key 直接抛 LLMError，不会静默降级。',
+          f:'backend/app/llm/__init__.py', l:'96',
+          w:['ModelConfig.provider', 'base_url', 'model', 'api_key 是否为空'],
+          e:'' },
+        { id:'specs', t:'工具声明 specs', s:'tools/__init__.py:152', br:'llm',
+          d:'只把 enabled 的工具转换成 JSON Schema；被设置禁用的、MCP 连接失败的都不会出现。',
+          f:'backend/app/agent/tools/__init__.py', l:'152',
+          w:['len(specs)', 'specs[i]["name"]', 'tools.enabled_names()'],
+          e:'' },
+        { id:'call', t:'chat_with_tools', s:'executor.py:582', br:'llm',
+          d:'非推理模式的调用点。断在这里能拿到本轮完整消息、工具声明和轮次，是排查「模型看到什么」的最佳位置。',
+          f:'backend/app/agent/executor.py', l:'582',
+          w:['round_messages', 'specs', 'round_number'],
+          e:'agent.model.request（:569）' },
+        { id:'scall', t:'stream_with_tools', s:'executor.py:586', br:'llm',
+          d:'推理模式：生成器边产文本边解析工具调用，_relay_preview 把增量转成 assistant_delta 事件。',
+          f:'backend/app/agent/executor.py', l:'586',
+          w:['closing/generator', 'effort'],
+          e:'' },
+        { id:'relay', t:'_relay_preview 流式转发', s:'executor.py:518', br:'llm',
+          d:'包装生成器，把每个 chunk 变成事件；断点会非常频繁，建议只在你怀疑丢字时开。',
+          f:'backend/app/agent/executor.py', l:'518',
+          w:['chunk', 'yield 的事件类型'],
+          e:'assistant_delta' },
+        { id:'payload', t:'HTTP 载荷 _tool_payload', s:'openai_compatible.py:93', br:'llm',
+          d:'组装 tools / tool_choice；DeepSeek 额外带 reasoning_content，assistant tool_calls 原样回传。',
+          f:'backend/app/llm/openai_compatible.py', l:'93',
+          w:['payload["tools"]', 'payload["tool_choice"]', 'messages 最后一条'],
+          e:'' },
+        { id:'sse', t:'上游 SSE 解析', s:'openai_compatible.py:237', br:'llm',
+          d:'逐帧读 delta：文本直接 yield，tool_calls 分片累加；结束校验 finish_reason 与调用完整性。',
+          f:'backend/app/llm/openai_compatible.py', l:'237',
+          w:['delta', 'finish_reason', 'pending_calls'],
+          bp:[['268','工具调用分片合并'],['279','文本增量'],['295','不完整回复 → LLMError']],
+          e:'llm.exchange.response' },
+        { id:'mergecall', t:'工具调用分片合并', s:'openai_compatible.py:407', br:'llm',
+          d:'按 index（0..127）累加 id/name/arguments；id 重复或缺失会被判为不完整。',
+          f:'backend/app/llm/openai_compatible.py', l:'407',
+          w:['index', 'current.id', 'current.name', 'arguments 长度'],
+          e:'' },
+        { id:'final', t:'最终答复收尾', s:'executor.py:637', br:'llm',
+          d:'没有 tool_calls 即最终答复：空内容判失败，补网页来源，写 STEP_FINAL_ANSWER，run 置 COMPLETED。',
+          f:'backend/app/agent/executor.py', l:'637',
+          w:['reply["content"]', 'run.status', 'evidence'],
+          e:'agent.finish（:662）' }
+      ]},
+    { id:'toolb', t:'ToolUse', s:'发现 → 注册 → 使用 → 审批', br:'tool',
+      d:'内置工具与 MCP 工具统一进 ToolRegistry，同名去重；每次调用先过 ToolPolicy，再进线程池执行。',
+      f:'backend/app/agent/tools/__init__.py', l:'92', e:'agent.tools.registry',
+      c:[
+        { id:'reg', t:'registry_for 发现工具', s:'executor.py:1322', br:'tool',
+          d:'读取 tools_disabled，合并内置源与所有启用的 MCP 服务器；单个 MCP 失败只记状态，不阻断整体。',
+          f:'backend/app/agent/executor.py', l:'1322',
+          w:['disabled', 'servers', 'last_status'],
+          bp:[['1374','agent.tools.registry trace']],
+          e:'agent.tools.registry' },
+        { id:'builtin', t:'BuiltinSource 内置工具', s:'tools/__init__.py:63', br:'tool',
+          d:'返回 calculator / now / search_conversations / rename_conversation 四个工具，写操作默认要审批。',
+          f:'backend/app/agent/tools/__init__.py', l:'63',
+          w:['tools', '[t.name for t in tools]'],
+          e:'' },
+        { id:'mcp', t:'MCP source_for', s:'mcp/manager.py:61', br:'tool',
+          d:'复用 300 秒内的连接；stale 时重新 list_tools 并校验 inputSchema，失败就丢弃连接。',
+          f:'backend/app/mcp/manager.py', l:'61',
+          w:['conn.tools', 'spec.slug', 'last_status'],
+          bp:[['85','list_tools 结果'],['94','schema 校验失败分支']],
+          e:'tool.mcp.connection / tool.mcp.discover' },
+        { id:'registrymerge', t:'ToolRegistry 合并去重', s:'tools/__init__.py:117', br:'tool',
+          d:'from_sources 逐个 source.list，重名直接 ValueError；disabled 的名字会被过滤。',
+          f:'backend/app/agent/tools/__init__.py', l:'117',
+          w:['names 是否重复', 'disabled'],
+          e:'' },
+        { id:'check', t:'ToolPolicy.check 判定', s:'policy.py:89', br:'tool',
+          d:'顺序：未知工具 → 被禁用 → 日预算 → 参数规则 → 需要审批。审批次数满 5 或同工具被拒 2 次会 fatal。',
+          f:'backend/app/agent/policy.py', l:'89',
+          w:['decision.action', 'decision.reason', 'decision.fatal'],
+          e:'agent.tool.policy（executor:793）' },
+        { id:'approve', t:'审批挂起', s:'executor.py:804', br:'tool',
+          d:'需要审批时不执行工具，写 approval_context 并落 AgentApproval，run 变 waiting_approval，流以 approval_required 结束。',
+          f:'backend/app/agent/executor.py', l:'804',
+          w:['run.approval_context', 'deferred_ids', 'approval.id'],
+          bp:[['815','_open_approval 落库'],['825','agent.approval.wait']],
+          e:'agent.approval.wait' },
+        { id:'exec', t:'_execute 线程池执行', s:'executor.py:1584', br:'tool',
+          d:'按 tool meta 的超时（默认 2 秒）执行；超时区分 cancelled 与 uncertain，后者会中止整轮。',
+          f:'backend/app/agent/executor.py', l:'1584',
+          w:['meta.timeout_seconds', 'future', 'timeout_uncertain'],
+          e:'agent.tool.execute（:846）' },
+        { id:'runtool', t:'run_tool 参数校验', s:'tools/base.py:177', br:'tool',
+          d:'先用 args_model 校验原始 JSON，再调用工具；ToolError 与未知异常都转成 ok=False 的 observation。',
+          f:'backend/app/agent/tools/base.py', l:'177',
+          w:['data', 'error', 'result.content'],
+          bp:[['181','tool.arguments.validate'],['193','tool.run 前']],
+          e:'tool.arguments.validate' },
+        { id:'mcprun', t:'McpTool.run 远程调用', s:'mcp/source.py:78', br:'tool',
+          d:'MCP 工具固定 EXTERNAL，必过审批；执行时校验参数、call_tool、把远程错误转 ToolError。',
+          f:'backend/app/mcp/source.py', l:'78',
+          w:['self.name', 'args', 'call result'],
+          e:'tool.mcp.validate / call / result' },
+        { id:'result', t:'结果落库与回灌', s:'executor.py:858', br:'tool',
+          d:'step 里存截断文本，消息里存完整 content；失败计数连续 3 次就整轮失败。',
+          f:'backend/app/agent/executor.py', l:'858',
+          w:['ok', 'duration_ms', 'state.failures'],
+          e:'agent.tool.result（:872）' }
+      ]},
+    { id:'skillb', t:'Skill', s:'发现 → 注册 → 加载', br:'skill',
+      d:'Skill 是「按需加载的说明文档」：auto 模式下目录进入 system，正文只在模型请求后作为 tool observation 注入，并随 run 快照持久化。',
+      f:'backend/app/agent/executor.py', l:'1081', e:'agent.skill.load',
+      c:[
+        { id:'cat', t:'catalog_snapshot 扫描', s:'skill_catalog_service.py:51', br:'skill',
+          d:'合并内置目录、共享目录、用户目录；结果缓存在 UserSettings.skill_catalog，签名变化或强制 rescan 才重扫。',
+          f:'backend/app/services/skill_catalog_service.py', l:'51',
+          w:['rescan', 'signature', 'entries'],
+          bp:[['23','configured_roots 三类根'],['81','skill.catalog.scan']],
+          e:'skill.catalog.scan' },
+        { id:'fs', t:'FileSystemSkillProvider.discover', s:'providers/filesystem.py:68', br:'skill',
+          d:'扫根目录下的 */SKILL.md，最多 100 个；key = namespace:slug，version = 文件 sha256，同 slug 只留第一个。',
+          f:'backend/app/skills/providers/filesystem.py', l:'68',
+          w:['entries', 'key', 'version'],
+          e:'' },
+        { id:'regd', t:'SkillRegistry.discover', s:'skills/registry.py:28', br:'skill',
+          d:'按 provider 顺序合并；preserve_sources=false 时同 slug 早者遮蔽。重复 key 会抛错。',
+          f:'backend/app/skills/registry.py', l:'28',
+          w:['merged', 'key 冲突'],
+          e:'skill.registry.discover / skill.provider.discover' },
+        { id:'load', t:'_load_skill 校验与加载', s:'executor.py:1081', br:'skill',
+          d:'校验 key 存在、未加载、数量 <3、版本未变、累计指引 <12000；成功后写 snapshot、记 STEP_SKILL_LOADED、发 skill_loaded。',
+          f:'backend/app/agent/executor.py', l:'1081',
+          w:['reason', 'loaded.instructions', 'len(state.loaded_skills)'],
+          bp:[['1081','入口：看 key 与 state'],['1127','registry.load 调用'],['1175','成功写入 snapshot 与 STEP_SKILL_LOADED']],
+          e:'agent.skill.load（:719）、skill_loaded' },
+        { id:'regload', t:'SkillRegistry.load', s:'skills/registry.py:47', br:'skill',
+          d:'要求 provider 返回 key/slug/version 完全匹配的内容，否则 ValueError；找不到返回 None。',
+          f:'backend/app/skills/registry.py', l:'47',
+          w:['loaded.key', 'loaded.version', 'registry version'],
+          e:'' },
+        { id:'inject', t:'注入 system', s:'executor.py:1297', br:'skill',
+          d:'加载前每轮都注入目录；加载后该项从目录消失，正文以 tool 消息存在，模型不会重复看到两份。',
+          f:'backend/app/agent/executor.py', l:'1297',
+          w:['round_messages[0]', 'catalog 剩余条数'],
+          e:'' },
+        { id:'res', t:'_read_skill_resource 资源', s:'executor.py:1215', br:'skill',
+          d:'只允许读已加载 Skill 的 resources；单次 run 最多 8 个、合计 32KB，读取后写回 snapshot。',
+          f:'backend/app/agent/executor.py', l:'1215',
+          w:['path', 'resource_count', 'total_bytes'],
+          e:'agent.skill.resource（:699）' },
+        { id:'skillfail', t:'加载失败分支', s:'executor.py:1055', br:'skill',
+          d:'unknown_skill / already_loaded / skill_limit / unavailable / version_changed / context_limit 都会落失败步骤并作为 observation 回给模型。',
+          f:'backend/app/agent/executor.py', l:'1055',
+          w:['reason', 'STEP_SKILL_LOAD_FAILED'],
+          e:'skill_load_failed' }
+      ]},
+    { id:'resumeb', t:'审批与恢复', s:'挂起 → 决定 → 续跑', br:'resume',
+      d:'审批不是新请求：前端决定后调用 resume，从 step 记录重建消息，再接着原 checkpoint 跑。',
+      f:'backend/app/agent/executor.py', l:'315', e:'agent.approval.replay',
+      c:[
+        { id:'open', t:'_open_approval', s:'executor.py:1479', br:'resume',
+          d:'写 AgentApproval（工具名、参数、指纹），run 置 waiting_approval，记 step_count。',
+          f:'backend/app/agent/executor.py', l:'1479',
+          w:['approval.id', 'run.status'],
+          e:'approval_required' },
+        { id:'decide', t:'decide_approval', s:'executor.py:1429', br:'resume',
+          d:'条件 UPDATE 保证只处理一次；并发或状态已变时 rowcount != 1，返回 409。',
+          f:'backend/app/agent/executor.py', l:'1429',
+          w:['approved', 'note', 'rowcount'],
+          e:'agent.approval.result（:469）' },
+        { id:'start', t:'start_resume', s:'hub.py:273', br:'resume',
+          d:'复用同一条 run 建新订阅并再起一个守护线程，跑 resume_run，从 checkpoint 继续。',
+          f:'backend/app/agent/hub.py', l:'273',
+          w:['run_id', 'owns(run_id)'],
+          e:'' },
+        { id:'resume', t:'resume_run', s:'executor.py:315', br:'resume',
+          d:'重建消息、匹配待审批步骤、校验模型与工具指纹、恢复 checkpoint，然后执行/拒绝并继续循环。',
+          f:'backend/app/agent/executor.py', l:'315',
+          w:['pending', 'approval_context', 'fingerprint'],
+          bp:[['346','_replay_messages 结果'],['369','模型一致性'],['375','工具指纹一致性'],['401','批准分支']],
+          e:'agent.approval.replay（:347）' },
+        { id:'replay', t:'_replay_messages', s:'executor.py:1507', br:'resume',
+          d:'按 seq 扫 AgentStep 还原消息：Skill 内部调用用 call_skill_{seq}，工具调用用 call_{seq}；未完成的进 pending。',
+          f:'backend/app/agent/executor.py', l:'1507',
+          w:['messages', 'pending', 'call_id'],
+          e:'' }
+      ]},
+    { id:'stateb', t:'持久化与事件', s:'step / event / 收尾', br:'state',
+      d:'所有过程都落 agent_runs / agent_steps / agent_approvals；SSE 事件是这些记录的即时投影。',
+      f:'backend/app/agent/executor.py', l:'1630', e:'agent.step',
+      c:[
+        { id:'step', t:'_add_step 记步骤', s:'executor.py:1630', br:'state',
+          d:'统一 seq 自增并写 AgentStep；kind 决定前端时间线怎么画，也决定 resume 时怎么重放。',
+          f:'backend/app/agent/executor.py', l:'1630',
+          w:['seq', 'kind', 'tool_args'],
+          e:'' },
+        { id:'events', t:'事件构造器', s:'events.py:13-126', br:'state',
+          d:'run_started / step_started / assistant_delta / tool_call / tool_result / skill_loaded / approval_required / run_finished / error。',
+          f:'backend/app/agent/events.py', l:'13',
+          w:['type', 'payload 字段'],
+          e:'' },
+        { id:'save', t:'_save_final_message', s:'executor.py:1674', br:'state',
+          d:'把最终答复写进 messages 表并更新会话标题所需信息；这是刷新后还能看到回复的原因。',
+          f:'backend/app/agent/executor.py', l:'1674',
+          w:['message.id', 'content'],
+          e:'' },
+        { id:'runfail', t:'_fail 失败收尾', s:'executor.py:1697', br:'state',
+          d:'统一置 RUN_FAILED、写错误事件并返回；500 内部错误、502 模型故障、504 超时。',
+          f:'backend/app/agent/executor.py', l:'1697',
+          w:['code', 'message', 'run.status'],
+          e:'agent.fail' }
+      ]}
+  ]
+};
+
+const NODE_H = 44, ROW = 52, COL = 268, PAD = 28;
+const byId = new Map();
+const parentOf = new Map();
+const nodesEl = document.getElementById('nodes');
+const wires = document.getElementById('wires');
+const world = document.getElementById('world');
+const canvas = document.getElementById('canvas');
+const panel = document.getElementById('panel');
+const collapsed = new Set();
+let selected = null;
+
+function walk(n, fn, parent){
+  byId.set(n.id, n); if(parent) parentOf.set(n.id, parent);
+  fn(n);
+  (n.c || []).forEach(k => walk(k, fn, n));
+}
+walk(TREE, () => {});
+
+function render(){
+  nodesEl.innerHTML = '';
+  let leaf = 0;
+  const visible = [];
+
+  function place(n, depth){
+    n._x = PAD + depth * COL;
+    const kids = n.c || [];
+    if(!kids.length || collapsed.has(n.id)){
+      n._y = PAD + leaf * ROW; leaf++;
+    } else {
+      kids.forEach(k => place(k, depth + 1));
+      n._y = (kids[0]._y + kids[kids.length - 1]._y) / 2;
+    }
+    visible.push(n);
+  }
+  place(TREE, 0);
+
+  let maxX = 0, maxY = 0;
+  visible.forEach(n => {
+    maxX = Math.max(maxX, n._x + 240);
+    maxY = Math.max(maxY, n._y + NODE_H + PAD);
+    const el = document.createElement('div');
+    el.className = 'node b-' + n.br + (n.id === 'root' ? ' root' : '') + (selected === n.id ? ' sel' : '');
+    el.style.left = n._x + 'px';
+    el.style.top = n._y + 'px';
+    el.dataset.id = n.id;
+    el.innerHTML = '<div class="t"></div><div class="s"></div>';
+    el.querySelector('.t').textContent = n.t;
+    el.querySelector('.s').textContent = n.s;
+    el.addEventListener('click', e => {
+      if(e.target.classList.contains('toggle')) return;
+      if(n.c && n.c.length && collapsed.has(n.id)){ collapsed.delete(n.id); render(); }
+      select(n.id);
+    });
+    if(n.c && n.c.length){
+      const t = document.createElement('span');
+      t.className = 'toggle';
+      t.textContent = collapsed.has(n.id) ? '+' : '−';
+      t.title = collapsed.has(n.id) ? '展开' : '收起';
+      t.addEventListener('click', e => {
+        e.stopPropagation();
+        collapsed.has(n.id) ? collapsed.delete(n.id) : collapsed.add(n.id);
+        render();
+      });
+      el.appendChild(t);
+    }
+    nodesEl.appendChild(el);
+  });
+
+  const paths = [];
+  visible.forEach(n => {
+    if(!n.c || collapsed.has(n.id)) return;
+    n.c.forEach(k => {
+      const x1 = n._x + 240, y1 = n._y + NODE_H / 2;
+      const x2 = k._x, y2 = k._y + NODE_H / 2;
+      const mid = (x1 + x2) / 2;
+      paths.push('<path d="M' + x1 + ' ' + y1 + ' C' + mid + ' ' + y1 + ' ' + mid + ' ' + y2 + ' ' + x2 + ' ' + y2 + '"/>');
+    });
+  });
+  wires.setAttribute('width', maxX);
+  wires.setAttribute('height', maxY);
+  wires.innerHTML = paths.join('');
+  world.style.width = maxX + 'px';
+  world.style.height = maxY + 'px';
+}
+
+function expandTo(id){
+  let p = parentOf.get(id);
+  while(p){ collapsed.delete(p.id); p = parentOf.get(p.id); }
+}
+
+function select(id){
+  selected = id;
+  const n = byId.get(id);
+  document.querySelectorAll('.node').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+  renderPanel(n);
+}
+
+function renderPanel(n){
+  const br = BR[n.br] || BR.state;
+  const kids = n.c || [];
+  const par = parentOf.get(n.id);
+  const bp = n.bp || [[n.l, '入口 / 关键行']];
+  panel.innerHTML =
+    '<span class="chip" style="--ac:var(--' + n.br + ')">' + br.n + '</span>' +
+    '<h2></h2>' +
+    '<div class="path"><span class="p"></span><button id="copy">复制</button></div>' +
+    '<p class="desc"></p>' +
+    '<div class="sec"><h3>断点</h3><ul class="bp"></ul></div>' +
+    (n.e ? '<div class="sec"><h3>对应 trace 事件</h3><span class="trace"></span></div>' : '') +
+    (n.w && n.w.length ? '<div class="sec"><h3>观察这些值</h3><ul class="watch"></ul></div>' : '') +
+    (n.d2 ? '<div class="sec"><h3>备注</h3><p class="desc" style="margin:0"></p></div>' : '') +
+    '<div class="sec"><h3>相关节点</h3><div class="rel"></div></div>' +
+    '<div class="hint">行号基准：主工作树 codex/skill-tool-system @ 13b5701。执行在 agent-run-* 子线程，IDE 需挂起全部线程。</div>';
+
+  panel.querySelector('h2').textContent = n.t;
+  panel.querySelector('.path .p').textContent = n.f + ':' + n.l;
+  panel.querySelector('.desc').textContent = n.d;
+  const ul = panel.querySelector('ul.bp');
+  bp.forEach(item => {
+    const li = document.createElement('li');
+    const b = document.createElement('b'); b.textContent = ':' + item[0];
+    const s = document.createElement('span'); s.textContent = item[1];
+    li.appendChild(b); li.appendChild(s); ul.appendChild(li);
+  });
+  if(n.e) panel.querySelector('.trace').textContent = n.e;
+  if(n.w && n.w.length){
+    const w = panel.querySelector('ul.watch');
+    n.w.forEach(v => { const li = document.createElement('li'); li.textContent = v; w.appendChild(li); });
+  }
+  if(n.d2) panel.querySelectorAll('p.desc')[1].textContent = n.d2;
+  const rel = panel.querySelector('.rel');
+  if(par){
+    const b = document.createElement('button');
+    b.innerHTML = '<i>↑</i><span></span>'; b.querySelector('span').textContent = '上级 · ' + par.t;
+    b.addEventListener('click', () => { expandTo(par.id); render(); select(par.id); }); rel.appendChild(b);
+  }
+  kids.forEach(k => {
+    const b = document.createElement('button');
+    b.innerHTML = '<i>↓</i><span></span>'; b.querySelector('span').textContent = k.t;
+    b.addEventListener('click', () => { expandTo(k.id); render(); select(k.id); }); rel.appendChild(b);
+  });
+  if(!par && !kids.length) rel.innerHTML = '<span style="color:var(--muted)">无</span>';
+
+  panel.querySelector('#copy').addEventListener('click', () => {
+    const text = n.f + ':' + n.l;
+    navigator.clipboard && navigator.clipboard.writeText(text).then(() => {
+      const btn = panel.querySelector('#copy'); btn.textContent = '已复制';
+      setTimeout(() => { btn.textContent = '复制'; }, 1200);
+    });
+  });
+  panel.scrollTop = 0;
+}
+
+/* search */
+const q = document.getElementById('q');
+q.addEventListener('input', () => {
+  const term = q.value.trim().toLowerCase();
+  const hits = new Set();
+  if(!term){
+    document.querySelectorAll('.node').forEach(el => el.classList.remove('hit','dim'));
+    return;
+  }
+  byId.forEach(n => {
+    const hay = (n.t + ' ' + n.s + ' ' + n.f + ' ' + (n.w || []).join(' ') + ' ' + (n.e || '')).toLowerCase();
+    if(hay.includes(term)) hits.add(n.id);
+  });
+  hits.forEach(id => expandTo(id));
+  if(hits.size) render();
+  document.querySelectorAll('.node').forEach(el => {
+    el.classList.toggle('hit', hits.has(el.dataset.id));
+    el.classList.toggle('dim', !hits.has(el.dataset.id));
+  });
+});
+
+document.getElementById('expand').addEventListener('click', () => { collapsed.clear(); render(); });
+document.getElementById('collapse').addEventListener('click', () => {
+  TREE.c.forEach(k => collapsed.add(k.id));
+  render();
+});
+document.getElementById('fit').addEventListener('click', fit);
+function fit(){
+  world.style.transform = 'scale(1)';
+  const w = world.offsetWidth;
+  const avail = canvas.clientWidth - 2;
+  const s = Math.min(1, avail / w);
+  world.style.transform = 'scale(' + s + ')';
+  world.style.transformOrigin = '0 0';
+}
+window.addEventListener('resize', () => { if(canvas.clientWidth < world.offsetWidth) fit(); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape'){ selected = null; render(); } });
+
+TREE.c.forEach(k => collapsed.add(k.id));
+render();
+select('root');
+fit();
+</script>
+</body>
+</html>
