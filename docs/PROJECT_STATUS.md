@@ -1,7 +1,9 @@
 # 项目状态
 
 > 一页纸：**现在在哪、下一步做什么、有什么坑**。每次任务开始前读它，结束后更新它（AGENTS.md §7）。
-> 最近更新：2026-11-20 · 新增 Agent 全链路追踪图（断点 + 思维导图）
+> 最近更新：2026-11-20 · ReAct-MCP 骨架落地 + 分支归并到 main
+
+- **ReAct-MCP 骨架 + 分支收尾（2026-11-20）**：新增独立学习子工程 [`ReAct-MCP/`](../ReAct-MCP/README.md)（Node ≥ 20 + TypeScript，用 `tsx` 直跑）：`package.json` 提供 `dev`/`start`/`build`/`type-check`/`format`，`tsconfig.json` 用 NodeNext + strict，`README.md` 写清目录职责、命令、环境变量、设计要点与下一步，`.env.example` 记录模型与 `MCP_SERVERS`（`.env` 仍被根 `.gitignore` 忽略）。`src/` 下 7 个文件只有头注释，**还没有实现**，不参与主应用构建。验证：`pnpm install`、`type-check`、`format:check`、`build`、`start` 均通过（只自检工具链，没有可运行逻辑）。同一轮把 `docs/agent-trace-map.{md,html}` 提交；`codex/skill-tool-system`（领先 66 个提交）快进合并进 `main` 并推送，本地与远端的其它分支全部删除（`backup-before-split` 的 3 个独有提交只留在本地 reflog，原 tip `71cde74`；两个 `dsh-*` 分支连同 `.agents/worktrees/dsh-88d7f25b-c093` 一并清掉）。
 
 - **新增 [Agent 全链路追踪图](agent-trace-map.md)（2026-11-20）**：把「入口 → prepare_run → RunHub → _run_loop → LLM → ToolUse → Skill → 审批恢复」整理成断点表，并配 [交互版思维导图](agent-trace-map.html)。行号基准为主工作树 `codex/skill-tool-system @ 13b5701`；`.agents/worktrees/dsh-*` 的旧快照不可用于对照。本次只新增两份文档，未改代码、未跑测试。
 
