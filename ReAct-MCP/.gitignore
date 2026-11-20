@@ -1,0 +1,2 @@
+# 本子工程自己的运行产物（node_modules/ dist/ .env 已被根 .gitignore 覆盖）
+output/
